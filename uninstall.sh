@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # SteamMachine-DIY - Master Uninstaller
-# Version: 3.1.0
+# Version: 3.0.0
 # Description: Safely removes all components, helpers, hooks, and logs.
 # Repository: https://github.com/dlucca1986/SteamMachine-DIY
 # License: MIT
