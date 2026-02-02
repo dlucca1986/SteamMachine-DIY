@@ -1,42 +1,65 @@
-
 # =============================================================================
-#              STEAM MACHINE DIY - CONFIGURATION PANEL
+#           STEAM MACHINE DIY - MAIN CONFIGURATION PANEL ()
 # =============================================================================
 # Path: ~/.config/steamos-diy/config
 #
 # HOW TO EDIT:
-# 1. Use 1 for YES (On) and 0 for NO (Off).
-# 2. DO NOT use spaces! Example: TARGET_WIDTH=1920 (Correct)
-#                                TARGET_WIDTH = 1920 (WRONG!)
+# 1. Use 1 for YES (On) and 0 for NO (Off).           # Boolean toggles
+# 2. DO NOT use spaces around '='!                    # Bash assignment rule
+# 3. Variables with 'export' affect the Steam UI.     # Environment injection
 # =============================================================================
 
-# --- [ 1. DISPLAY RESOLUTION ] ---
-# Set this to match your TV or Monitor. 
-# Examples: 3840x2160 (4K), 1920x1080 (1080p), 1280x720 (720p).
-TARGET_WIDTH=1920
-TARGET_HEIGHT=1080
+# --- [ 1. DISPLAY SETTINGS ] ---
+# Set these to match your TV or Monitor's native specs.
+# -----------------------------------------------------------------------------
+TARGET_WIDTH=1920                                        # Horizontal pixels
+TARGET_HEIGHT=1080                                       # Vertical pixels
+REFRESH_RATE=60                                          # Refresh rate in Hz
 
-# --- [ 2. REFRESH RATE ] ---
-# Set this to your monitor's frequency (usually 60, 120, or 144).
-REFRESH_RATE=60
 
-# --- [ 3. FEATURE TOGGLES ] ---
-# Enable (1) or Disable (0) these features:
+# --- [ 2. STEAM INTERFACE & DRIVERS ] ---
+# Variables that influence how Steam interacts with the hardware.
+# -----------------------------------------------------------------------------
+# ✅ CORRECT:
+export SDL_VIDEODRIVER=x11                               # Force X11 for SDL apps
+export XDG_CURRENT_DESKTOP=SteamOS                       # Enable Deck UI features
 
-# Performance Overlay: Shows FPS and system usage (MangoHud).
-ENABLE_MANGOAPP=0
+# ❌ WRONG:
+# SDL_VIDEODRIVER=x11                                    # Error: Missing 'export'
+# export SDL_VIDEODRIVER = x11                           # Error: Spaces break Bash
 
-# HDR: Only enable if your display supports HDR10.
-ENABLE_HDR=0
 
-# VRR: Enable for FreeSync, G-Sync, or Adaptive Sync monitors.
-ENABLE_VRR=0
+# --- [ 3. FEATURE TOGGLES (0/1) ] ---
+# Enable (1) or Disable (0) these Gamescope features:
+# -----------------------------------------------------------------------------
+ENABLE_MANGOAPP=0                                        # Performance Overlay (FPS)
+ENABLE_HDR=0                                             # High Dynamic Range (HDR10)
+ENABLE_VRR=0                                             # Variable Refresh (G-Sync/FreeSync)
+
+
+# --- [ 4. ADVANCED GAMESCOPE ARGUMENTS ] ---
+# WARNING: Expert users only. Extra flags for the Gamescope compositor.
+# -----------------------------------------------------------------------------
+# ✅ CORRECT:
+# GAMESCOPE_ARGS="--cursor-scale 2 --borderless"         # Quoted string (Safe)
+# GAMESCOPE_ARGS="--disable-layers"                      # Specific workaround flag
+
+# ❌ WRONG:
+# GAMESCOPE_ARGS=--disable-layers                        # Error: Missing quotes
+# GAMESCOPE_ARGS="--unknown-flag"                        # Error: Will trigger Watchdog
+# -----------------------------------------------------------------------------
+GAMESCOPE_ARGS=""
 
 
 # =============================================================================
-# ! TROUBLESHOOTING / SAFE MODE !
+# ! HARDWARE SAFETY & WATCHDOG !
 # =============================================================================
-# If a setting causes a crash, the "Atomic Watchdog" will detect it.
-# The system will automatically restart in SAFE MODE, ignoring this file
-# and using emergency defaults (720p/60) to let you recover the system.
+# 1. PREVENTIVE GUARD: If settings exceed monitor limits, SDY overrides
+#    them with NATIVE resolution (Auto-Fallback).
+#
+# 2. REACTIVE WATCHDOG: If Gamescope crashes within 10s (due to bad args),
+#    the system restarts in "Native Safe Mode" to keep Steam accessible.
+#
+# 3. VULKAN MODE: The system is optimized for Vulkan rendering. Ensure
+#    drivers are up to date via System Info tab.
 # =============================================================================
