@@ -1,0 +1,18 @@
+# --- SteamOS-DIY: Passwordless Sudo Privileges ---
+
+# Display Backlight Management (Universal)
+# Allows the DIY tools to adjust brightness without root password prompts
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/backlight/*/brightness
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/chmod a+w /sys/class/backlight/*/brightness
+
+# Session Launchers
+# Required for switching between Game Mode and Desktop Mode
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/wayland-session-launch
+%wheel ALL=(ALL) NOPASSWD: /usr/local/bin/steamos-session-launch
+
+# Service Management (User-Agnostic)
+# The wildcard '*' allows any user in the 'wheel' group to manage their own sessions
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/systemctl start steamos-gamemode@*
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop steamos-gamemode@*
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/systemctl start steamos-desktop@*
+%wheel ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop steamos-desktop@*
