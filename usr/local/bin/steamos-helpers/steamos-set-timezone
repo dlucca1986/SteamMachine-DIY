@@ -38,4 +38,4 @@ log_info "Timezone request acknowledged. System settings remain unchanged."
 echo -e "${GREEN}✓ Timezone synchronization finalized.${NC}"
 
 # Exit gracefully
-exit 0
+exit 0;
