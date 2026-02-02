@@ -1,4 +1,4 @@
-# 🎮 SteamMachine-DIY
+# 🎮 SteamMachine-DIY (AMD & Intel Open Source Build)
 **Transform any Arch Linux machine into a powerful, seamless SteamOS Console.**
 
 [![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
