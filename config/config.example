@@ -1,8 +1,14 @@
 # =============================================================================
-#           STEAM MACHINE DIY - MAIN CONFIGURATION PANEL ()
+#           STEAM MACHINE DIY - MAIN CONFIGURATION PANEL
 # =============================================================================
 # Path: ~/.config/steamos-diy/config
-#
+# Version: 3.1.0
+# Description: Master display and compositor settings for Gamescope.
+# Repository: https://github.com/dlucca1986/SteamMachine-DIY
+# Path: ~/.config/steamos-diy/config
+# License: MIT
+# =============================================================================
+
 # HOW TO EDIT:
 # 1. Use 1 for YES (On) and 0 for NO (Off).           # Boolean toggles
 # 2. DO NOT use spaces around '='!                    # Bash assignment rule
