@@ -3,7 +3,7 @@
 # SteamMachine-DIY - System Update Manager
 # =============================================================================
 # Script: steamos-update
-# Version: 3.0.0
+# Version: 3.1.0
 # Description: Compatibility shim for SteamOS OTA update infrastructure.
 #              Ensures the Steam UI "Check for Updates" flow completes safely.
 # Repository: https://github.com/dlucca1986/SteamMachine-DIY
