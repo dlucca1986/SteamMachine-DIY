@@ -1,4 +1,4 @@
-# 🎮 SteamMachine-DIY (AMD & Intel Open Source Build)
+# 🎮 SteamMachine-DIY (Systemd Native Build for AMD and Intel)
 **Transform any Arch Linux machine into a powerful, seamless SteamOS Console.**
 
 [![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
@@ -12,7 +12,9 @@
 
 Hi, I'm **Daniele**! 🕹️
 
-This project has evolved into a professional **System Overlay** designed to faithfully replicate the SteamOS ecosystem. Version 3.1.0 marks a major milestone: moving away from user-specific hacks to a robust, **hardware-agnostic architecture** driven by `systemd`.
+This project has evolved into a professional **System Overlay** designed to faithfully replicate the SteamOS ecosystem. Version 3.1.0 marks a major milestone: transitioning from a script-based approach to a robust, **system-native architecture** driven by `systemd`. 
+
+While the project remains hardware-agnostic by design (supporting both AMD and Intel), this new version deepens the integration with the Linux OS core for unprecedented stability.
 
 ---
 
@@ -20,6 +22,9 @@ This project has evolved into a professional **System Overlay** designed to fait
 
 * **🔄 Native Session Switching**:
   Transition between **Gamescope** and **KDE Plasma** using the official UI buttons. No login screens, no passwords—just a clean handover managed by `systemd` unit conflicts.
+
+* **🎨 Custom Boot Experience**:
+  Includes a **Custom Boot Splash** integration to provide a seamless visual transition from the moment you power on your machine.
 
 * **🧠 Intelligent Hardware Detection**:
   The new launcher automatically detects resolution, refresh rates, and GPU capabilities. It configures itself on the fly, ensuring you reach the UI even on complex multi-monitor setups.
@@ -40,7 +45,7 @@ This project has evolved into a professional **System Overlay** designed to fait
 
 ## 🛡️ Clean Architecture & Safety
 
-I value your system's integrity. The "Agnostic" version follows a strict system-safe philosophy:
+I value your system's integrity. This project follows a "system-safe" philosophy to ensure your Arch Linux installation remains clean and stable:
 
 * **Filesystem Hierarchy Standard**: Scripts are isolated in `/usr/local/bin/steamos-helpers/`, keeping your primary `/usr/bin/` clean while satisfying Steam's hardcoded path requirements through symbolic links.
 * **Transparent Sudoers**: Security is paramount. A minimal, dedicated policy file is added to `/etc/sudoers.d/steamos-diy`. It grants passwordless execution *only* to the specific scripts required for session switching.
