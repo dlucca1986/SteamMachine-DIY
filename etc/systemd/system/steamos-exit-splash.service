@@ -1,17 +1,27 @@
 [Unit]
+# =============================================================================
+# SteamMachine-DIY - Exit Splash Screen Service
+# =============================================================================
 Description=SteamOS-DIY Exit Splash
 DefaultDependencies=no
-Before=shutdown.target reboot.target halt.target
+# Ensure the splash runs before the system actually cuts power or reboots
+Before=shutdown.target reboot.target halt.target kexec.target
 StandardOutput=tty
 StandardInput=tty
 TTYPath=/dev/tty1
 
 [Service]
 Type=oneshot
+# Initial trigger: Default to shutdown splash
 ExecStart=/usr/local/bin/steamos-helpers/steamos-splash shutdown
-# Se systemd sta riavviando, sovrascriviamo lo splash con reboot
+
+# Logic: Check if the current systemd job is a reboot and override the splash image
+# The '-' prefix allows the command to fail without stopping the service
 ExecStartPost=-/bin/sh -c 'if systemctl list-jobs | grep -q "reboot.target"; then /usr/local/bin/steamos-helpers/steamos-splash reboot; fi'
+
+# Ensures systemd considers the service "active" during the transition
 RemainAfterExit=yes
 
 [Install]
+# Hook into the power-off and reboot sequences
 WantedBy=shutdown.target reboot.target
