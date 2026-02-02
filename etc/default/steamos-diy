@@ -1,41 +1,52 @@
 # =============================================================================
-# SteamOS-DIY - Global System Configuration
+# SteamMachine-DIY - Global System Configuration (Master Template)
+# =============================================================================
+# Path: /etc/default/steamos-diy
+# Description: Central configuration file for the SteamOS-DIY ecosystem.
+#              All helpers (sdy, launch, select) source this file.
 # =============================================================================
 
-# --- USER SETTINGS ---
-# L'utente principale del sistema (usato per i percorsi Home e i permessi)
-STEAMOS_USER="lelo"
+# --- 1. USER IDENTITY ---
+# The primary system user. This is automatically detected but can be 
+# overridden if you want to target a specific account for paths.
+STEAMOS_USER="${STEAMOS_USER:-$(id -un)}"
 
-# --- PATH SETTINGS ---
-# Cartella base per le configurazioni dei giochi (usata da sdy e UI)
-CONF_DIR="/home/lelo/.config/steamos-diy"
-GAMES_CONF_DIR="/home/lelo/.config/steamos-diy/games"
+# --- 2. DYNAMIC PATH SETTINGS ---
+# These paths use the STEAMOS_USER variable to remain hardware-agnostic.
+# Root directory for SteamOS-DIY configurations
+CONF_DIR="/home/${STEAMOS_USER}/.config/steamos-diy"
 
-# File di log centrale
+# Directory for per-game configuration files (managed by sdy wrapper)
+GAMES_CONF_DIR="${CONF_DIR}/games"
+
+# Main diagnostic log file (Requires write permissions for the user)
 LOG_FILE="/var/log/steamos-diy.log"
 
-# Log di Steam (per l'estrazione degli errori e marker SDY)
-STEAM_LOG="/home/lelo/.local/share/Steam/logs/console-linux.txt"
+# Path to official Steam logs for error extraction and SDY markers
+STEAM_LOG="/home/${STEAMOS_USER}/.local/share/Steam/logs/console-linux.txt"
 
-# --- HARDWARE & SESSION SETTINGS ---
-# Se lasciati vuoti, il launcher userà l'autodetect dinamico (Agnostico!)
+# --- 3. DISPLAY & PERFORMANCE SETTINGS ---
+# If left empty, the launcher will use dynamic hardware auto-detection (Recommended).
+# Force specific resolution if auto-detection fails (e.g., TARGET_WIDTH="1920")
 TARGET_WIDTH=""
 TARGET_HEIGHT=""
 REFRESH_RATE=""
 
-# Funzionalità avanzate (0 = Disabilitato, 1 = Abilitato)
+# Advanced Features (0 = Disabled, 1 = Enabled)
 ENABLE_HDR=0
 ENABLE_VRR=0
 ENABLE_MANGOAPP=0
 
-# Argomenti extra per Gamescope (es: --backend sdl o --filter fsr)
+# Extra Gamescope arguments (e.g., "--backend sdl" or "--filter fsr")
 GAMESCOPE_ARGS=""
 
-# --- LOGGING SETTINGS ---
+# --- 4. LOGGING & DIAGNOSTICS ---
+# Tag used in the system log for easy filtering (grep "[SteamOS-DIY]")
 LOG_TAG="[SteamOS-DIY]"
 LOG_LEVEL="info"
 
-# --- ENVI ---
+# --- 5. SYSTEM ENVIRONMENT OVERRIDES ---
+# Enforces the correct environment for Steam and GTK apps within Gamescope.
 XDG_CURRENT_DESKTOP="gamescope"
 KDE_FULL_SESSION="false"
 GTK_USE_PORTAL=1
