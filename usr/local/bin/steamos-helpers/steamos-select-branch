@@ -40,4 +40,4 @@ log_info "Release channel '${SELECTED_BRANCH}' confirmed (Simulated)."
 echo -e "${GREEN}✓ Branch selection finalized.${NC}"
 
 # Exit with success to prevent the Steam UI from hanging
-exit 0
+exit 0;
