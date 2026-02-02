@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Switch to Game Mode
 Comment=Restart the session into Steam Deck UI
-Exec=sudo systemctl startsteamos-gamemode@$USER.service
+Exec=sudo systemctl start steamos-gamemode@[USERNAME].service
 Icon=steam
 Terminal=false
 Type=Application
