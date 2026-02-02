@@ -2,7 +2,7 @@
 Name=SteamOS-DIY Control
 Comment=Hardware and Game Configuration Hub
 Exec=/usr/local/bin/steamos-diy-control
-Icon=input-gaming
+Icon=preferences-system-performance
 Terminal=false
 Type=Application
 StartupWMClass=SteamOS-DIY Control
