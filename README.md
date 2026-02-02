@@ -64,7 +64,7 @@ I value your system's integrity. This project follows a "system-safe" philosophy
 * **GPU**: AMD Radeon (preferred) or Intel Graphics (Mesa drivers).
 * **Display Manager**: **None/Disabled** (Direct TTY1 login).
 * **Desktop Environment**: KDE Plasma 6.x.
-* **Core Software**: `steam`, `gamescope`, `mangohud`, `gamemode`.
+* **Core Software**: `steam`, `gamescope`, `mangohud`, `gamemode`, `lib32-gamemode`, `python-pyqt6`
 
 ---
 
