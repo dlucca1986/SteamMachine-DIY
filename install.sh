@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # SteamMachine-DIY - Master Installer
-# Version: 3.1.0
+# Version: 3.0.0
 # Description: Full deployment for SteamOS-like experience on Arch Linux
 # Repository: https://github.com/dlucca1986/SteamMachine-DIY
 # License: MIT
