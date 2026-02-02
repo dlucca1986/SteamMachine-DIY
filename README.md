@@ -1,49 +1,53 @@
-# 🎮 SteamMachine-DIY (AMD & Intel Open Source Build)
-**Transform your Arch Linux machine into a powerful, seamless SteamOS Console.**
+# 🎮 SteamMachine-DIY
+**Transform any Arch Linux machine into a powerful, seamless SteamOS Console.**
 
-[![Version](https://img.shields.io/badge/Version-3.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> ### "Bringing the Seamless SteamOS Experience to any Arch-based Distribution"
+> ### "The most robust, hardware-agnostic SteamOS experience for the Arch ecosystem."
 
 ---
 
 ## 🌟 About the Project
 
-Hi, I'm **Daniele**, and I’m a hardcore gaming fanatic! 🕹️
+Hi, I'm **Daniele**! 🕹️
 
-I developed this project to faithfully simulate the **SteamOS ecosystem** on standard desktops and laptops. My goal is to bring that "console-like" feeling to your Linux machine, specifically optimized for **AMD Radeon** and **Intel Graphics**.
+This project has evolved into a professional **System Overlay** designed to faithfully replicate the SteamOS ecosystem. Version 3.1.0 marks a major milestone: moving away from user-specific hacks to a robust, **hardware-agnostic architecture** driven by `systemd`.
 
 ---
 
-## ✨ Key Features
+## ✨ Key Features (Agnostic Edition)
 
-* **🔄 Seamless Session Switching**:
-  Native support for the **"Switch to Desktop"** button. Transition between Gamescope and KDE Plasma without ever seeing a login screen or typing a password, thanks to our privileged SDDM helper.
+* **🔄 Native Session Switching**:
+  Transition between **Gamescope** and **KDE Plasma** using the official UI buttons. No login screens, no passwords—just a clean handover managed by `systemd` unit conflicts.
 
-* **🎮 Pure Console Experience**:
-  * **Intelligent Launcher**: Automatically detects your hardware and display resolution on the first boot.
-    
-  * **Safety Watchdog**: If a session fails to initialize (e.g., due to bad settings), it automatically triggers a **Safe Mode** relaunch, bypassing custom configs to ensure you always reach the UI.
-    
-  * **Talking Config**: A detailed template is installed at `~/.config/steamos-diy/config.example`. 
-  The launcher will automatically generate your operational `config` file on the first run. 
-  Use the `.example` file as a guide to safely customize your experience!
+* **🧠 Intelligent Hardware Detection**:
+  The new launcher automatically detects resolution, refresh rates, and GPU capabilities. It configures itself on the fly, ensuring you reach the UI even on complex multi-monitor setups.
 
-* **📏 Hardware-Aware**: 
-  Built-in toggles for HDR, VRR, and Mangoapp Performance Overlay via simple config edits.
+* **⚙️ Centralized Master Config**:
+  No more hunting for hidden files. The entire system is now governed by a single, professional configuration file: `/etc/default/steamos-diy`.
 
-* **🔴 Performance Ready**:
-  Integrated with **Feral GameMode** and **MangoHud**. The installer automatically applies `setcap` to Gamescope for high-priority scheduling and zero stuttering.
+* **🎮 Universal Game Wrapper (sdy)**:
+  A powerful injection tool for your games. Add custom prefixes, or extra arguments globally or on a per-game basis.
+
+---
+
+## 🛡️ Clean Architecture & Safety
+
+I value your system's integrity. The "Agnostic" version follows a strict system-safe philosophy:
+
+* **Filesystem Hierarchy Standard**: Scripts are isolated in `/usr/local/bin/steamos-helpers/`, keeping your primary `/usr/bin/` clean while satisfying Steam's hardcoded path requirements through symbolic links.
+* **Systemd-Driven**: Sessions are managed as proper system services (`steamos-gamemode@.service`), ensuring better logging and process recovery.
+* **User-Agnostic**: Everything is built using dynamic UID/User detection. No hardcoded usernames.
+* **Wayland-Native**: Optimized for KDE Plasma 6 and Wayland-based SDDM to prevent X11 socket conflicts.
 
 ---
 
 ## 🛠️ Prerequisites
 
-* **GPU**: AMD Radeon or Intel Graphics (Mesa drivers).
-* **Display Manager**: **SDDM** (Required for session switching logic).
-* **Desktop Environment**: KDE Plasma 6.x (Recommended).
-* **OS**: Arch Linux (or any Arch-based distro).
+* **GPU**: AMD Radeon (preferred) or Intel Graphics (Mesa drivers).
+* **Display Manager**: **SDDM** (configured for Wayland).
+* **Desktop Environment**: KDE Plasma 6.x.
 * **Core Software**: `steam`, `gamescope`, `mangohud`, `gamemode`.
 
 ---
