@@ -1,0 +1,125 @@
+# 🎮 SteamMachine-DIY (AMD & Intel Open Source Build)
+**Transform your Arch Linux machine into a powerful, seamless SteamOS Console.**
+
+[![Version](https://img.shields.io/badge/Version-3.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> ### "Bringing the Seamless SteamOS Experience to any Arch-based Distribution"
+
+---
+
+## 🌟 About the Project
+
+Hi, I'm **Daniele**, and I’m a hardcore gaming fanatic! 🕹️
+
+I developed this project to faithfully simulate the **SteamOS ecosystem** on standard desktops and laptops. My goal is to bring that "console-like" feeling to your Linux machine, specifically optimized for **AMD Radeon** and **Intel Graphics**.
+
+---
+
+## ✨ Key Features
+
+* **🔄 Seamless Session Switching**:
+  Native support for the **"Switch to Desktop"** button. Transition between Gamescope and KDE Plasma without ever seeing a login screen or typing a password, thanks to our privileged SDDM helper.
+
+* **🎮 Pure Console Experience**:
+  * **Intelligent Launcher**: Automatically detects your hardware and display resolution on the first boot.
+    
+  * **Safety Watchdog**: If a session fails to initialize (e.g., due to bad settings), it automatically triggers a **Safe Mode** relaunch, bypassing custom configs to ensure you always reach the UI.
+    
+  * **Talking Config**: A detailed template is installed at `~/.config/steamos-diy/config.example`. 
+  The launcher will automatically generate your operational `config` file on the first run. 
+  Use the `.example` file as a guide to safely customize your experience!
+
+* **📏 Hardware-Aware**: 
+  Built-in toggles for HDR, VRR, and Mangoapp Performance Overlay via simple config edits.
+
+* **🔴 Performance Ready**:
+  Integrated with **Feral GameMode** and **MangoHud**. The installer automatically applies `setcap` to Gamescope for high-priority scheduling and zero stuttering.
+
+---
+
+## 🛠️ Prerequisites
+
+* **GPU**: AMD Radeon or Intel Graphics (Mesa drivers).
+* **Display Manager**: **SDDM** (Required for session switching logic).
+* **Desktop Environment**: KDE Plasma 6.x (Recommended).
+* **OS**: Arch Linux (or any Arch-based distro).
+* **Core Software**: `steam`, `gamescope`, `mangohud`, `gamemode`.
+
+---
+
+## 📖 Documentation & Wiki:
+
+* **For detailed guides and technical information, please visit our Project Wiki.** https://github.com/dlucca1986/SteamMachine-DIY/wiki
+
+---
+
+## 🤝 Acknowledgments & Credits:
+
+This project wouldn't have been possible without the amazing work and guides from the Linux gaming community. A special thanks to:
+
+* **[shahnawazshahin](https://github.com/shahnawazshahin/steam-using-gamescope-guide):** For writing a wonderful guide that served as a primary inspiration for this project.
+* **[berturion](https://www.reddit.com/r/archlinux/comments/1p2fmso/comment/nqjvr44/):** For the brilliant technical insights that helped finalize the desktop switching logic.
+* **The SteamOS & Gamescope Teams:** For building the foundation of handheld gaming on Linux.
+* **Community Guides:** Big thanks to the developers and enthusiasts on **Reddit** (r/SteamDeck, r/LinuxGaming) and the **Arch Wiki** contributors.
+* **Open Source Contributors:** To everyone sharing scripts and ideas to make Linux a better place for gamers. 
+
+---
+
+## ❤️ Support the Project
+
+Built with ❤️ by a gaming fan for the Linux Community.  
+**If you like this project, please leave a ⭐ Star on GitHub!** It helps other gamers find it.
+
+---
+
+## 🚀 Quick Installation
+
+Follow these steps to transform your system. The installer will guide you through the process, detect your hardware, and handle all dependencies.
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/dlucca1986/SteamMachine-DIY.git
+   ```
+
+2. **Enter the folder**:
+   ```
+   cd SteamMachine-DIY
+   ```
+  
+3. **Set Permission**:
+   ```
+   chmod +x install.sh
+   ```
+4. **Run the Installer**:
+    ```
+   sudo ./install.sh
+   ```    
+
+* 💡 **Note**: The installer is interactive and will automatically verify your AMD/Intel hardware, install missing dependencies, and configure the necessary system permissions.
+
+---
+
+## 🛡️ Clean Architecture & Safety
+
+I value your system's integrity. This project follows a "system-safe" philosophy to ensure your Arch Linux installation remains clean and stable:
+
+* **Non-Intrusive**: Real binaries and scripts are isolated in `/usr/local/bin/`. We use a dedicated directory `/usr/bin/steamos-polkit-helpers/` for symbolic links. This satisfies Steam's hardcoded path requirements without cluttering or overwriting files in your primary `/usr/bin/` directory.
+
+* **Transparent Sudoers**: Security is paramount. A minimal, dedicated policy file is added to `/etc/sudoers.d/steamos-switcher`. It grants passwordless execution *only* to the specific scripts required for session switching, following the principle of least privilege.
+  
+* **Wayland-First Approach**: The project configures SDDM to run on Wayland. This is a strategic choice to ensure **Gamescope** can reliably claim the primary display socket, preventing common X11 resource conflicts and ensuring a seamless transition between the Desktop and Gaming Mode.
+
+* **Full Reversibility**: Every system change, link, and configuration entry is tracked. The included uninstaller can revert your system to its original state at any time.
+
+---
+
+## 🗑️ Uninstallation
+If you wish to revert all changes, I’ve included a dedicated uninstaller. 
+
+It will completely remove all scripts, symbolic links, desktop shortcuts, and the sudoers rule:
+
+```bash
+chmod +x uninstall.sh
+sudo ./uninstall.sh
+```
