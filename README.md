@@ -10,11 +10,11 @@
 
 ## 🌟 About the Project
 
-Hi, I'm **Daniele**! 🕹️
+Hi, I'm Daniele, and I’m a hardcore gaming fanatic! 🕹️
 
 This project has evolved into a professional **System Overlay** designed to faithfully replicate the SteamOS ecosystem. Version 3.1.0 marks a major milestone: transitioning from a script-based approach to a robust, **system-native architecture** driven by `systemd`. 
 
-While the project remains hardware-agnostic by design (supporting both AMD and Intel), this new version deepens the integration with the Linux OS core for unprecedented stability.
+While the project remains hardware-agnostic by design (supporting both **AMD and Intel**), this new version deepens the integration with the Linux OS core for unprecedented stability.
 
 ---
 
