@@ -1,1 +1,42 @@
 
+# =============================================================================
+#              STEAM MACHINE DIY - CONFIGURATION PANEL
+# =============================================================================
+# Path: ~/.config/steamos-diy/config
+#
+# HOW TO EDIT:
+# 1. Use 1 for YES (On) and 0 for NO (Off).
+# 2. DO NOT use spaces! Example: TARGET_WIDTH=1920 (Correct)
+#                                TARGET_WIDTH = 1920 (WRONG!)
+# =============================================================================
+
+# --- [ 1. DISPLAY RESOLUTION ] ---
+# Set this to match your TV or Monitor. 
+# Examples: 3840x2160 (4K), 1920x1080 (1080p), 1280x720 (720p).
+TARGET_WIDTH=1920
+TARGET_HEIGHT=1080
+
+# --- [ 2. REFRESH RATE ] ---
+# Set this to your monitor's frequency (usually 60, 120, or 144).
+REFRESH_RATE=60
+
+# --- [ 3. FEATURE TOGGLES ] ---
+# Enable (1) or Disable (0) these features:
+
+# Performance Overlay: Shows FPS and system usage (MangoHud).
+ENABLE_MANGOAPP=0
+
+# HDR: Only enable if your display supports HDR10.
+ENABLE_HDR=0
+
+# VRR: Enable for FreeSync, G-Sync, or Adaptive Sync monitors.
+ENABLE_VRR=0
+
+
+# =============================================================================
+# ! TROUBLESHOOTING / SAFE MODE !
+# =============================================================================
+# If a setting causes a crash, the "Atomic Watchdog" will detect it.
+# The system will automatically restart in SAFE MODE, ignoring this file
+# and using emergency defaults (720p/60) to let you recover the system.
+# =============================================================================
