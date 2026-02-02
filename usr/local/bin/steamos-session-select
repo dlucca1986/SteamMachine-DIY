@@ -1,47 +1,64 @@
 #!/bin/bash
+# =============================================================================
+# SteamMachine-DIY - Intelligent Session Selector
+# =============================================================================
+# Script: steamos-session-select
+# Version: 3.1.0
+# Description: Handles transitions between Gaming Mode (Gamescope) and 
+#              Desktop Mode (Plasma). Optimized for TTY1 execution and 
+#              process detachment to prevent session hangups.
+# Repository: https://github.com/dlucca1986/SteamMachine-DIY
+# Path:        /usr/local/bin/steamos-session-select
+# License: MIT
+# =============================================================================
 
-# ==============================================================================
-# SteamOS-DIY Session Selector (Optimized for TTY1 & Conflicts)
-# ==============================================================================
+# --- Configuration & Logging ---
+readonly LOG_FILE="/var/log/steamos-diy.log"
+readonly LOG_TAG="Session-Select"
 
-LOG_FILE="/var/log/steamos-diy.log"
-LOG_TAG="Session-Select"
-
+# Standardized logging function
 log_message() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$LOG_TAG] $1" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$LOG_TAG] $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
+# --- Environment Detection ---
 REAL_USER=$(id -un)
-TARGET_ENV=$1
-DETACH_FLAG=$2
+TARGET_ENV=${1:-""}
+DETACH_FLAG=${2:-""}
 
 # --- Detachment Logic ---
-# Essenziale: lo script deve sopravvivere alla chiusura della sessione chiamante
+# Essential: The script must survive the termination of the calling session.
+# We use systemd-run to spawn a transient service that persists during the switch.
 if [[ "$DETACH_FLAG" != "--detached" ]]; then
-    log_message "Detaching for user $REAL_USER..."
-    systemd-run --user --collect /usr/bin/steamos-session-select "$TARGET_ENV" --detached
+    log_message "Detaching session switch for user: $REAL_USER..."
+    # --collect ensures the transient service is cleaned up after execution
+    systemd-run --user --collect /usr/local/bin/steamos-session-select "$TARGET_ENV" --detached
     exit 0
 fi
 
-log_message "--- SWITCH INITIATED --- Target: $TARGET_ENV"
+log_message "--- SWITCH INITIATED --- Target Environment: $TARGET_ENV"
 
+# --- Transition Execution ---
+# Leveraging 'Conflicts=' in systemd unit files:
+# Starting one service automatically stops the conflicting one.
 case "$TARGET_ENV" in
     "plasma" | "desktop")
-        log_message "Switching to Desktop Mode..."
-        # Grazie a 'Conflicts=', far partire il desktop spegne automaticamente Steam
+        log_message "Transitioning to Desktop Mode..."
+        # Starting the desktop service will stop the gamemode service via Conflicts
         sudo /usr/bin/systemctl start "steamos-desktop@$REAL_USER.service"
         ;;
 
     "gamescope" | "steam")
-        log_message "Switching to Game Mode..."
-        # Grazie a 'Conflicts=', far partire Steam spegne automaticamente il desktop
+        log_message "Transitioning to Game Mode..."
+        # Starting the gamemode service will stop the desktop service via Conflicts
         sudo /usr/bin/systemctl start "steamos-gamemode@$REAL_USER.service"
         ;;
 
     *)
-        log_message "Error: Invalid target '$TARGET_ENV'."
+        log_message "Error: Invalid target '$TARGET_ENV' requested by $REAL_USER."
+        echo "Usage: steamos-session-select [desktop|steam]"
         exit 1
         ;;
 esac
 
-log_message "Request sent to systemd. Transition in progress on TTY1."
+log_message "Request sent to systemd. Transition in progress on primary VT."
