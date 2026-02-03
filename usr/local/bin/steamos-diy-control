@@ -46,10 +46,11 @@ LOG_PATH = MASTER["LOG_FILE"]
 STEAM_LOG = MASTER["STEAM_LOG"]
 
 SUGGESTIONS = [
-    "width", "height", "refresh", "fps-limit", "fsr", "nis", "sharpness",
-    "rt", "prefer-output", "hdr-enabled", "force-composition",
+    "width", "height", "refresh", "fps-limit", "fsr-sharpness", "nis-sharpness",
+    "rt", "prefer-output", "hdr-enabled", "force-composition", "xwayland-count",
     "GAMESCOPE_COMMAND", "ENABLE_VULKAN", "STEAM_COMPAT_DATA_PATH",
-    "MESA_DISK_CACHE_SINGLE_FILE", "vblank_mode", "mangohud"
+    "MESA_DISK_CACHE_SINGLE_FILE", "vblank_mode", "mangohud",
+    "adaptive_sync_ignore_overlay", "STEAM_MULTIPLE_XWAYLANDS", "POST_LAUNCH_CMD"
 ]
 
 # --- HIGHLIGHTERS ---
@@ -57,22 +58,17 @@ class ConfHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rules = []
-        palette = QApplication.palette()
-        color_accent = palette.color(QPalette.ColorRole.Highlight)
-        color_text = palette.color(QPalette.ColorRole.Text)
-        color_comment = palette.color(QPalette.ColorRole.PlaceholderText)
 
-        fmt_k = QTextCharFormat(); fmt_k.setForeground(color_accent); fmt_k.setFontWeight(QFont.Weight.Bold)
-        self.rules.append((QRegularExpression(r"^[A-Za-z0-9_]+(?==)"), fmt_k))
+        # Colori Steam-Style per leggibilità massima
+        fmt_k = QTextCharFormat(); fmt_k.setForeground(QColor("#1a9fff")); fmt_k.setFontWeight(QFont.Weight.Bold)
+        fmt_n = QTextCharFormat(); fmt_n.setForeground(QColor("#f49b00")); fmt_n.setFontWeight(QFont.Weight.Bold)
+        fmt_c = QTextCharFormat(); fmt_c.setForeground(QColor("#7f8c8d")); fmt_c.setFontItalic(True)
+        fmt_v = QTextCharFormat(); fmt_v.setForeground(QColor("#ffffff"))
 
-        fmt_n = QTextCharFormat(); fmt_n.setForeground(color_text); fmt_n.setFontWeight(QFont.Weight.Bold)
-        self.rules.append((QRegularExpression(r"\b[0-9]+\b"), fmt_n))
-
-        fmt_v = QTextCharFormat(); fmt_v.setForeground(color_text)
-        self.rules.append((QRegularExpression(r"(?<==).+"), fmt_v))
-
-        fmt_c = QTextCharFormat(); fmt_c.setForeground(color_comment); fmt_c.setFontItalic(True)
-        self.rules.append((QRegularExpression(r"#.*"), fmt_c))
+        self.rules.append((QRegularExpression(r"^[A-Za-z0-9_]+(?==)"), fmt_k))   # Keys
+        self.rules.append((QRegularExpression(r"\b[0-9]+\b"), fmt_n))            # Numbers
+        self.rules.append((QRegularExpression(r"#.*"), fmt_c))                   # Comments
+        self.rules.append((QRegularExpression(r"(?<==).+"), fmt_v))             # Values
 
     def highlightBlock(self, text):
         for pattern, fmt in self.rules:
@@ -113,15 +109,15 @@ class SmartTextEdit(QTextEdit):
         super().__init__(parent)
         self._completer = QCompleter(SUGGESTIONS)
         self._completer.setWidget(self)
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self._completer.activated.connect(self.insert_completion)
 
     def insert_completion(self, completion):
         tc = self.textCursor()
         extra = len(completion) - len(self._completer.completionPrefix())
-        tc.movePosition(tc.MoveOperation.Left)
-        tc.movePosition(tc.MoveOperation.EndOfWord)
-        tc.insertText(completion[-extra:])
+        tc.movePosition(tc.MoveOperation.Left, tc.MoveMode.KeepAnchor, len(self._completer.completionPrefix()))
+        tc.insertText(completion)
         self.setTextCursor(tc)
 
     def text_under_cursor(self):
@@ -134,9 +130,10 @@ class SmartTextEdit(QTextEdit):
             if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return, Qt.Key.Key_Escape, Qt.Key.Key_Tab):
                 event.ignore()
                 return
+
         super().keyPressEvent(event)
         prefix = self.text_under_cursor()
-        if prefix:
+        if prefix and len(prefix) >= 2:
             self._completer.setCompletionPrefix(prefix)
             cr = self.cursorRect()
             cr.setWidth(self._completer.popup().sizeHintForColumn(0) + self._completer.popup().verticalScrollBar().sizeHint().width())
