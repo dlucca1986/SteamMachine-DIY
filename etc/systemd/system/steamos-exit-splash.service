@@ -4,24 +4,27 @@
 # =============================================================================
 Description=SteamOS-DIY Exit Splash
 DefaultDependencies=no
-# Ensure the splash runs before the system actually cuts power or reboots
-Before=shutdown.target reboot.target halt.target kexec.target
-StandardOutput=tty
-StandardInput=tty
-TTYPath=/dev/tty1
+# We must run before the targets that actually stop services
+Before=shutdown.target reboot.target halt.target
+# Conflicts with umount.target ensures we stay alive until the very end
+Conflicts=umount.target
 
 [Service]
 Type=oneshot
-# Initial trigger: Default to shutdown splash
-ExecStart=/usr/local/bin/steamos-helpers/steamos-splash shutdown
+# Logic: We detect the target directly in a single shell execution.
+# This avoids running the splash twice and is much faster.
+ExecStart=/bin/sh -c '\
+    if systemctl list-jobs | grep -q "reboot.target"; then \
+        /usr/local/bin/steamos-helpers/steamos-splash reboot; \
+    else \
+        /usr/local/bin/steamos-helpers/steamos-splash shutdown; \
+    fi'
 
-# Logic: Check if the current systemd job is a reboot and override the splash image
-# The '-' prefix allows the command to fail without stopping the service
-ExecStartPost=-/bin/sh -c 'if systemctl list-jobs | grep -q "reboot.target"; then /usr/local/bin/steamos-helpers/steamos-splash reboot; fi'
-
-# Ensures systemd considers the service "active" during the transition
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+# Keep the service "active" so it's not cleaned up too early
 RemainAfterExit=yes
 
 [Install]
-# Hook into the power-off and reboot sequences
 WantedBy=shutdown.target reboot.target
