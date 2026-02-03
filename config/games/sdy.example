@@ -2,23 +2,34 @@
 # SteamMachine-DIY - SDY Game Profile Template
 # =============================================================================
 # Path:        ~/.config/steamos-diy/games/YourGameName.conf
-# Version:     3.1.0
+# Version:     3.2.4
 # Description: Per-game environment variables and command injection.
 # Repository:  https://github.com/dlucca1986/SteamMachine-DIY
 # License:     MIT
 # =============================================================================
+
+# --- [ HOW SDY EXECUTES YOUR GAME ] ---
+# The final command is built following this exact order:
+# [Global Pre] + [Game Pre] + Steam_Executable + [Game Args] + [Global Args]
+#
+# PRACTICAL EXAMPLE:
+# global.conf: PRE="mangohud" | ARGS="-vulkan"
+# game.conf:   PRE="gamemoderun" | ARGS="-novid"
+# RESULT: mangohud gamemoderun App.exe -novid -vulkan
+# -----------------------------------------------------------------------------
+
 # --- [ 1. PRE-COMMAND (PREFIX) ] ---
 # Tools or env vars that run BEFORE the game executable.
 # CUMULATIVE: [Global Pre] + [Game Pre] + Game.exe
 # -----------------------------------------------------------------------------
 # ✅ CORRECT SYNTAX:
-export GAME_PRE_COMMAND="mangohud gamemoderun"           # Combined tools (Quoted)
-export GAME_PRE_COMMAND="DXVK_HUD=fps"                   # Environment variables
-export GAME_PRE_COMMAND="taskset -c 0-7"                 # CPU Core Pinning
+# export GAME_PRE_COMMAND="mangohud gamemoderun"           # Combined tools (Quoted)
+# export GAME_PRE_COMMAND="DXVK_HUD=fps"                   # Environment variables
+# export GAME_PRE_COMMAND="taskset -c 0-7"                 # CPU Core Pinning
 
 # ❌ WRONG SYNTAX:
-# GAME_PRE_COMMAND="mangohud"                            # Missing 'export' keyword
-# export GAME_PRE_COMMAND=mangohud gamemoderun           # Error: Missing quotes
+# GAME_PRE_COMMAND="mangohud"                             # Missing 'export' keyword
+# export GAME_PRE_COMMAND=mangohud gamemoderun            # Error: Missing quotes
 # -----------------------------------------------------------------------------
 export GAME_PRE_COMMAND=""
 
@@ -28,13 +39,13 @@ export GAME_PRE_COMMAND=""
 # CUMULATIVE: Game.exe + [Game Args] + [Global Args]
 # -----------------------------------------------------------------------------
 # ✅ CORRECT SYNTAX:
-export GAME_ARGS="-novid -high"                          # Multiple flags (Quoted)
-export GAME_ARGS="--resolution 1920x1080"                # Args with values
-export GAME_ARGS="-vulkan"                               # Single flag
+# export GAME_ARGS="-novid -high"                          # Multiple flags (Quoted)
+# export GAME_ARGS="--resolution 1920x1080"                # Args with values
+# export GAME_ARGS="-vulkan"                               # Single flag
 
 # ❌ WRONG SYNTAX:
-# export GAME_ARGS=-novid -high                          # Error: Quotes are required
-# export GAME_ARGS="-novid" -high                        # Error: Broken string
+# export GAME_ARGS=-novid -high                           # Error: Quotes are required
+# export GAME_ARGS="-novid" -high                         # Error: Broken string
 # -----------------------------------------------------------------------------
 export GAME_ARGS=""
 
@@ -45,6 +56,7 @@ export GAME_ARGS=""
 # - Use 'global.conf' for: Always-on tools (MangoHud, GameMode, global FPS limits).
 # - Use 'game.conf' for: Specific fixes (--skip-intro, -windowed, custom paths).
 # - Use quotes "" always: Prevents Bash from misinterpreting spaces.
+# - NO SPACES around '=': Use 'export VAR="val"', NOT 'export VAR = "val"'.
 # =============================================================================
 
 # =============================================================================
