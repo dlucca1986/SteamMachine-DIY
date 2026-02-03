@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# SteamMachine-DIY - Master Installer (v3.2.3)
-# Cleaned: Using repo-native shebangs, config preservation, desktop validation
+# SteamMachine-DIY - Master Installer (v3.2.4)
+# Fixed: Global variable expansion for cross-language compatibility (Python/Bash)
 # =============================================================================
 
 set -uo pipefail
@@ -36,7 +36,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 clear
 echo -e "${CYAN}==============================================${NC}"
-echo -e "${CYAN}   SteamOS-DIY Master Installer v3.2.3        ${NC}"
+echo -e "${CYAN}   SteamOS-DIY Master Installer v3.2.4        ${NC}"
 echo -e "${CYAN}==============================================${NC}"
 
 if [[ $EUID -ne 0 ]]; then
@@ -65,7 +65,7 @@ deploy_core() {
     info "Deploying Agnostic Core..."
     mkdir -p "$HELPERS_DEST" "$SYSTEMD_DEST/getty@tty1.service.d" "$APP_ENTRIES" "$POLKIT_LINKS_DIR"
 
-    # 1. Scripts & Helpers (Usa Shebang nativi del repo)
+    # 1. Scripts & Helpers
     if [ -d "$SOURCE_DIR/usr/local/bin" ]; then
         cp -r "$SOURCE_DIR/usr/local/bin/"* "$BIN_DEST/" 2>/dev/null || true
         chmod +x "$BIN_DEST"/* 2>/dev/null || true
@@ -99,13 +99,22 @@ deploy_core() {
 }
 
 setup_configs() {
-    info "Deploying user configurations..."
+    info "Deploying and flattening configurations..."
 
-    # Preserva il template globale se esiste nel repo
     if [ -f "$SOURCE_DIR/etc/default/steamos-diy" ]; then
         cp "$SOURCE_DIR/etc/default/steamos-diy" "$GLOBAL_CONF"
+        
+        # 1. Sostituzione primaria dell'utente
         sed -i "s/^STEAMOS_USER=.*/STEAMOS_USER=\"$REAL_USER\"/" "$GLOBAL_CONF"
-        success "Global configuration preserved and calibrated."
+        
+        # 2. Espansione di ${STEAMOS_USER} in tutto il file (per percorsi statici)
+        sed -i "s/\${STEAMOS_USER}/$REAL_USER/g" "$GLOBAL_CONF"
+        
+        # 3. Espansione di ${CONF_DIR} (per riferimenti incrociati come GAMES_CONF_DIR)
+        local REAL_CONF_DIR="/home/$REAL_USER/.config/steamos-diy"
+        sed -i "s|\${CONF_DIR}|$REAL_CONF_DIR|g" "$GLOBAL_CONF"
+        
+        success "Global configuration flattened for universal access."
     else
         echo "STEAMOS_USER=\"$REAL_USER\"" > "$GLOBAL_CONF"
     fi
