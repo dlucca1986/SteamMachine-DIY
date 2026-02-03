@@ -1,10 +1,8 @@
 [Unit]
-# =============================================================================
-# SteamMachine-DIY - Desktop Session Service (KDE Plasma)
-# =============================================================================
-Description=SteamOS-DIY Desktop Session for %i
+Description=SteamOS-DIY Desktop Session (KDE Plasma) for %i
+# Ensure system services and TTY1 are ready before session start
 After=network.target systemd-user-sessions.service getty@tty1.service
-# Conflicts ensures that starting Desktop Mode automatically stops Game Mode
+# Avoid resource conflicts with Game Mode and local logins
 Conflicts=steamos-gamemode@%i.service getty@tty1.service
 
 [Service]
@@ -15,47 +13,45 @@ WorkingDirectory=/home/%i
 UtmpIdentifier=tty1
 UtmpMode=user
 
-# Load Global Master Configuration (Agnostic Paths/Tags)
+# Load global configuration variables
 EnvironmentFile=/etc/default/steamos-diy
 
-# TTY1 & Log Management
+# TTY & Logging
+# Capturing session output to monitor Wayland startup performance
 StandardInput=tty
-# Redirecting desktop logs to the central diagnostic log
 StandardOutput=append:/var/log/steamos-diy.log
 StandardError=append:/var/log/steamos-diy.log
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
 
-# DYNAMIC ENVIRONMENT - Overriding Game Mode settings for a full KDE Session
+# KDE Plasma Wayland Environment Variables
 Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_CURRENT_DESKTOP=KDE
 Environment=KDE_FULL_SESSION=true
 Environment=QT_QPA_PLATFORM=wayland
-# Disable specialized portals to use standard Desktop behavior
 Environment=GTK_USE_PORTAL=0
 
-# PRE-LAUNCH CLEANUP
-# 1. Clear TTY1 for visual transition
+# --- STARTUP PHASE ---
+# 1. Remove stale Wayland sockets to ensure a fresh session start
+ExecStartPre=-/usr/bin/bash -c "/usr/bin/rm -f /run/user/%U/wayland-0*"
+# 2. Clear terminal to prevent old logs from flickering
 ExecStartPre=-/usr/bin/bash -c "clear > /dev/tty1"
-# 2. Force-release GPU (DRI) from any lingering Gamescope/Steam processes
-ExecStartPre=-/bin/sh -c 'if /usr/bin/fuser /dev/dri/card* >/dev/null 2>&1; then /usr/bin/fuser -k /dev/dri/card*; fi'
-# 3. Aggressive cleanup of stale Wayland sockets to prevent startup failures
-ExecStartPre=-/usr/bin/bash -c "/usr/bin/rm -f /run/user/$(id -u %i)/wayland-0*"
-# 4. Trigger the Desktop Mode Splash Screen
+# 3. Trigger the cyan "Desktop Mode" splash screen
 ExecStartPre=-/usr/local/bin/steamos-helpers/steamos-splash desktop
 
-# LAUNCH SEQUENCE
-# Start the native KDE Plasma Wayland session
+# --- SESSION LAUNCH ---
+# Invoke the KDE Plasma Wayland compositor
 ExecStart=/usr/bin/startplasma-wayland
 
-# SESSION MANAGEMENT
+# --- EXIT MANAGEMENT ---
+# Using standard session termination without additional hooks to 
+# allow KDE to manage its own cleanup process.
 Restart=no
 KillMode=mixed
 KillSignal=SIGTERM
-# Fast timeout for seamless switching
-TimeoutStopSec=500ms
+TimeoutStopSec=3s
 
 [Install]
-# Hook into the graphical target sequence
+# Enable the service for graphical.target
 WantedBy=graphical.target
