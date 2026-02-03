@@ -8,51 +8,55 @@
 # Path: ~/.config/steamos-diy/config
 # License: MIT
 # =============================================================================
+# Path:        ~/.config/steamos-diy/config
+# Version:     3.2.4
+# Description: Master display and compositor settings for Gamescope.
+# Repository:  https://github.com/dlucca1986/SteamMachine-DIY
+# License:     MIT
+# =============================================================================
 
-# HOW TO EDIT:
-# 1. Use 1 for YES (On) and 0 for NO (Off).           # Boolean toggles
-# 2. DO NOT use spaces around '='!                    # Bash assignment rule
-# 3. Variables with 'export' affect the Steam UI.     # Environment injection
+# --- [ 🟢 HOW TO EDIT ] ---
+# 1. Use 1 for ON (Yes) and 0 for OFF (No).
+# 2. NO SPACES around '='! (e.g., TARGET_WIDTH=1920 is OK).
+# 3. Variables with 'export' affect the Steam UI environment.
 # =============================================================================
 
 # --- [ 1. DISPLAY SETTINGS ] ---
+# These define the "Canvas" where your games will be drawn.
 # Set these to match your TV or Monitor's native specs.
 # -----------------------------------------------------------------------------
-TARGET_WIDTH=1920                                        # Horizontal pixels
-TARGET_HEIGHT=1080                                       # Vertical pixels
-REFRESH_RATE=60                                          # Refresh rate in Hz
+TARGET_WIDTH=1920                             # Horizontal pixels (Width)
+TARGET_HEIGHT=1080                            # Vertical pixels (Height)
+REFRESH_RATE=60                               # Refresh rate in Hz (Speed)
 
 
 # --- [ 2. STEAM INTERFACE & DRIVERS ] ---
-# Variables that influence how Steam interacts with the hardware.
+# These variables "inject" settings into the Steam process.
 # -----------------------------------------------------------------------------
-# ✅ CORRECT:
-export SDL_VIDEODRIVER=x11                               # Force X11 for SDL apps
-export XDG_CURRENT_DESKTOP=SteamOS                       # Enable Deck UI features
+# ✅ CORRECT SYNTAX:
+export SDL_VIDEODRIVER=x11                    # Forces X11 (Safe for Gamescope)
+export XDG_CURRENT_DESKTOP=SteamOS            # Tells Steam: "You are a Console"
 
-# ❌ WRONG:
-# SDL_VIDEODRIVER=x11                                    # Error: Missing 'export'
-# export SDL_VIDEODRIVER = x11                           # Error: Spaces break Bash
+# ❌ WRONG SYNTAX:
+# SDL_VIDEODRIVER=x11                         # ❌ ERROR: Missing 'export'
+# export SDL_VIDEODRIVER = x11                # ❌ ERROR: Spaces break Bash
+# -----------------------------------------------------------------------------
 
 
 # --- [ 3. FEATURE TOGGLES (0/1) ] ---
-# Enable (1) or Disable (0) these Gamescope features:
+# Performance and Visual enhancements.
 # -----------------------------------------------------------------------------
-ENABLE_MANGOAPP=0                                        # Performance Overlay (FPS)
-ENABLE_HDR=0                                             # High Dynamic Range (HDR10)
-ENABLE_VRR=0                                             # Variable Refresh (G-Sync/FreeSync)
+ENABLE_MANGOAPP=0                             # SHOW FPS: Performance Overlay
+ENABLE_HDR=0                                  # HDR: Deep colors (Needs HDR Monitor)
+ENABLE_VRR=0                                  # VRR: G-Sync/FreeSync (Prevents tearing)
 
 
-# --- [ 4. ADVANCED GAMESCOPE ARGUMENTS ] ---
-# WARNING: Expert users only. Extra flags for the Gamescope compositor.
+# --- [ 4. EXPERT ARGUMENTS ] ---
+# Extra flags sent directly to the Gamescope compositor.
+# Think of this as adding "Left-side" instructions to the compositor.
 # -----------------------------------------------------------------------------
-# ✅ CORRECT:
-# GAMESCOPE_ARGS="--cursor-scale 2 --borderless"         # Quoted string (Safe)
-# GAMESCOPE_ARGS="--disable-layers"                      # Specific workaround flag
-
-# ❌ WRONG:
-# GAMESCOPE_ARGS=--disable-layers                        # Error: Missing quotes
-# GAMESCOPE_ARGS="--unknown-flag"                        # Error: Will trigger Watchdog
+# ✅ EXAMPLE: GAMESCOPE_ARGS="--cursor-scale 2 --borderless"
+# ❌ DANGER:  GAMESCOPE_ARGS="--wrong-flag" (Can cause black screens!)
 # -----------------------------------------------------------------------------
 GAMESCOPE_ARGS=""
 
@@ -60,12 +64,14 @@ GAMESCOPE_ARGS=""
 # =============================================================================
 # ! HARDWARE SAFETY & WATCHDOG !
 # =============================================================================
-# 1. PREVENTIVE GUARD: If settings exceed monitor limits, SDY overrides
-#    them with NATIVE resolution (Auto-Fallback).
+# 🛡️ PREVENTIVE GUARD: 
+# If your settings exceed your monitor's physical limits, SDY will 
+# automatically override them with NATIVE resolution (Auto-Fallback).
 #
-# 2. REACTIVE WATCHDOG: If Gamescope crashes within 10s (due to bad args),
-#    the system restarts in "Native Safe Mode" to keep Steam accessible.
+# 🛡️ REACTIVE WATCHDOG: 
+# If Gamescope crashes within 10s (due to bad arguments), the system 
+# will restart in "Native Safe Mode" to keep the UI accessible.
 #
-# 3. VULKAN MODE: The system is optimized for Vulkan rendering. Ensure
-#    drivers are up to date via System Info tab.
+# 🛡️ VULKAN FIRST: 
+# This system is built for Vulkan. Ensure your GPU supports it.
 # =============================================================================
