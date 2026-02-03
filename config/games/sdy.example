@@ -7,68 +7,70 @@
 # Repository:  https://github.com/dlucca1986/SteamMachine-DIY
 # License:     MIT
 # =============================================================================
-
-# --- [ HOW SDY EXECUTES YOUR GAME ] ---
-# The final command is built following this exact order:
-# [Global Pre] + [Game Pre] + Steam_Executable + [Global Args] + [Game Args]
-#
-# PRACTICAL EXAMPLE:
-# global.conf: PRE="mangohud" | ARGS="-vulkan"
-# game.conf:   PRE="gamemoderun" | ARGS="-opengl"
-# RESULT: mangohud gamemoderun App.exe -vulkan -opengl
-# (Note: In case of conflict, -opengl wins because it is read last)
-
+# --- [ 🚂 HOW SDY EXECUTES YOUR GAME ] ---
+# Imagine your game command as a train. This file adds wagons to it.
+# The final order is:
+# [Global Pre] + [Game Pre] + 🚂 GAME.exe + [Global Args] + [Game Args]
 # -----------------------------------------------------------------------------
 
-# --- [ 1. PRE-COMMAND (PREFIX) ] ---
-# Tools or env vars that run BEFORE the game executable.
+# --- [ 1. EXTRA TOOLS (Left Side of the Train) ] ---
+# 💡 REAL LIFE ANALOGY: "The Equipment" 🎒
+# Think of this as putting on your gear BEFORE you start the mission.
+# If you need binoculars (MangoHud) or special boots (GameMode), you 
+# "wear" them here so they are ready when the game starts.
+#
 # CUMULATIVE: [Global Pre] + [Game Pre] + Game.exe
 # -----------------------------------------------------------------------------
 # ✅ CORRECT SYNTAX:
-# export GAME_PRE_COMMAND="mangohud gamemoderun"           # Combined tools (Quoted)
-# export GAME_PRE_COMMAND="DXVK_HUD=fps"                   # Environment variables
-# export GAME_PRE_COMMAND="taskset -c 0-7"                 # CPU Core Pinning
-
-# ❌ WRONG SYNTAX:
-# GAME_PRE_COMMAND="mangohud"                             # Missing 'export' keyword
-# export GAME_PRE_COMMAND=mangohud gamemoderun            # Error: Missing quotes
+# export GAME_PRE_COMMAND="mangohud gamemoderun"           # Combined tools
+# export GAME_PRE_COMMAND="DXVK_HUD=fps"                   # Env variables
 # -----------------------------------------------------------------------------
 export GAME_PRE_COMMAND=""
 
 
-# --- [ 2. GAME ARGUMENTS (SUFFIX) ] ---
-# Arguments passed directly AFTER the game executable.
-# CUMULATIVE: Game.exe + [Game Args] + [Global Args]
+# --- [ 2. GAME OPTIONS (Right Side of the Train) ] ---
+# 💡 REAL LIFE ANALOGY: "The Instructions" 📝
+# Think of these as specific orders you give to the game once it's running.
+# Example: "Don't show the intro movie" (-novid) or "Use this engine" (-vulkan).
+# Since these are at the END, they are the LAST orders the game hears.
+#
+# CUMULATIVE: Game.exe + [Global Args] + [Game Args]
 # -----------------------------------------------------------------------------
 # ✅ CORRECT SYNTAX:
-# export GAME_ARGS="-novid -high"                          # Multiple flags (Quoted)
-# export GAME_ARGS="--resolution 1920x1080"                # Args with values
+# export GAME_ARGS="-novid -high"                          # Multiple flags
 # export GAME_ARGS="-vulkan"                               # Single flag
-
-# ❌ WRONG SYNTAX:
-# export GAME_ARGS=-novid -high                           # Error: Quotes are required
-# export GAME_ARGS="-novid" -high                         # Error: Broken string
 # -----------------------------------------------------------------------------
 export GAME_ARGS=""
 
 
 # =============================================================================
+# ! QUICK RECAP !
+# =============================================================================
+# ❓ "What is PRE-COMMAND?"
+#    It's EXTERNAL. Tools that watch or help the game from the outside.
+#    Analogy: Wearing a watch or a heart rate monitor while you run.
+#
+# ❓ "What is GAME-ARGS?"
+#    It's INTERNAL. Commands that change how the game engine itself works.
+#    Analogy: Telling a runner to "run faster" or "breathe deeply".
+#
+# ❓ "Which one should I use?"
+#    - Use PRE if you want to see FPS (MangoHud) or boost CPU (GameMode).
+#    - Use ARGS if the game itself needs a fix (Windowed mode, No-Intro).
+# =============================================================================
+
+# =============================================================================
 # ! HINTS & TIPS !
 # =============================================================================
-# - Use 'global.conf' for: Always-on tools (MangoHud, GameMode, global FPS limits).
-# - Use 'game.conf' for: Specific fixes (--skip-intro, -windowed, custom paths).
-# - Use quotes "" always: Prevents Bash from misinterpreting spaces.
-# - NO SPACES around '=': Use 'export VAR="val"', NOT 'export VAR = "val"'.
+# - Use 'global.conf' for: Always-on tools (MangoHud, GameMode).
+# - Use 'game.conf'   for: Specific overrides (-opengl, --skip-intro).
+# - Use quotes "" always: Prevents Bash from breaking on spaces.
+# - NO SPACES around '=': Use VAR="val", NOT VAR = "val".
 # =============================================================================
 
 # =============================================================================
 # ! DEBUGGING & LOGS !
 # =============================================================================
 # Check /var/log/steamos-diy.log for:
-#   - [LAUNCH]: The wrapper has successfully started.
-#   - [ARGS]: Shows the final combined Prefix and Extra args injected.
 #   - [DEBUG]: The full final command-line exactly as executed.
-#
-# Steam Log Sync Tag (check ~/.local/share/Steam/logs/console-linux.txt):
-#   --- SDY_REATTIVO_START: [FOLDER_NAME] ---
 # =============================================================================
