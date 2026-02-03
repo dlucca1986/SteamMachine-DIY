@@ -15,7 +15,6 @@
 set -eou pipefail
 
 # --- 1. CONFIGURATION & AGNOSTIC LOADING ---
-# Load the Master Global Configuration for system-wide paths and tags
 GLOBAL_CONFIG="/etc/default/steamos-diy"
 
 if [[ -f "$GLOBAL_CONFIG" ]]; then
@@ -44,7 +43,6 @@ log() {
 mkdir -p "$CONF_DIR"
 
 # --- 2. DYNAMIC TEMPLATE GENERATION ---
-# Create a global template if it doesn't exist
 if [[ ! -f "$GLOBAL_GAME_CONF" ]]; then
     echo -e "# Global settings for all games\nexport GAME_PRE_COMMAND=\"\"\nexport GAME_ARGS=\"\"" > "$GLOBAL_GAME_CONF"
 fi
@@ -61,26 +59,26 @@ if [[ ! -f "$GAME_CONF" ]]; then
 fi
 
 # --- 3. CONFIGURATION LOADING & CONCATENATION ---
-# Reset variables to ensure a clean state
 export GAME_PRE_COMMAND=""
 export GAME_ARGS=""
 
-# Load Global Settings
+# 1. Load Global Settings
 source "$GLOBAL_GAME_CONF"
 G_PRE="$GAME_PRE_COMMAND"
 G_ARGS="$GAME_ARGS"
 
-# Reset and Load Game-Specific Settings
+# 2. Reset and Load Game-Specific Settings
 export GAME_PRE_COMMAND=""
 export GAME_ARGS=""
 source "$GAME_CONF"
 
-# Combine Global and Specific commands
+# 3. Combine with Priority Logic:
+# Prefixes: [Global] + [Specific]
 FINAL_PRE="${G_PRE} ${GAME_PRE_COMMAND}"
-FINAL_ARGS="${GAME_ARGS} ${G_ARGS}"
+# Arguments: [Global] + [Specific] -> Specific stays at the end to allow OVERRIDE
+FINAL_ARGS="${G_ARGS} ${GAME_ARGS}"
 
 # --- 4. STEAM LOG SYNCHRONIZATION ---
-# Insert a marker in Steam's own logs to assist the DIY Control Center diagnostic
 touch "$STEAM_LOG_PATH" 2>/dev/null || true
 printf "\n--- SDY_REATTIVO_START: %s ---\n" "$FOLDER_NAME" >> "$STEAM_LOG_PATH" 2>/dev/null || true
 sync "$STEAM_LOG_PATH" 2>/dev/null || true
@@ -88,12 +86,11 @@ sync "$STEAM_LOG_PATH" 2>/dev/null || true
 # --- 5. EXECUTION ---
 log "LAUNCH" "Starting Game: $FOLDER_NAME"
 
-# Log injection details only if variables are not empty
 if [[ -n "${FINAL_PRE// /}" || -n "${FINAL_ARGS// /}" ]]; then
     log "ARGS" "Injection -> Prefix: [${FINAL_PRE:-NONE}] | Extra: [${FINAL_ARGS:-NONE}]"
 fi
 
 log "DEBUG" "Full Exec: $FINAL_PRE $@ $FINAL_ARGS"
 
-# Execute the game using 'env' to handle prefixes correctly, redirecting errors to main log
+# Execute using 'env' to handle prefixes, redirecting errors to main log
 exec env $FINAL_PRE "$@" $FINAL_ARGS 2>> "$LOG_FILE"
