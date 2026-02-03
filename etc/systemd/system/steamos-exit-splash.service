@@ -1,30 +1,43 @@
 [Unit]
 # =============================================================================
-# SteamMachine-DIY - Exit Splash Screen Service
+# SteamOS-DIY System Exit Transition Service
 # =============================================================================
-Description=SteamOS-DIY Exit Splash
+Description=SteamOS-DIY System Exit Splash
 DefaultDependencies=no
-# We must run before the targets that actually stop services
+
+# COORDINATION: Wait for active user sessions to release TTY1 and GPU resources.
+# This ensures no overlap between session-end and system-shutdown splashes.
+After=steamos-gamemode@%i.service steamos-desktop@%i.service
+
+# PRIORITY: Must complete execution before the system unmounts filesystems 
+# or reaches the final shutdown/reboot stages.
 Before=shutdown.target reboot.target halt.target
-# Conflicts with umount.target ensures we stay alive until the very end
 Conflicts=umount.target
 
 [Service]
 Type=oneshot
-# Logic: We detect the target directly in a single shell execution.
-# This avoids running the splash twice and is much faster.
-ExecStart=/bin/sh -c '\
+# Standard TTY management to ensure the splash is visible on the physical console.
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+
+# Ensure TTY1 is active before rendering.
+ExecStartPre=/usr/bin/chvt 1
+
+# DIRECTION LOGIC:
+# Checks the systemd job queue to determine the exit intent.
+# If 'reboot.target' is in the queue, it triggers the yellow splash.
+# Otherwise, it defaults to the red shutdown splash.
+ExecStart=/usr/bin/bash -c '\
     if systemctl list-jobs | grep -q "reboot.target"; then \
         /usr/local/bin/steamos-helpers/steamos-splash reboot; \
     else \
         /usr/local/bin/steamos-helpers/steamos-splash shutdown; \
     fi'
 
-StandardOutput=tty
-StandardError=tty
-TTYPath=/dev/tty1
-# Keep the service "active" so it's not cleaned up too early
+# Prevents the service from being considered 'dead' before the script delay finishes.
 RemainAfterExit=yes
 
 [Install]
+# Links the service to the system power-state targets.
 WantedBy=shutdown.target reboot.target
