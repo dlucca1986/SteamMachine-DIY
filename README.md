@@ -24,7 +24,7 @@ While the project remains hardware-agnostic by design (supporting both **AMD and
   Transition between **Gamescope** and **KDE Plasma** using the official UI buttons. No login screens, no passwords—just a clean handover managed by `systemd` unit conflicts.
 
 * **🎨 Custom Boot Experience**:
-  Includes a **Custom Boot Splash** integration to provide a seamless visual transition from the moment you power on your machine.
+  Includes a **Custom Boot Splash** integration to provide a seamless visual experience from power-on to shutdown, hiding the console clutter.
 
 * **🧠 Intelligent Hardware Detection**:
   The new launcher automatically detects resolution, refresh rates, and GPU capabilities. It configures itself on the fly, ensuring you reach the UI even on complex multi-monitor setups.
@@ -32,8 +32,8 @@ While the project remains hardware-agnostic by design (supporting both **AMD and
 * **⚙️ Centralized Master Config**:
   No more hunting for hidden files. The entire system is now governed by a single, professional configuration file: `/etc/default/steamos-diy`.
 
-* **⚡ Zero-DM Boot (Fast & Lean)**:
-  Eliminates SDDM/GDM. The system boots directly into the session via `agetty` autologin on TTY1, significantly reducing boot times and overhead.
+* **⚡ Zero-DM Boot (Deterministic & Lean)**:
+  Eliminates SDDM/GDM. The system boots directly into the session via `agetty` autologin on TTY1, ensuring a reliable GPU handover and reducing background overhead.
 
 * **🚀 SteamOS Compatibility Shims**:
   Includes specialized helpers (`jupiter-biosupdate`, `steamos-update`) that "trick" the Steam UI into thinking it's on official hardware, preventing update errors.
@@ -42,7 +42,7 @@ While the project remains hardware-agnostic by design (supporting both **AMD and
   A powerful injection tool for your games. Add custom prefixes, or extra arguments globally or on a per-game basis.
 
 * **🛠️ SteamMachine-DIY Control Center (sdy companion)**:
-  Python-based utility that acts as the brain of the system. It orchestrates hardware configurations, manages the Safe Mode state, and provides a bridge between the system services and the user interface.
+  A Python-based graphical utility designed to manage the system's core settings. It allows users to easily configure **Gamescope** parameters, customize the **Universal Game Wrapper**, monitor real-time system logs, and manage the **Safe Mode** state through an intuitive interface.
   
 ---
 
@@ -64,7 +64,7 @@ I value your system's integrity. This project follows a "system-safe" philosophy
 * **GPU**: AMD Radeon (preferred) or Intel Graphics (Mesa drivers).
 * **Display Manager**: **None/Disabled** (Direct TTY1 login).
 * **Desktop Environment**: KDE Plasma 6.x.
-* **Core Software**: `steam`, `gamescope`, `mangohud`, `gamemode`, `lib32-gamemode`, `python-pyqt6`
+* **Core Software**: `steam`, `steam-devices`, `gamescope`, `mangohud`, `gamemode`, `lib32-gamemode`, `python-pyqt6`
 
 ---
 
@@ -79,6 +79,7 @@ I value your system's integrity. This project follows a "system-safe" philosophy
 This project wouldn't have been possible without the amazing work and guides from the Linux gaming community. A special thanks to:
 
 * **[shahnawazshahin](https://github.com/shahnawazshahin/steam-using-gamescope-guide):** For writing a wonderful guide that served as a primary inspiration for this project.
+* **[HikariKnight](https://github.com/HikariKnight/ScopeBuddy):** For the excellent ScopeBuddy tool which inspired the Universal Game Wrapper.
 * **[berturion](https://www.reddit.com/r/archlinux/comments/1p2fmso/comment/nqjvr44/):** For the brilliant technical insights that helped finalize the desktop switching logic.
 * **The SteamOS & Gamescope Teams:** For building the foundation of handheld gaming on Linux.
 * **Community Guides:** Big thanks to the developers and enthusiasts on **Reddit** (r/SteamDeck, r/LinuxGaming) and the **Arch Wiki** contributors.
