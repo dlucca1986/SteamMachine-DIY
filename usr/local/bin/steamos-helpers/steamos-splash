@@ -16,54 +16,33 @@ GLOBAL_CONF="/etc/default/steamos-diy"
 DISPLAY_USER="${STEAMOS_USER:-User}"
 LOCK_FILE="/tmp/steamos-splash.lock"
 
-# --- TTY Initialization ---
-# Redirect output to physical console TTY1
-exec > /dev/tty1 2>&1
-# Hardware reset to clear previous frame buffers (prevents ghosting)
-echo -ne '\033c'
-# Hide terminal cursor for a cleaner look
-setterm -cursor off
+# --- TTY Output Function (Native) ---
+# Poiché il .service ha StandardOutput=tty, stampiamo direttamente
+tty_out() {
+    echo -ne "$1"
+}
+
+# --- Initialization ---
+# Reset hardware e nascondi cursore (ora senza sudo e senza permessi negati)
+tty_out '\033c'
+setterm -cursor off 2>/dev/null || true
 
 # --- UI Color Definitions (ANSI) ---
-CYAN='\e[1;36m'    # Desktop Mode
-GREEN='\e[1;32m'   # Game Mode
-RED='\e[1;31m'     # Shutdown
-YELLOW='\e[1;33m'  # Reboot
-WHITE='\e[1;37m'   # Primary Text
-GRAY='\e[1;30m'    # Subtitles/Separator
-RESET='\e[0m'      # Reset Formatting
-
-# Visual padding for ASCII art alignment
+CYAN='\e[1;36m'; GREEN='\e[1;32m'; RED='\e[1;31m'; YELLOW='\e[1;33m'; WHITE='\e[1;37m'; GRAY='\e[1;30m'; RESET='\e[0m'
 PAD="            "
 
 # --- Argument & State Logic ---
 case "$1" in
-    "game")
-        # Session Start: Gaming Mode
-        rm -f "$LOCK_FILE" 2>/dev/null || true
-        COLOR=$GREEN; MODE="Game Mode"; STAT="Active"; DELAY=0.8
-        ;;
-    "desktop")
-        # Session Start: Desktop Mode
-        rm -f "$LOCK_FILE" 2>/dev/null || true
-        COLOR=$CYAN; MODE="Desktop Mode"; STAT="Online"; DELAY=0.8
-        ;;
-    "reboot")
-        # System State: Rebooting
-        COLOR=$YELLOW; MODE="System"; STAT="Rebooting..."; DELAY=1.0
-        ;;
-    "shutdown")
-        # System State: Powering Off
-        COLOR=$RED; MODE="System"; STAT="Shutting down..."; DELAY=1.0
-        ;;
+    "game")     rm -f "$LOCK_FILE" 2>/dev/null; COLOR=$GREEN; MODE="Game Mode"; STAT="Active"; DELAY=0.5 ;;
+    "desktop")  rm -f "$LOCK_FILE" 2>/dev/null; COLOR=$CYAN; MODE="Desktop Mode"; STAT="Online"; DELAY=0.5 ;;
+    "reboot")   COLOR=$YELLOW; MODE="System"; STAT="Rebooting..."; DELAY=1.0 ;;
+    "shutdown") COLOR=$RED; MODE="System"; STAT="Shutting down..."; DELAY=1.0 ;;
     *)
-        # Auto-Detection Logic for Generic Calls (e.g., systemd ExecStopPost)
         if systemctl list-jobs | grep -q "reboot.target"; then
             COLOR=$YELLOW; MODE="System"; STAT="Rebooting..."; DELAY=2.5
         elif systemctl list-jobs | grep -qE "shutdown.target|poweroff.target|halt.target"; then
             COLOR=$RED; MODE="System"; STAT="Shutting down..."; DELAY=2.5
         else
-            # Exit if session is already active or locked to prevent flicker
             [[ -f "$LOCK_FILE" ]] && exit 0
             COLOR=$WHITE; MODE="Wait"; STAT="Processing..."; DELAY=0.5
         fi
@@ -71,18 +50,14 @@ case "$1" in
 esac
 
 # --- Screen Rendering ---
-# Vertical offset for center-like positioning
-echo -e "\n\n\n\n\n\n"
+OUT="\n\n\n\n\n\n"
+OUT+="${PAD}${COLOR}      ◢◤  ◢◤      ${RESET}   ${WHITE}${DISPLAY_USER}${RESET}@${WHITE}steamos-diy${RESET}\n"
+OUT+="${PAD}${COLOR}    ◢◤      ◢◤    ${RESET}   ${GRAY}-------------------${RESET}\n"
+OUT+="${PAD}${COLOR}  ◢◤          ◢◤  ${RESET}   ${WHITE}Os     : SteamOS-DIY\n"
+OUT+="${PAD}${COLOR}    ◢◤      ◢◤    ${RESET}   ${WHITE}Mode   : ${COLOR}${MODE}${RESET}\n"
+OUT+="${PAD}${COLOR}      ◢◤  ◢◤      ${RESET}   ${WHITE}Status : ${GRAY}${STAT}${RESET}\n"
 
-# Logo and System Info
-echo -e "${PAD}${COLOR}      ◢◤  ◢◤      ${RESET}   ${WHITE}${DISPLAY_USER}${RESET}@${WHITE}steamos-diy${RESET}"
-echo -e "${PAD}${COLOR}    ◢◤      ◢◤    ${RESET}   ${GRAY}-------------------${RESET}"
-echo -e "${PAD}${COLOR}  ◢◤          ◢◤  ${RESET}   ${WHITE}Os     : SteamOS-DIY"
-echo -e "${PAD}${COLOR}    ◢◤      ◢◤    ${RESET}   ${WHITE}Mode   : ${COLOR}${MODE}${RESET}"
-echo -e "${PAD}${COLOR}      ◢◤  ◢◤      ${RESET}   ${WHITE}Status : ${GRAY}${STAT}${RESET}"
+tty_out "$OUT"
 
-# Hold the splash for the defined duration
+# Mantiene lo splash visibile per il tempo definito
 sleep $DELAY
-
-# Restore cursor before exit (optional, but good practice)
-setterm -cursor on
