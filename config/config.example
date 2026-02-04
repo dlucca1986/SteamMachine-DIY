@@ -60,6 +60,13 @@ ENABLE_VRR=0                                  # VRR: G-Sync/FreeSync (Prevents t
 # -----------------------------------------------------------------------------
 GAMESCOPE_ARGS=""
 
+# --- [ 5. POST-LAUNCH COMMAND ] ---
+# Execute a custom command 5 seconds after the session starts.
+# Useful for runtime adjustments (e.g., gamescopectl or display fixes).
+# -----------------------------------------------------------------------------
+# ✅ EXAMPLE: POST_LAUNCH_CMD="gamescopectl adaptive_sync_ignore_overlay 1"
+# -----------------------------------------------------------------------------
+POST_LAUNCH_CMD=""
 
 # =============================================================================
 # ! HARDWARE SAFETY & WATCHDOG !
