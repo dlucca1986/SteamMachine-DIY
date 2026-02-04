@@ -19,8 +19,8 @@ EnvironmentFile=/etc/default/steamos-diy
 # TTY & Logging
 # Capturing session output to monitor Wayland startup performance
 StandardInput=tty
-StandardOutput=append:/var/log/steamos-diy.log
-StandardError=append:/var/log/steamos-diy.log
+StandardOutput=tty
+StandardError=tty
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
