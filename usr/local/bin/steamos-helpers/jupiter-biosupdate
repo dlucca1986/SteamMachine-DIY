@@ -12,29 +12,17 @@
 # License: MIT
 # =============================================================================
 
-# --- Configuration & Logging ---
-readonly LOG_FILE="/tmp/steamos-diy.log"
-readonly GREEN='\033[0;32m'
-readonly BLUE='\033[0;34m'
-readonly NC='\033[0m'
+# Caricamento SSoT
+CONF="/etc/default/steamos-diy"
+[ -f "$CONF" ] && source "$CONF"
 
-# Log to both Master Log (for diagnostics) and Console (for manual runs)
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [BIOS-Shim] $1" >> "$LOG_FILE"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [BIOS-Shim] $1"
+    echo -e "$1"
+    echo "$msg" >> "${LOG_FILE:-/tmp/steamos-diy-fallback.log}"
 }
 
-# --- Main Logic ---
-
 log_info "Checking for system firmware updates..."
-
-# DIY Hardware Notice: 
-# This satisfies SteamOS dependencies without risking firmware corruption
-# on non-Valve hardware. Actual BIOS updates must be done via the vendor.
-
 log_info "System firmware is managed by host OS. Returning success."
 
-echo -e "${GREEN}✓ Compatibility check passed.${NC}"
-
-# Exit gracefully
-exit 0;
+exit 0
