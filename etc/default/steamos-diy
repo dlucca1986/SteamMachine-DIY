@@ -22,6 +22,11 @@ export DEFAULT_RES="1280x720"
 export BIN_DIR="/usr/local/bin"
 export HELPER_DIR="${BIN_DIR}/steamos-helpers"
 
+export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
+export BIN_SESSION_SELECT="${BIN_DIR}/steamos-session-select"
+export BIN_SDY="${BIN_DIR}/sdy"
+export BIN_SPLASH="${HELPER_DIR}/steamos-splash"
+
 # Binari invocati dai servizi Systemd
 export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
 export BIN_SESSION_SELECT="${BIN_DIR}/steamos-session-select"
