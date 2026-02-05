@@ -11,7 +11,6 @@
 # Repository: https://github.com/dlucca1986/SteamMachine-DIY
 # Path:        /usr/local/bin/sdy
 # License: MIT
-# =================
 # =============================================================================
 
 set -eou pipefail
