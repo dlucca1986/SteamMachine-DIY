@@ -2,40 +2,23 @@
 # =============================================================================
 # SteamMachine-DIY - Localization & Time Manager
 # =============================================================================
-# Script: steamos-set-timezone
-# Version: 3.1.0
+# Script:      steamos-set-timezone
+# Version:     4.0.0
+# Philosophy:  KISS
 # Description: Compatibility shim for SteamOS timezone synchronization.
-#              Redirects Steam Client timezone requests to system settings.
-# Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path:        /usr/local/bin/steamos-helpers/steamos-set-timezone
-# License: MIT
 # =============================================================================
 
-# --- Configuration & Logging ---
-readonly LOG_FILE="/tmp/steamos-diy.log"
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-readonly NC='\033[0m'
+CONF="/etc/default/steamos-diy"
+[ -f "$CONF" ] && source "$CONF"
 
-# Log to both Master Log (for diagnostics) and Console (for manual runs)
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Time-Shim] $1" >> "$LOG_FILE"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [Time-Shim] $1"
+    echo -e "$1"
+    echo "$msg" >> "${LOG_FILE:-/tmp/steamos-diy-fallback.log}"
 }
 
-# --- Main Logic ---
-
-# Steam passes the timezone string as the first argument (e.g., "Europe/Rome").
-# On DIY systems, we let the host OS handle time synchronization via NTP/timedatectl.
 TARGET_ZONE="${1:-UTC}"
-
 log_info "Intercepting Steam Client timezone request: ${TARGET_ZONE}"
-
-# We return exit 0 to signal to the Steam Client that the request was 
-# intercepted and handled, preventing "Settings fail" overlays in the UI.
 log_info "Timezone request acknowledged. System settings remain unchanged."
 
-echo -e "${GREEN}✓ Timezone synchronization finalized.${NC}"
-
-# Exit gracefully
-exit 0;
+exit 0
