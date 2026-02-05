@@ -5,9 +5,13 @@
 # Script:      sdy
 # Version:     4.0.0
 # Philosophy:  KISS (Keep It Simple, Stupid)
-# Description: [Descrizione breve e dritta al punto]
-# Repository:  https://github.com/dlucca1986/SteamMachine-DIY
-# License:     MIT
+# Description: Intelligent wrapper for Steam games. Handles per-game 
+#              configurations, command injection (prefixes/args), and 
+#              synchronizes diagnostic markers with Steam logs.
+# Repository: https://github.com/dlucca1986/SteamMachine-DIY
+# Path:        /usr/local/bin/sdy
+# License: MIT
+# =================
 # =============================================================================
 
 set -eou pipefail
