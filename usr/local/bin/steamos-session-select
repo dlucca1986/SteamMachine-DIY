@@ -1,7 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# SteamOS-DIY - Intelligent Session Selector (Agnostic & Safe Edition)
+# SteamMachine-DIY - steamos-session-launch
 # =============================================================================
+# Script:      sdy
+# Version:     4.0.0
+# Philosophy:  KISS (Keep It Simple, Stupid)
+# Description: Minimal environment with ACTIVE recovery watchdog.
+# Repository: https://github.com/dlucca1986/SteamMachine-DIY
+# Path:        /usr/local/bin/steamos-session-launch
+# License: MIT
+# =============================================================================
+
 set -eou pipefail
 
 # --- 1. CARICAMENTO GERARCHICO (SSoT) ---
