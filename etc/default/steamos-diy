@@ -3,23 +3,19 @@
 # =============================================================================
 
 # --- 1. IDENTITY ---
-# Popolata dall'installer via sed (es. sed -i 's/\[USER_HERE\]/lelo/')
 export STEAMOS_USER="[USER_HERE]"
 
-# --- 2. DYNAMIC PATHS (Agnostici) ---
-# Usiamo getent per essere sicuri al 100% della Home, ovunque essa sia
+# --- 2. DYNAMIC PATHS ---
 export USER_HOME=$(getent passwd "${STEAMOS_USER}" | cut -d: -f6)
 export CONF_DIR="${USER_HOME}/.config/steamos-diy"
 export GAMES_CONF_DIR="${CONF_DIR}/games"
-
-# --- 3. LOGGING (Unificato) ---
 export LOG_FILE="${CONF_DIR}/session.log"
-export STEAM_LOG="${USER_HOME}/.local/share/Steam/logs/console-linux.txt"
 
-# --- 4. BINARIES & HELPERS (Ex-Defaults) ---
-# Centralizziamo qui i path per eliminare la dipendenza da /usr/share/
+# --- 3. EXECUTION & COMMANDS ---
+export STEAM_CMD="steam -gamepadui -steamdeck -steamos3"
+
+# --- 4. BINARIES & HELPERS ---
 export BIN_DIR="/usr/local/bin"
 export HELPER_DIR="${BIN_DIR}/steamos-helpers"
 export BIN_SDY="${BIN_DIR}/sdy"
 export BIN_SPLASH="${HELPER_DIR}/steamos-splash"
-export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
