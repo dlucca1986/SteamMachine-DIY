@@ -2,39 +2,23 @@
 # =============================================================================
 # SteamMachine-DIY - System Update Manager
 # =============================================================================
-# Script: steamos-update
-# Version: 3.1.0
+# Script:      steamos-update
+# Version:     4.0.0
+# Philosophy:  KISS
 # Description: Compatibility shim for SteamOS OTA update infrastructure.
-#              Ensures the Steam UI "Check for Updates" flow completes safely.
-# Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path:        /usr/local/bin/steamos-helpers/steamos-update
-# License: MIT
 # =============================================================================
 
-# --- Configuration & Logging ---
-readonly LOG_FILE="/tmp/steamos-diy.log"
-readonly BLUE='\033[0;34m'
-readonly GREEN='\033[0;32m'
-readonly NC='\033[0m'
+CONF="/etc/default/steamos-diy"
+[ -f "$CONF" ] && source "$CONF"
 
-# Log to both Master Log (for diagnostics) and Console
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Update-Shim] $1" >> "$LOG_FILE"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [Update-Shim] $1"
+    echo -e "$1"
+    echo "$msg" >> "${LOG_FILE:-/tmp/steamos-diy-fallback.log}"
 }
 
-# --- Main Logic ---
-
 log_info "Intercepting SteamOS OTA update request."
-
-# DIY Hardware Notice:
-# In a DIY environment, we avoid triggering a full system upgrade (pacman -Syu)
-# automatically from the Steam UI. This prevents partial upgrades or 
-# unexpected reboots. Updates are managed manually by the user.
-
 log_info "Update check acknowledged. System is reported as 'Up to Date' to the UI."
 
-echo -e "${GREEN}✓ Update check finalized.${NC}"
-
-# Exit with success to prevent the "Update Error" message in Gaming Mode
-exit 7;
+# Exit 7 è il codice che SteamOS interpreta come "Nessun aggiornamento necessario"
+exit 7
