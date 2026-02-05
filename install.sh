@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# SteamOS-DIY - Master Installer (v4.2.1 Enterprise)
+# SteamOS-DIY - Master Installer (v4.2.2 SSoT)
 # =============================================================================
 
 set -uo pipefail
@@ -16,11 +16,10 @@ SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
-# Percorsi Destinazione
+# --- CONFIGURAZIONE PATH DESTINAZIONE ---
 BIN_DEST="/usr/local/bin"
 HELPERS_DEST="/usr/local/bin/steamos-helpers"
 POLKIT_LINKS_DIR="/usr/bin/steamos-polkit-helpers"
-SYSTEM_DEFAULTS_DIR="/usr/share/steamos-diy"
 GLOBAL_CONF="/etc/default/steamos-diy"
 USER_CONF_DEST="$USER_HOME/.config/steamos-diy"
 SUDOERS_DEST="/etc/sudoers.d/steamos-diy"
@@ -60,45 +59,43 @@ install_dependencies() {
 
 deploy_core() {
     info "Deploying Core Infrastructure..."
-    mkdir -p "$HELPERS_DEST" "$SYSTEM_DEFAULTS_DIR" "$POLKIT_LINKS_DIR" "$APPS_DEST"
+    # Pulizia: non creiamo più /usr/share/steamos-diy
+    mkdir -p "$HELPERS_DEST" "$POLKIT_LINKS_DIR" "$APPS_DEST"
     
-    # 1. Copia Binari & Helpers
+    # 1. Copia Binari & Helpers (v4.0.0)
+    # Nota: mantiene la tua struttura usr/local/bin/
     cp -r "$SOURCE_DIR/usr/local/bin/"* "$BIN_DEST/" 2>/dev/null || true
     chmod +x "$BIN_DEST"/* "$HELPERS_DEST"/* 2>/dev/null || true
 
-    # 2. Copia Desktop Entries (Applicazioni nel menu)
+    # 2. Copia Desktop Entries
     if [ -d "$SOURCE_DIR/usr/share/applications" ]; then
         cp "$SOURCE_DIR/usr/share/applications/"*.desktop "$APPS_DEST/" 2>/dev/null || true
     fi
 
-    # 3. Defaults
-    if [ -f "$SOURCE_DIR/usr/share/steamos-diy/defaults" ]; then
-        cp "$SOURCE_DIR/usr/share/steamos-diy/defaults" "$SYSTEM_DEFAULTS_DIR/defaults"
-    fi
-
-    # 4. Global Symlinks
+    # 3. Global Symlinks (Mantenuti per compatibilità)
     ln -sf "$BIN_DEST/steamos-session-launch" "/usr/bin/steamos-session-launch"
     ln -sf "$BIN_DEST/steamos-session-select" "/usr/bin/steamos-session-select"
     ln -sf "$BIN_DEST/sdy" "/usr/bin/sdy"
+    
     success "Infrastructure, Apps and Symlinks established."
 }
 
 setup_configs() {
     info "Configuring SSoT Identity, Autologin & Final Splash..."
 
-    # 1. Master Config
+    # 1. Master Config (SSoT)
     if [ -f "$SOURCE_DIR/etc/default/steamos-diy" ]; then
         cp "$SOURCE_DIR/etc/default/steamos-diy" "$GLOBAL_CONF"
+        # Iniettiamo l'utente reale nel Master
         sed -i "s/^export STEAMOS_USER=.*/export STEAMOS_USER=\"$REAL_USER\"/" "$GLOBAL_CONF"
     fi
 
     # 2. Systemd Units (Servizi)
-    info "Installing Systemd Services..."
     if [ -d "$SOURCE_DIR/etc/systemd/system" ]; then
         cp "$SOURCE_DIR/etc/systemd/system/"*.service "$SYSTEMD_DIR/" 2>/dev/null || true
     fi
 
-    # 3. Autologin Calibration
+    # 3. Autologin Calibration (TTY1)
     local AUTO_DIR="/etc/systemd/system/getty@tty1.service.d"
     mkdir -p "$AUTO_DIR"
     if [ -f "$SOURCE_DIR/etc/systemd/system/getty@tty1.service.d/autologin.conf" ]; then
@@ -107,20 +104,23 @@ setup_configs() {
     fi
 
     # 4. Final Splash (System-Shutdown Hook)
-    # Creiamo il link affinché lo splash sia l'ultimo respiro del sistema
     local SHUTDOWN_HOOK_DIR="/usr/lib/systemd/system-shutdown"
     mkdir -p "$SHUTDOWN_HOOK_DIR"
     ln -sf "$HELPERS_DEST/steamos-splash" "$SHUTDOWN_HOOK_DIR/steamos-diy-final"
 
-    # 5. Home Config & Logs
+    # 5. Home Config & Games Dir (Qui creiamo fisicamente la struttura)
     mkdir -p "$USER_CONF_DEST/games"
-    [ -d "$SOURCE_DIR/config" ] && cp -r "$SOURCE_DIR/config/"* "$USER_CONF_DEST/"
+    if [ -d "$SOURCE_DIR/config" ]; then
+        cp -r "$SOURCE_DIR/config/"* "$USER_CONF_DEST/"
+    fi
+    
     touch "$USER_CONF_DEST/session.log"
     chown -R "$REAL_USER:$REAL_USER" "$USER_CONF_DEST"
+    success "User configuration and games directory established."
 }
 
 setup_security() {
-    info "Applying Sudoers & Pacman Hooks..."
+    info "Applying Sudoers & Polkit Mapping..."
     
     # 1. Polkit Mapping
     if ls "$HELPERS_DEST/"* >/dev/null 2>&1; then
@@ -170,7 +170,6 @@ enable_services() {
     # Abilitiamo il servizio gamemode per l'utente reale
     systemctl enable "steamos-gamemode@${REAL_USER}.service"
     
-    # Setcap iniziale per Gamescope
     if [ -x /usr/bin/gamescope ]; then
         setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
     fi
