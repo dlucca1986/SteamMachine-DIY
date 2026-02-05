@@ -1,29 +1,25 @@
 # =============================================================================
-# SteamOS-DIY - Master Configuration (SSoT)
+# SteamMachine-DIY - System Master (SSoT)
 # =============================================================================
 
 # --- 1. IDENTITY ---
-# L'installer popolerà questa variabile con l'utente reale
+# Popolata dall'installer via sed (es. sed -i 's/\[USER_HERE\]/lelo/')
 export STEAMOS_USER="[USER_HERE]"
 
-# --- 2. PATHS (Dinamici e Agnostici) ---
-export CONF_DIR="/home/${STEAMOS_USER}/.config/steamos-diy"
+# --- 2. DYNAMIC PATHS (Agnostici) ---
+# Usiamo getent per essere sicuri al 100% della Home, ovunque essa sia
+export USER_HOME=$(getent passwd "${STEAMOS_USER}" | cut -d: -f6)
+export CONF_DIR="${USER_HOME}/.config/steamos-diy"
 export GAMES_CONF_DIR="${CONF_DIR}/games"
+
+# --- 3. LOGGING (Unificato) ---
 export LOG_FILE="${CONF_DIR}/session.log"
-export STEAM_LOG="/home/${STEAMOS_USER}/.local/share/Steam/logs/console-linux.txt"
+export STEAM_LOG="${USER_HOME}/.local/share/Steam/logs/console-linux.txt"
 
-# --- 3. PREFERENZE GRAFICHE ---
-# Se vuote, gli script useranno l'auto-detection hardware
-TARGET_WIDTH=""
-TARGET_HEIGHT=""
-REFRESH_RATE=""
-
-# --- 4. FUNZIONALITÀ (0=Off, 1=On) ---
-ENABLE_HDR=0
-ENABLE_VRR=0
-ENABLE_MANGOAPP=0
-
-# --- 5. UI & SPLASH ---
-SYSTEM_NAME="SteamOS-DIY"
-SPLASH_DELAY_SHORT=1.5
-SPLASH_DELAY_LONG=2.5
+# --- 4. BINARIES & HELPERS (Ex-Defaults) ---
+# Centralizziamo qui i path per eliminare la dipendenza da /usr/share/
+export BIN_DIR="/usr/local/bin"
+export HELPER_DIR="${BIN_DIR}/steamos-helpers"
+export BIN_SDY="${BIN_DIR}/sdy"
+export BIN_SPLASH="${HELPER_DIR}/steamos-splash"
+export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
