@@ -1,15 +1,18 @@
 #!/bin/bash
 # =============================================================================
-# SteamMachine-DIY - steamos-session-launch
+# SteamMachine-DIY - steamos-session-select
 # =============================================================================
 # Script:      sdy
 # Version:     4.0.0
 # Philosophy:  KISS (Keep It Simple, Stupid)
-# Description: Minimal environment with ACTIVE recovery watchdog.
+# Description: Handles transitions between Gaming Mode (Gamescope) and 
+#              Desktop Mode (Plasma). Optimized for TTY1 execution and 
+#              process detachment to prevent session hangups.
 # Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path:        /usr/local/bin/steamos-session-launch
+# Path:        /usr/local/bin/steamos-session-select
 # License: MIT
 # =============================================================================
+
 
 set -eou pipefail
 
