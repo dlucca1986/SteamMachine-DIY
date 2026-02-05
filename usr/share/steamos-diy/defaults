@@ -1,5 +1,5 @@
 # =============================================================================
-# SteamOS-DIY - System Defaults (SSoT Spine)
+# SteamOS-DIY - System Defaults (Immutable)
 # =============================================================================
 
 # --- 1. PATHS & BINARIES ---
@@ -11,18 +11,15 @@ BIN_SESSION_SELECT="${BIN_DIR}/steamos-session-select"
 BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
 BIN_SDY="${BIN_DIR}/sdy"
 
-# --- 2. CONFIGURATION HIERARCHY (SSoT) ---
-# Queste variabili sono usate dal Control Center e dagli script per localizzarsi
+# --- 2. FALLBACK IDENTITY ---
+# Usato solo se /etc/default/steamos-diy è mancante o corrotto
 STEAMOS_USER_DEFAULT="steam"
-CONF_DIR_DEFAULT="/home/\${STEAMOS_USER}/.config/steamos-diy"
-LOG_FILE_DEFAULT="\${CONF_DIR}/session.log"
-GAMES_CONF_DIR_DEFAULT="\${CONF_DIR}/games"
 
 # --- 3. RUNTIME DEFAULTS ---
 DEFAULT_TTY="/dev/tty1"
 DEFAULT_RES="1280x720"
 STEAM_CMD="steam -steamdeck -steamos3"
 
-# --- 4. HARDWARE/SESSION DEFAULTS ---
-DEFAULT_ENABLE_HDR="false"
-DEFAULT_ENABLE_VRR="false"
+# --- 4. HARDWARE FLAGS ---
+DEFAULT_ENABLE_HDR=0
+DEFAULT_ENABLE_VRR=0
