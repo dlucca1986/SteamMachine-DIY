@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# SteamOS-DIY - Master Installer (v4.0.0 Enterprise)
+# SteamOS-DIY - Master Installer (v4.1.0 Enterprise + Hardware Aware)
 # =============================================================================
 
 set -uo pipefail
@@ -19,6 +19,7 @@ USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 # Percorsi Destinazione
 BIN_DEST="/usr/local/bin"
 HELPERS_DEST="/usr/local/bin/steamos-helpers"
+POLKIT_LINKS_DIR="/usr/bin/steamos-polkit-helpers"
 SYSTEM_DEFAULTS_DIR="/usr/share/steamos-diy"
 GLOBAL_CONF="/etc/default/steamos-diy"
 USER_CONF_DEST="$USER_HOME/.config/steamos-diy"
@@ -34,66 +35,86 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 install_dependencies() {
-    info "Updating system and installing dependencies..."
+    info "Updating system and detecting hardware..."
     
-    # Multilib check
     if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
         pacman -Sy
     fi
 
-    # Pacman -S --needed installa solo ciò che manca, -Syu aggiorna il sistema
-    pacman -Syu --needed --noconfirm \
-        steam gamescope xorg-xwayland mangohud python-pyqt6 \
-        pciutils mesa-utils procps-ng lib32-mangohud gamemode lib32-gamemode
+    local pkgs=(steam gamescope xorg-xwayland mangohud python-pyqt6 pciutils mesa-utils procps-ng lib32-mangohud gamemode lib32-gamemode)
+
+    # GPU Driver Auto-Detection (Vital for Gaming)
+    if lspci | grep -iq "AMD"; then
+        info "AMD GPU detected. Adding Vulkan Radeon drivers..."
+        pkgs+=(vulkan-radeon lib32-vulkan-radeon)
+    elif lspci | grep -iq "Intel"; then
+        info "Intel GPU detected. Adding Vulkan Intel drivers..."
+        pkgs+=(vulkan-intel lib32-vulkan-intel)
+    fi
+
+    pacman -Syu --needed --noconfirm "${pkgs[@]}"
 }
 
 deploy_core() {
-    info "Deploying Core Infrastructure..."
-    mkdir -p "$HELPERS_DEST" "$SYSTEM_DEFAULTS_DIR"
+    info "Deploying Core Infrastructure & Binaries..."
+    mkdir -p "$HELPERS_DEST" "$SYSTEM_DEFAULTS_DIR" "$POLKIT_LINKS_DIR"
     
-    # 1. Binari
-    cp -r "$SOURCE_DIR/usr/local/bin/"* "$BIN_DEST/" 2>/dev/null || true
-    chmod +x "$BIN_DEST"/* "$HELPERS_DEST"/* 2>/dev/null || true
+    # 1. Copia Binari Originali
+    if [ -d "$SOURCE_DIR/usr/local/bin" ]; then
+        cp -r "$SOURCE_DIR/usr/local/bin/"* "$BIN_DEST/" 2>/dev/null || true
+        chmod +x "$BIN_DEST"/* "$HELPERS_DEST"/* 2>/dev/null || true
+    fi
 
     # 2. Defaults (SSoT Level 2)
     if [ -f "$SOURCE_DIR/usr/share/steamos-diy/defaults" ]; then
         cp "$SOURCE_DIR/usr/share/steamos-diy/defaults" "$SYSTEM_DEFAULTS_DIR/defaults"
-        success "System defaults deployed to $SYSTEM_DEFAULTS_DIR"
+        success "System defaults deployed."
     fi
+
+    # 3. Global Symlinks (Per accesso universale e Control Center)
+    info "Creating global command symlinks..."
+    ln -sf "$BIN_DEST/steamos-session-launch" "/usr/bin/steamos-session-launch"
+    ln -sf "$BIN_DEST/steamos-session-select" "/usr/bin/steamos-session-select"
+    ln -sf "$BIN_DEST/sdy" "/usr/bin/sdy"
 }
 
 setup_configs() {
     info "Configuring SSoT Identity & Autologin..."
 
-    # 1. Master Config (/etc/default/steamos-diy)
+    # 1. Master Config
     if [ -f "$SOURCE_DIR/etc/default/steamos-diy" ]; then
         cp "$SOURCE_DIR/etc/default/steamos-diy" "$GLOBAL_CONF"
         sed -i "s/^export STEAMOS_USER=.*/export STEAMOS_USER=\"$REAL_USER\"/" "$GLOBAL_CONF"
-        success "Master Config initialized for user: $REAL_USER"
     fi
 
-    # 2. Autologin Calibration (Drop-in systemd)
+    # 2. Autologin Calibration (Drop-in)
     local AUTO_DIR="/etc/systemd/system/getty@tty1.service.d"
-    local AUTO_FILE="${AUTO_DIR}/autologin.conf"
     mkdir -p "$AUTO_DIR"
-    
     if [ -f "$SOURCE_DIR/etc/systemd/system/getty@tty1.service.d/autologin.conf" ]; then
-        cp "$SOURCE_DIR/etc/systemd/system/getty@tty1.service.d/autologin.conf" "$AUTO_FILE"
-        sed -i "s/\[USERNAME\]/$REAL_USER/g" "$AUTO_FILE"
-        success "Autologin calibrated on TTY1 for $REAL_USER"
+        cp "$SOURCE_DIR/etc/systemd/system/getty@tty1.service.d/autologin.conf" "$AUTO_DIR/autologin.conf"
+        sed -i "s/\[USERNAME\]/$REAL_USER/g" "$AUTO_DIR/autologin.conf"
     fi
 
     # 3. Home Config & Logs
     mkdir -p "$USER_CONF_DEST/games"
     [ -d "$SOURCE_DIR/config" ] && cp -r "$SOURCE_DIR/config/"* "$USER_CONF_DEST/"
-    
     touch "$USER_CONF_DEST/session.log"
     chown -R "$REAL_USER:$REAL_USER" "$USER_CONF_DEST"
 }
 
 setup_security() {
-    info "Applying Sudoers policies..."
+    info "Applying Sudoers & Polkit Mapping..."
+    
+    # 1. Popolamento Polkit Helpers (Symlinks verso /usr/bin)
+    if ls "$HELPERS_DEST/"* >/dev/null 2>&1; then
+        for helper in "$HELPERS_DEST"/*; do
+            ln -sf "$helper" "$POLKIT_LINKS_DIR/$(basename "$helper")"
+        done
+        success "Polkit helpers mapped."
+    fi
+
+    # 2. Sudoers
     if [ -f "$SOURCE_DIR/etc/sudoers.d/steamos-diy" ]; then
         cp "$SOURCE_DIR/etc/sudoers.d/steamos-diy" "$SUDOERS_DEST"
         chmod 440 "$SUDOERS_DEST"
@@ -101,27 +122,23 @@ setup_security() {
 }
 
 disable_conflicts() {
-    info "Disabling Login Managers to prevent TTY conflicts..."
-    # Lista dei comuni display manager
+    info "Disabling Login Managers..."
     local dms=(sddm gdm lightdm lxdm)
     for dm in "${dms[@]}"; do
         if systemctl is-active --quiet "$dm"; then
             warn "Disabling $dm..."
-            systemctl disable "$dm"
-            systemctl stop "$dm"
+            systemctl disable "$dm" && systemctl stop "$dm"
         fi
     done
 }
 
 enable_services() {
-    info "Activating SteamOS-DIY Services..."
+    info "Activating Services..."
     systemctl daemon-reload
-    
-    # Abilitiamo il gamemode per l'utente
     systemctl enable "steamos-gamemode@${REAL_USER}.service" 2>/dev/null || true
     
-    # Opzionale: se hai un servizio per il launcher principale
-    # systemctl enable "steamos-session-launch@${REAL_USER}.service"
+    # Set capabilities per Gamescope (Performance & Scheduling)
+    [ -x /usr/bin/gamescope ] && setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope 2>/dev/null || true
 }
 
 # --- Execution ---
