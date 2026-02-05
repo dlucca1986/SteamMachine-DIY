@@ -1,96 +1,51 @@
 #!/bin/bash
 # =============================================================================
-# SteamMachine-DIY - Universal Game Wrapper (sdy)
+# SteamOS-DIY - SDY Game Wrapper (Agnostic & Clean Edition)
 # =============================================================================
-# Script: sdy
-# Version: 3.1.0
-# Description: Intelligent wrapper for Steam games. Handles per-game 
-#              configurations, command injection (prefixes/args), and 
-#              synchronizes diagnostic markers with Steam logs.
-# Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path:        /usr/local/bin/sdy
-# License: MIT
-# =============================================================================
-
 set -eou pipefail
 
-# --- 1. CONFIGURATION & AGNOSTIC LOADING ---
-GLOBAL_CONFIG="/etc/default/steamos-diy"
+# --- 1. CARICAMENTO GERARCHICO (SSoT) ---
+source "/usr/share/steamos-diy/defaults" 2>/dev/null || { echo "Defaults missing"; exit 1; }
+source "/etc/default/steamos-diy" 2>/dev/null || { echo "Master Config missing"; exit 1; }
 
-if [[ -f "$GLOBAL_CONFIG" ]]; then
-    source "$GLOBAL_CONFIG"
-else
-    # Fallback paths for compatibility during standalone testing
-    readonly LOG_FILE="/var/log/steamos-diy.log"
-    readonly STEAM_LOG="$HOME/.local/share/Steam/logs/console-linux.txt"
-    readonly GAMES_CONF_DIR="$HOME/.config/steamos-diy/games"
-fi
-
-# Local variables mapped from Master File or Fallbacks
-readonly LOG_FILE="${LOG_FILE}"
-readonly STEAM_LOG_PATH="${STEAM_LOG}"
-readonly CONF_DIR="${GAMES_CONF_DIR}"
-readonly GLOBAL_GAME_CONF="$CONF_DIR/global.conf"
-
-# Logging function using the system-wide LOG_TAG
+# Funzione Log Uniformata
 log() {
-    local tag="$1"
-    local msg="$2"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${LOG_TAG:-[SteamOS-DIY]} [$tag] $msg" >> "$LOG_FILE" 2>/dev/null || true
+    local level=$1
+    local msg=$2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SDY] [$level] $msg" >> "${LOG_FILE}" 2>/dev/null || true
+    echo "[$level] $msg" | systemd-cat -t "steamos-diy"
 }
 
-# Ensure the configuration directory exists
-mkdir -p "$CONF_DIR"
+# Assicuriamoci che la cartella dei giochi esista (GAMES_CONF_DIR definita nel Master)
+mkdir -p "${GAMES_CONF_DIR}"
 
-# --- 2. DYNAMIC TEMPLATE GENERATION ---
-if [[ ! -f "$GLOBAL_GAME_CONF" ]]; then
-    echo -e "# Global settings for all games\nexport GAME_PRE_COMMAND=\"\"\nexport GAME_ARGS=\"\"" > "$GLOBAL_GAME_CONF"
+# --- 2. IDENTIFICAZIONE GIOCO ---
+# Prendiamo l'ultimo argomento (solitamente il percorso dell'eseguibile)
+RAW_PATH="${@: -1}"
+REAL_PATH=$(readlink -f "$RAW_PATH" 2>/dev/null || echo "$RAW_PATH")
+
+if [ -d "$REAL_PATH" ]; then
+    FOLDER_NAME=$(basename "$REAL_PATH")
+else
+    FOLDER_NAME=$(basename "$(dirname "$REAL_PATH")")
 fi
 
-# Identify the game based on the launch path (the last argument from Steam)
-REAL_PATH="${@: -1}"
-FOLDER_NAME=$(basename "$(dirname "$REAL_PATH")")
-GAME_CONF="$CONF_DIR/${FOLDER_NAME}.conf"
+GAME_CONF="${GAMES_CONF_DIR}/${FOLDER_NAME}.conf"
+GLOBAL_GAME_CONF="${GAMES_CONF_DIR}/global.conf"
 
-# Auto-generate a specific config template for the detected game
-if [[ ! -f "$GAME_CONF" ]]; then
-    echo -e "# Specific settings for $FOLDER_NAME\nexport GAME_PRE_COMMAND=\"\"\nexport GAME_ARGS=\"\"" > "$GAME_CONF"
-    log "WRAPPER" "Generated specific config for: $FOLDER_NAME"
+# --- 3. GENERAZIONE AUTOMATICA CONFIG (Standardizzata) ---
+[ ! -f "$GLOBAL_GAME_CONF" ] && echo -e "export GAME_PRE_COMMAND=\"\"\nexport GAME_ARGS=\"\"" > "$GLOBAL_GAME_CONF"
+
+if [ ! -f "$GAME_CONF" ]; then
+    echo -e "# Config for $FOLDER_NAME\nexport GAME_PRE_COMMAND=\"\"\nexport GAME_ARGS=\"\"" > "$GAME_CONF"
+    log "INFO" "Created new game config: ${FOLDER_NAME}.conf"
 fi
 
-# --- 3. CONFIGURATION LOADING & CONCATENATION ---
-export GAME_PRE_COMMAND=""
-export GAME_ARGS=""
-
-# 1. Load Global Settings
+# --- 4. CARICAMENTO ED ESECUZIONE ---
 source "$GLOBAL_GAME_CONF"
-G_PRE="$GAME_PRE_COMMAND"
-G_ARGS="$GAME_ARGS"
-
-# 2. Reset and Load Game-Specific Settings
-export GAME_PRE_COMMAND=""
-export GAME_ARGS=""
 source "$GAME_CONF"
 
-# 3. Combine with Priority Logic:
-# Prefixes: [Global] + [Specific]
-FINAL_PRE="${G_PRE} ${GAME_PRE_COMMAND}"
-# Arguments: [Global] + [Specific] -> Specific stays at the end to allow OVERRIDE
-FINAL_ARGS="${G_ARGS} ${GAME_ARGS}"
+log "LAUNCH" "Executing game: $FOLDER_NAME"
 
-# --- 4. STEAM LOG SYNCHRONIZATION ---
-touch "$STEAM_LOG_PATH" 2>/dev/null || true
-printf "\n--- SDY_REATTIVO_START: %s ---\n" "$FOLDER_NAME" >> "$STEAM_LOG_PATH" 2>/dev/null || true
-sync "$STEAM_LOG_PATH" 2>/dev/null || true
-
-# --- 5. EXECUTION ---
-log "LAUNCH" "Starting Game: $FOLDER_NAME"
-
-if [[ -n "${FINAL_PRE// /}" || -n "${FINAL_ARGS// /}" ]]; then
-    log "ARGS" "Injection -> Prefix: [${FINAL_PRE:-NONE}] | Extra: [${FINAL_ARGS:-NONE}]"
-fi
-
-log "DEBUG" "Full Exec: $FINAL_PRE $@ $FINAL_ARGS"
-
-# Execute using 'env' to handle prefixes, redirecting errors to main log
-exec env $FINAL_PRE "$@" $FINAL_ARGS 2>> "$LOG_FILE"
+# Esecuzione dinamica
+eval ${GAME_PRE_COMMAND} "$@" ${GAME_ARGS}
