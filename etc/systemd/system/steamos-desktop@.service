@@ -1,57 +1,45 @@
 [Unit]
 Description=SteamOS-DIY Desktop Session (KDE Plasma) for %i
-# Ensure system services and TTY1 are ready before session start
 After=network.target systemd-user-sessions.service getty@tty1.service
-# Avoid resource conflicts with Game Mode and local logins
 Conflicts=steamos-gamemode@%i.service getty@tty1.service
 
 [Service]
-PAMName=login
+EnvironmentFile=/usr/share/steamos-diy/defaults
+EnvironmentFile=/etc/default/steamos-diy
 User=%i
 Group=%i
 WorkingDirectory=/home/%i
+PAMName=login
 UtmpIdentifier=tty1
 UtmpMode=user
 
-# Load global configuration variables
-EnvironmentFile=/etc/default/steamos-diy
-
-# TTY & Logging
-# Capturing session output to monitor Wayland startup performance
 StandardInput=tty
 StandardOutput=tty
-StandardError=tty
+StandardError=journal
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
 
-# KDE Plasma Wayland Environment Variables
+# KDE Environment
 Environment=XDG_SESSION_TYPE=wayland
 Environment=XDG_CURRENT_DESKTOP=KDE
 Environment=KDE_FULL_SESSION=true
 Environment=QT_QPA_PLATFORM=wayland
 Environment=GTK_USE_PORTAL=0
 
-# --- STARTUP PHASE ---
-# 1. Remove stale Wayland sockets to ensure a fresh session start
+# STARTUP
 ExecStartPre=-/usr/bin/bash -c "/usr/bin/rm -f /run/user/%U/wayland-0*"
-# 2. Clear terminal to prevent old logs from flickering
 ExecStartPre=-/usr/bin/bash -c "clear > /dev/tty1"
-# 3. Trigger the cyan "Desktop Mode" splash screen
-ExecStartPre=-/usr/local/bin/steamos-helpers/steamos-splash desktop
+ExecStartPre=-${BIN_SPLASH} desktop
 
-# --- SESSION LAUNCH ---
-# Invoke the KDE Plasma Wayland compositor
+# SESSION
 ExecStart=/usr/bin/startplasma-wayland
 
-# --- EXIT MANAGEMENT ---
-# Using standard session termination without additional hooks to 
-# allow KDE to manage its own cleanup process.
+# EXIT MANAGEMENT
 Restart=no
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=2s
+TimeoutStopSec=5s
 
 [Install]
-# Enable the service for graphical.target
 WantedBy=graphical.target
