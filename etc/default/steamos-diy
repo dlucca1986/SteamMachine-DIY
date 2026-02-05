@@ -12,7 +12,7 @@ export GAMES_CONF_DIR="${CONF_DIR}/games"
 export LOG_FILE="${CONF_DIR}/session.log"
 
 # --- 3. EXECUTION & COMMANDS ---
-export STEAM_CMD="steam -gamepadui -steamdeck -steamos3"
+export STEAM_CMD="steam -steamdeck -steamos3"
 
 # --- 4. BINARIES & HELPERS ---
 export BIN_DIR="/usr/local/bin"
