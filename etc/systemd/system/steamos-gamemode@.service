@@ -1,64 +1,36 @@
 [Unit]
 Description=SteamOS-DIY Game Mode Session for %i
-# Ensure network is up and user sessions are ready before starting
 After=network.target systemd-user-sessions.service getty@tty1.service
-# Prevent conflicts with the desktop session and standard TTY login
 Conflicts=steamos-desktop@%i.service getty@tty1.service
+OnFailure=steamos-desktop@%i.service
 
 [Service]
-PAMName=login
+EnvironmentFile=/usr/share/steamos-diy/defaults
+EnvironmentFile=/etc/default/steamos-diy
 User=%i
 Group=%i
 WorkingDirectory=/home/%i
+PAMName=login
 UtmpIdentifier=tty1
 UtmpMode=user
 
-# Load global configuration variables
-EnvironmentFile=/etc/default/steamos-diy
-
-# TTY & Logging Management
-# Redirecting output to TTY1 and logging to a persistent file for debugging
 StandardInput=tty
 StandardOutput=tty
-StandardError=tty
+StandardError=journal
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
 
-# Display Environment
-Environment=DISPLAY=:0
-Environment=XDG_SESSION_TYPE=wayland
-
-# --- STARTUP PHASE ---
-# 1. Clear the terminal to ensure a clean slate
+# STARTUP
 ExecStartPre=-/usr/bin/bash -c "clear > /dev/tty1"
-# 2. Trigger the green "Game Mode" splash screen
-ExecStartPre=-/usr/local/bin/steamos-helpers/steamos-splash game
+ExecStartPre=-${BIN_SPLASH} game
+ExecStart=${BIN_SESSION_LAUNCH}
 
-# --- SESSION LAUNCH ---
-# Execute the main SteamOS session launcher
-ExecStart=/usr/local/bin/steamos-session-launch
-
-# --- EXIT PHASE (Shutdown/Reboot Logic) ---
-# This block handles visual transitions specifically during power state changes.
-# It ensures Steam correctly signals the system state before the TTY is released.
-ExecStopPost=-/usr/bin/bash -c '\
-    if systemctl list-jobs | grep -qE "reboot.target|shutdown.target|poweroff.target|halt.target"; then \
-        /usr/bin/chvt 1; \
-        echo -ne "\033c" > /dev/tty1; \
-        if systemctl list-jobs | grep -q "reboot.target"; then \
-            /usr/local/bin/steamos-helpers/steamos-splash reboot; \
-        else \
-            /usr/local/bin/steamos-helpers/steamos-splash shutdown; \
-        fi \
-    fi'
-
-# Session Management Policy
+# EXIT MANAGEMENT
 Restart=no
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=2s
+TimeoutStopSec=3s
 
 [Install]
-# Link the service to the graphical target for auto-start capabilities
 WantedBy=graphical.target
