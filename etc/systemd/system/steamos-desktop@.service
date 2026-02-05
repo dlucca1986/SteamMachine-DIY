@@ -4,7 +4,6 @@ After=network.target systemd-user-sessions.service getty@tty1.service
 Conflicts=steamos-gamemode@%i.service getty@tty1.service
 
 [Service]
-EnvironmentFile=/usr/share/steamos-diy/defaults
 EnvironmentFile=/etc/default/steamos-diy
 User=%i
 Group=%i
