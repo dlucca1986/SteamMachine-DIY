@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# SteamOS-DIY - Master Installer (v4.2.0 Enterprise)
+# SteamOS-DIY - Master Installer (v4.2.1 Enterprise)
 # =============================================================================
 
 set -uo pipefail
@@ -25,6 +25,8 @@ GLOBAL_CONF="/etc/default/steamos-diy"
 USER_CONF_DEST="$USER_HOME/.config/steamos-diy"
 SUDOERS_DEST="/etc/sudoers.d/steamos-diy"
 HOOK_DIR="/etc/pacman.d/hooks"
+SYSTEMD_DIR="/etc/systemd/system"
+APPS_DEST="/usr/share/applications"
 
 info()    { echo -e "${CYAN}[SYSTEM]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -45,7 +47,6 @@ install_dependencies() {
 
     local pkgs=(steam gamescope xorg-xwayland mangohud python-pyqt6 pciutils mesa-utils procps-ng lib32-mangohud gamemode lib32-gamemode)
 
-    # GPU Auto-Detection
     if lspci | grep -iq "AMD"; then
         info "AMD GPU detected. Adding specific Vulkan drivers..."
         pkgs+=(vulkan-radeon lib32-vulkan-radeon)
@@ -59,22 +60,27 @@ install_dependencies() {
 
 deploy_core() {
     info "Deploying Core Infrastructure..."
-    mkdir -p "$HELPERS_DEST" "$SYSTEM_DEFAULTS_DIR" "$POLKIT_LINKS_DIR"
+    mkdir -p "$HELPERS_DEST" "$SYSTEM_DEFAULTS_DIR" "$POLKIT_LINKS_DIR" "$APPS_DEST"
     
-    # 1. Copia Binari
+    # 1. Copia Binari & Helpers
     cp -r "$SOURCE_DIR/usr/local/bin/"* "$BIN_DEST/" 2>/dev/null || true
     chmod +x "$BIN_DEST"/* "$HELPERS_DEST"/* 2>/dev/null || true
 
-    # 2. Defaults (SSoT Level 2)
+    # 2. Copia Desktop Entries (Applicazioni nel menu)
+    if [ -d "$SOURCE_DIR/usr/share/applications" ]; then
+        cp "$SOURCE_DIR/usr/share/applications/"*.desktop "$APPS_DEST/" 2>/dev/null || true
+    fi
+
+    # 3. Defaults
     if [ -f "$SOURCE_DIR/usr/share/steamos-diy/defaults" ]; then
         cp "$SOURCE_DIR/usr/share/steamos-diy/defaults" "$SYSTEM_DEFAULTS_DIR/defaults"
     fi
 
-    # 3. Global Symlinks
+    # 4. Global Symlinks
     ln -sf "$BIN_DEST/steamos-session-launch" "/usr/bin/steamos-session-launch"
     ln -sf "$BIN_DEST/steamos-session-select" "/usr/bin/steamos-session-select"
     ln -sf "$BIN_DEST/sdy" "/usr/bin/sdy"
-    success "Infrastructure and Symlinks established."
+    success "Infrastructure, Apps and Symlinks established."
 }
 
 setup_configs() {
@@ -86,7 +92,13 @@ setup_configs() {
         sed -i "s/^export STEAMOS_USER=.*/export STEAMOS_USER=\"$REAL_USER\"/" "$GLOBAL_CONF"
     fi
 
-    # 2. Autologin Calibration
+    # 2. Systemd Units (Servizi)
+    info "Installing Systemd Services..."
+    if [ -d "$SOURCE_DIR/etc/systemd/system" ]; then
+        cp "$SOURCE_DIR/etc/systemd/system/"*.service "$SYSTEMD_DIR/" 2>/dev/null || true
+    fi
+
+    # 3. Autologin Calibration
     local AUTO_DIR="/etc/systemd/system/getty@tty1.service.d"
     mkdir -p "$AUTO_DIR"
     if [ -f "$SOURCE_DIR/etc/systemd/system/getty@tty1.service.d/autologin.conf" ]; then
@@ -94,7 +106,7 @@ setup_configs() {
         sed -i "s/\[USERNAME\]/$REAL_USER/g" "$AUTO_DIR/autologin.conf"
     fi
 
-    # 3. Home Config & Logs
+    # 4. Home Config & Logs
     mkdir -p "$USER_CONF_DEST/games"
     [ -d "$SOURCE_DIR/config" ] && cp -r "$SOURCE_DIR/config/"* "$USER_CONF_DEST/"
     touch "$USER_CONF_DEST/session.log"
@@ -117,7 +129,7 @@ setup_security() {
         chmod 440 "$SUDOERS_DEST"
     fi
 
-    # 3. Pacman Hook (Gamescope Persistence)
+    # 3. Pacman Hook
     mkdir -p "$HOOK_DIR"
     cat <<EOF > "$HOOK_DIR/gamescope-capabilities.hook"
 [Trigger]
@@ -138,9 +150,10 @@ disable_conflicts() {
     info "Disabling Display Managers..."
     local dms=(sddm gdm lightdm lxdm)
     for dm in "${dms[@]}"; do
-        if systemctl is-active --quiet "$dm"; then
+        if systemctl is-active --quiet "$dm" || systemctl is-enabled --quiet "$dm"; then
             warn "Disabling $dm..."
-            systemctl disable "$dm" && systemctl stop "$dm"
+            systemctl disable "$dm" 2>/dev/null || true
+            systemctl stop "$dm" 2>/dev/null || true
         fi
     done
 }
@@ -148,10 +161,13 @@ disable_conflicts() {
 enable_services() {
     info "Activating Systemd Units..."
     systemctl daemon-reload
-    systemctl enable "steamos-gamemode@${REAL_USER}.service" 2>/dev/null || true
+    # Abilitiamo il servizio gamemode per l'utente reale
+    systemctl enable "steamos-gamemode@${REAL_USER}.service"
     
-    # Initial setcap
-    [ -x /usr/bin/gamescope ] && setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope 2>/dev/null || true
+    # Setcap iniziale per Gamescope
+    if [ -x /usr/bin/gamescope ]; then
+        setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
+    fi
 }
 
 # --- Execution Flow ---
@@ -163,5 +179,6 @@ disable_conflicts
 enable_services
 
 echo -e "\n${GREEN}==============================================${NC}"
-success "Installation Complete! Reboot now."
+success "Installation Complete! Your SteamOS-DIY is ready."
+info "Reboot now to enter Game Mode."
 echo -e "${GREEN}==============================================${NC}"
