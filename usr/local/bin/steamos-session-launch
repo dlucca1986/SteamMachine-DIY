@@ -1,4 +1,18 @@
 #!/bin/bash
+# =============================================================================
+# SteamMachine-DIY - SDY Game Wrapper
+# =============================================================================
+# Script:      sdy
+# Version:     4.0.0
+# Philosophy:  KISS (Keep It Simple, Stupid)
+# Description: Intelligent wrapper for Steam games. Handles per-game 
+#              configurations, command injection (prefixes/args), and 
+#              synchronizes diagnostic markers with Steam logs.
+# Repository: https://github.com/dlucca1986/SteamMachine-DIY
+# Path:        /usr/local/bin/sdy
+# License: MIT
+# =============================================================================
+
 set -uo pipefail
 
 # --- 1. CARICAMENTO GERARCHICO (SSoT) ---
