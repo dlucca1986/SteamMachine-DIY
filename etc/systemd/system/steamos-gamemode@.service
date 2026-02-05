@@ -31,6 +31,8 @@ Restart=no
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=3s
+ExecStopPost=-${BIN_SPLASH}
 
 [Install]
 WantedBy=graphical.target
+
