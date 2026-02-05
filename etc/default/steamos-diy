@@ -13,27 +13,21 @@ export GAMES_CONF_DIR="${CONF_DIR}/games"
 export LOG_FILE="${CONF_DIR}/session.log"
 
 # --- 3. EXECUTION & COMMANDS ---
-# Il cuore dell'avvio di Steam e risoluzione d'emergenza
-export STEAM_CMD="steam -gamepadui -steamdeck -steamos3"
+export STEAM_CMD="steam -steamdeck -steamos3"
 export DEFAULT_RES="1280x720"
 
 # --- 4. BINARIES & HELPERS ---
-# Percorsi fissi definiti come variabili per Systemd e Select
+# Definiamo le cartelle base
 export BIN_DIR="/usr/local/bin"
 export HELPER_DIR="${BIN_DIR}/steamos-helpers"
 
+# Elenco completo dei binari del sistema
 export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
 export BIN_SESSION_SELECT="${BIN_DIR}/steamos-session-select"
 export BIN_SDY="${BIN_DIR}/sdy"
 export BIN_SPLASH="${HELPER_DIR}/steamos-splash"
 
-# Binari invocati dai servizi Systemd
-export BIN_SESSION_LAUNCH="${BIN_DIR}/steamos-session-launch"
-export BIN_SESSION_SELECT="${BIN_DIR}/steamos-session-select"
-
 # --- 5. SYSTEM CUSTOMIZATION (Per lo Splash) ---
-# Il nome che apparirà nel logo ASCII
 export SYSTEM_NAME="SteamOS-DIY"
-# Delay dello splash (in secondi)
 export SPLASH_DELAY_SHORT="1.0"
 export SPLASH_DELAY_LONG="2.5"
