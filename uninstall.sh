@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# SteamOS-DIY - Master Uninstaller (v4.0.0 Enterprise)
-# Architecture: SSoT-Compliant Cleanup
+# SteamOS-DIY - Master Uninstaller (v4.2.1 Enterprise)
+# Architecture: SSoT-Compliant Cleanup & Deep System Restoration
 # =============================================================================
 
 set -uo pipefail
@@ -19,7 +19,7 @@ GLOBAL_CONF="/etc/default/steamos-diy"
 SYSTEM_DEFAULTS_DIR="/usr/share/steamos-diy"
 
 if [[ -f "$GLOBAL_CONF" ]]; then
-    # Estraiamo l'utente direttamente senza caricare tutto il file
+    # Estraiamo l'utente reale per chiudere i servizi istanziati
     REAL_USER=$(grep 'export STEAMOS_USER=' "$GLOBAL_CONF" | cut -d'"' -f2)
 else
     REAL_USER=${SUDO_USER:-$(whoami)}
@@ -31,8 +31,11 @@ USER_CONF_DIR="$USER_HOME/.config/steamos-diy"
 # --- Destination Paths ---
 BIN_DEST="/usr/local/bin"
 HELPERS_DEST="/usr/local/bin/steamos-helpers"
+POLKIT_LINKS_DIR="/usr/bin/steamos-polkit-helpers"
+APPS_DEST="/usr/share/applications"
 SYSTEMD_DEST="/etc/systemd/system"
 SUDOERS_FILE="/etc/sudoers.d/steamos-diy"
+HOOK_FILE="/etc/pacman.d/hooks/gamescope-capabilities.hook"
 
 # --- UI Functions ---
 info()    { echo -e "${CYAN}[UNINSTALL]${NC} $1"; }
@@ -47,60 +50,81 @@ echo -e "${CYAN}==============================================${NC}"
 info "Starting SteamOS-DIY Cleanup for user: $REAL_USER"
 echo -e "${CYAN}==============================================${NC}"
 
-# --- 1. Disable Services ---
-info "Stopping and disabling systemd units..."
-# Disabilita servizi istanziati
+# --- 1. Disable & Stop Services ---
+info "Deactivating Systemd units..."
+# Fermiamo e disabilitiamo i servizi principali
 systemctl stop "steamos-gamemode@${REAL_USER}.service" 2>/dev/null || true
 systemctl disable "steamos-gamemode@${REAL_USER}.service" 2>/dev/null || true
-systemctl stop "steamos-session-launch@${REAL_USER}.service" 2>/dev/null || true
-systemctl disable "steamos-session-launch@${REAL_USER}.service" 2>/dev/null || true
+systemctl stop "steamos-desktop@${REAL_USER}.service" 2>/dev/null || true
+systemctl disable "steamos-desktop@${REAL_USER}.service" 2>/dev/null || true
 
-# --- 2. Remove Core Infrastructure ---
-info "Removing binaries and system defaults..."
+# --- 2. Remove Infrastructure & Symlinks ---
+info "Removing binaries, apps and symlinks..."
 rm -rf "$HELPERS_DEST"
 rm -rf "$SYSTEM_DEFAULTS_DIR"
+rm -rf "$POLKIT_LINKS_DIR"
+
+# Rimozione binari diretti
 rm -f "$BIN_DEST/steamos-session-launch" \
       "$BIN_DEST/steamos-session-select" \
       "$BIN_DEST/steamos-diy-control" \
       "$BIN_DEST/sdy"
 
-# --- 3. Systemd & Autologin Cleanup ---
-info "Restoring Systemd configuration..."
+# Rimozione symlink globali
+rm -f "/usr/bin/steamos-session-launch" \
+      "/usr/bin/steamos-session-select" \
+      "/usr/bin/sdy"
+
+# Rimozione Desktop entries
+rm -f "$APPS_DEST/steamos-diy-control.desktop" \
+      "$APPS_DEST/steamos-switch-gamemode.desktop"
+
+# --- 3. Systemd & Security Restoration ---
+info "Cleaning up Systemd and Security policies..."
 rm -f "$SYSTEMD_DEST/steamos-"*@.service
 rm -rf "$SYSTEMD_DEST/getty@tty1.service.d"
-
-# --- 4. Security & Config Cleanup ---
-info "Removing global configurations..."
 rm -f "$SUDOERS_FILE"
+rm -f "$HOOK_FILE"
 rm -f "$GLOBAL_CONF"
 
-# --- 5. Restoration Choices ---
+# --- 4. Restoration Choices ---
 echo -e "\n${YELLOW}--- Restoration Choices ---${NC}"
 
 # A. Display Manager Restoration
-# Cerchiamo DM installati per suggerire il ripristino
-for dm in sddm gdm lightdm; do
+DMS=(sddm gdm lightdm lxdm)
+for dm in "${DMS[@]}"; do
     if systemctl list-unit-files | grep -q "^$dm.service"; then
-        read -p "$dm detected. Re-enable it for graphical login? (y/N): " dm_choice
+        echo -e "${CYAN}[DM]${NC} Found $dm installed."
+        read -p "Re-enable $dm for graphical login? (y/N): " dm_choice
         if [[ "$dm_choice" =~ ^[Yy]$ ]]; then
             systemctl enable "$dm.service"
-            success "$dm re-enabled."
+            success "$dm re-enabled. Graphical boot restored."
+            break # Ne abilitiamo solo uno
         fi
-        break # Ne abilitiamo solo uno
     fi
 done
 
 # B. Personal Configuration Wipe
 if [[ -d "$USER_CONF_DIR" ]]; then
-    read -p "Remove user configs and logs in $USER_CONF_DIR? (y/N): " wipe_choice
+    echo -e "${YELLOW}[DATA]${NC} User configs detected in $USER_CONF_DIR"
+    read -p "Wipe all user settings and logs? (y/N): " wipe_choice
     if [[ "$wipe_choice" =~ ^[Yy]$ ]]; then
         rm -rf "$USER_CONF_DIR"
-        success "User environment wiped."
+        success "User environment cleaned."
     else
         warn "User configurations preserved."
     fi
 fi
 
-# --- 6. Finalize ---
+# --- 5. Finalize ---
+info "Finalizing system state..."
 systemctl daemon-reload
-echo -e "\n${GREEN}Cleanup complete! System restored.${NC}"
+
+# Reset capabilities (optional but clean)
+if [ -x /usr/bin/gamescope ]; then
+    setcap -r /usr/bin/gamescope 2>/dev/null || true
+fi
+
+echo -e "\n${GREEN}==============================================${NC}"
+success "Uninstall Complete! System is now SteamOS-Free."
+echo -e "${GREEN}==============================================${NC}"
