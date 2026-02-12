@@ -2,6 +2,7 @@
 # PROJECT:      SSOTH (Single Source of Truth) - SteamOS-DIY
 # DESCRIPTION:  Centralized System Identity and Global Paths.
 #               This is the ONLY file with hardcoded system paths.
+# Path: /etc/default/steamos-diy
 # LICENSE:      MIT
 # =============================================================================
 
