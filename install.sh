@@ -101,7 +101,6 @@ deploy_files() {
 
     # Binaries
     mkdir -p /usr/local/bin/steamos-helpers
-    # ... (resto della funzione deploy_files come prima)
     cp usr/local/bin/steamos-* /usr/local/bin/ 2>/dev/null || true
     cp usr/local/bin/sdy /usr/local/bin/ 2>/dev/null || true
     cp usr/local/bin/steamos-helpers/* /usr/local/bin/steamos-helpers/ 2>/dev/null || true
@@ -112,7 +111,6 @@ deploy_files() {
     cp usr/local/share/applications/*.desktop /usr/local/share/applications/ 2>/dev/null || true
 
     # Skel & Home
-    # ... (stessa logica per Skel e Home)
     mkdir -p /etc/skel/.config/steamOs
     [ -f etc/skel/.bash_profile ] && cp etc/skel/.bash_profile /etc/skel/
     cp -r etc/skel/.config/steamOs/* /etc/skel/.config/steamOs/ 2>/dev/null || true
