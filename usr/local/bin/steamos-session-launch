@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# Version:      1.0.0
+# VERSION:      1.0.0
 # DESCRIPTION:  Core Session Manager with Dynamic Gamescope Mapping.
 #               Handles seamless transitions between Steam and Desktop.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
