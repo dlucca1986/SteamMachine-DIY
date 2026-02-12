@@ -171,7 +171,38 @@ EOF
     fi
 }
 
-# --- 6. Finalization ---
+# --- 6. Display Managers ---
+
+manage_display_manager() {
+    info "Checking for active Display Managers..."
+    
+    CURRENT_DM=$(systemctl list-unit-files --type=service | grep display-manager | awk '{print $1}') || true
+    
+    if [[ -z "$CURRENT_DM" ]]; then
+        for dm in sddm gdm lightdm lxdm; do
+            if systemctl is-enabled "$dm" &>/dev/null; then
+                CURRENT_DM="$dm"
+                break
+            fi
+        done
+    fi
+
+    if [[ -n "$CURRENT_DM" ]]; then
+        warn "Detected active Display Manager: $CURRENT_DM"
+        echo -ne "${YELLOW}To boot directly into Game Mode, we need to disable $CURRENT_DM. Proceed? [y/N] ${NC}"
+        read -r confirm_dm
+        if [[ $confirm_dm == [yY] ]]; then
+            systemctl disable "$CURRENT_DM"
+            success "$CURRENT_DM disabled. TTY1 is now free for SteamMachine-DIY."
+        else
+            warn "Display Manager remains enabled. This MIGHT cause conflicts with Game Mode."
+        fi
+    else
+        info "No Display Manager detected. TTY1 is clear."
+    fi
+}
+
+# --- 7. Finalization ---
 finalize_system() {
     info "Reloading system daemons..."
     systemctl daemon-reload
@@ -191,4 +222,5 @@ install_dependencies
 deploy_files
 setup_shim_links
 setup_bash_profile
+manage_display_manager
 finalize_system
