@@ -5,7 +5,7 @@
 # DESCRIPTION:  Compatibility shim for SteamOS OTA update infrastructure.
 #               Returns Exit Code 7 to simulate an "Up to Date" status.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# Repository:   https://github.com/dlucca1986/SteamMachine-DIY
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/bin/steamos-helpers/steamos-update
 # LICENSE:      MIT
 # =============================================================================
