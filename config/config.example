@@ -1,84 +1,99 @@
 # =============================================================================
-#           STEAM MACHINE DIY - MAIN CONFIGURATION PANEL
+# PROJECT:      SteamMachine-DIY - Dynamic Configuration Examples
+# Version:      1.0.0
+# DESCRIPTION:  Configuration Examples.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         $HOME/.config/steamOs/config.example
+# LICENSE:      MIT
 # =============================================================================
-# Path: ~/.config/steamos-diy/config
-# Version: 3.1.0
-# Description: Master display and compositor settings for Gamescope.
-# Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path: ~/.config/steamos-diy/config
-# License: MIT
-# =============================================================================
-# Path:        ~/.config/steamos-diy/config
-# Version:     3.2.4
-# Description: Master display and compositor settings for Gamescope.
-# Repository:  https://github.com/dlucca1986/SteamMachine-DIY
-# License:     MIT
-# =============================================================================
-
 # --- [ 🟢 HOW TO EDIT ] ---
-# 1. Use 1 for ON (Yes) and 0 for OFF (No).
-# 2. NO SPACES around '='! (e.g., TARGET_WIDTH=1920 is OK).
-# 3. Variables with 'export' affect the Steam UI environment.
+# 1. GS_variable=1 (Enable flag) / 0 (Disable) or "value".
+# 2. GS_ variables are auto-converted to flags (e.g., GS_rt -> --rt).
+# 3. Variables with 'export' are for System Environment or SDY wrapper.
 # =============================================================================
 
-# --- [ 1. DISPLAY SETTINGS ] ---
-# These define the "Canvas" where your games will be drawn.
-# Set these to match your TV or Monitor's native specs.
-# -----------------------------------------------------------------------------
-TARGET_WIDTH=1920                             # Horizontal pixels (Width)
-TARGET_HEIGHT=1080                            # Vertical pixels (Height)
-REFRESH_RATE=60                               # Refresh rate in Hz (Speed)
+# --- [ 1. SYSTEM & ENVIRONMENT ] ---
+export INTEL_DEBUG="noccs"
+export STEAM_GAMESCOPE_VRR_SUPPORTED=1
+export CHECK_INTERVAL=1
 
+# --- [ 2. GLOBAL GAME DEFAULTS (SDY) ] ---
+# Used by the 'sdy' wrapper for every game launched.
+export GAME_WRAPPER="gamemoderun"
+export GAME_EXTRA_ARGS=""
 
-# --- [ 2. STEAM INTERFACE & DRIVERS ] ---
-# These variables "inject" settings into the Steam process.
-# -----------------------------------------------------------------------------
-# ✅ CORRECT SYNTAX:
-export SDL_VIDEODRIVER=x11                    # Forces X11 (Safe for Gamescope)
-export XDG_CURRENT_DESKTOP=SteamOS            # Tells Steam: "You are a Console"
+# --- [ 3. OUTPUT & RESOLUTION ] ---
+# ✅ CORRECT SYNTAX: GS_variable=value
+GS_output_width=1366             # -W (Output resolution)
+GS_output_height=768             # -H
+GS_nested_width=""               # -w (Game resolution)
+GS_nested_height=""              # -h
+GS_scaler="fit"                  # -S (auto, integer, fit, fill, stretch)
+GS_filter="linear"               # -F (linear, nearest, fsr, nis, pixel)
+GS_sharpness=2                   # --sharpness (0 to 20)
 
-# ❌ WRONG SYNTAX:
-# SDL_VIDEODRIVER=x11                         # ❌ ERROR: Missing 'export'
-# export SDL_VIDEODRIVER = x11                # ❌ ERROR: Spaces break Bash
-# -----------------------------------------------------------------------------
+# --- [ 4. CORE FEATURES (1=On, 0=Off) ] ---
+# ✅ CORRECT SYNTAX: GS_variable=1 or 0
+GS_rt=1                          # --rt (Realtime scheduling)
+GS_mangoapp=0                    # --mangoapp (Performance overlay)
+GS_adaptive_sync=1               # --adaptive-sync (VRR)
+GS_immediate_flips=1             # --immediate-flips (Tearing)
+GS_xwayland_count=2              # --xwayland-count
 
+# --- [ 5. DISPLAY & ORIENTATION ] ---
+GS_borderless=0                  # -b
+GS_fullscreen=1                  # -f
+# GS_force_orientation="normal"  # --force-orientation (left, right, normal)
 
-# --- [ 3. FEATURE TOGGLES (0/1) ] ---
-# Performance and Visual enhancements.
-# -----------------------------------------------------------------------------
-ENABLE_MANGOAPP=0                             # SHOW FPS: Performance Overlay
-ENABLE_HDR=0                                  # HDR: Deep colors (Needs HDR Monitor)
-ENABLE_VRR=0                                  # VRR: G-Sync/FreeSync (Prevents tearing)
-
-
-# --- [ 4. EXPERT ARGUMENTS ] ---
-# Extra flags sent directly to the Gamescope compositor.
-# Think of this as adding "Left-side" instructions to the compositor.
-# -----------------------------------------------------------------------------
-# ✅ EXAMPLE: GAMESCOPE_ARGS="--cursor-scale 2 --borderless"
-# ❌ DANGER:  GAMESCOPE_ARGS="--wrong-flag" (Can cause black screens!)
-# -----------------------------------------------------------------------------
-GAMESCOPE_ARGS=""
-
-# --- [ 5. POST-LAUNCH COMMAND ] ---
-# Execute a custom command 5 seconds after the session starts.
-# Useful for runtime adjustments (e.g., gamescopectl or display fixes).
-# -----------------------------------------------------------------------------
-# ✅ EXAMPLE: POST_LAUNCH_CMD="gamescopectl adaptive_sync_ignore_overlay 1"
-# -----------------------------------------------------------------------------
-POST_LAUNCH_CMD=""
+# --- [ 6. BACKEND & ADVANCED ] ---
+GS_backend="auto"                # --backend (auto, drm, sdl, wayland)
 
 # =============================================================================
-# ! HARDWARE SAFETY & WATCHDOG !
+# --- [ 📘 DOCUMENTATION & SYNTAX RULES ] ---
 # =============================================================================
-# 🛡️ PREVENTIVE GUARD: 
-# If your settings exceed your monitor's physical limits, SDY will 
-# automatically override them with NATIVE resolution (Auto-Fallback).
-#
-# 🛡️ REACTIVE WATCHDOG: 
-# If Gamescope crashes within 10s (due to bad arguments), the system 
-# will restart in "Native Safe Mode" to keep the UI accessible.
-#
-# 🛡️ VULKAN FIRST: 
-# This system is built for Vulkan. Ensure your GPU supports it.
-# =============================================================================
+
+# 1. THE '#' SYMBOL (Commenting)
+# -----------------------------------------------------------------------------
+# In this SSOTH system, the '#' at the start of a line serves two purposes:
+# - Bash ignores the line (it isn't loaded into memory).
+# - The Launcher's 'grep' ignores it. If you comment out a GS_ variable,
+#   that specific flag will be COMPLETELY REMOVED from the Gamescope command.
+
+# 2. VARIABLE MAPPING (How the command is built)
+# -----------------------------------------------------------------------------
+# The launcher automatically transforms GS_ variables into CLI flags:
+# - If value is 1: Becomes a standalone flag (GS_rt=1 -> --rt)
+# - If value is a string: Becomes flag + value (GS_scaler="fit" -> --scaler fit)
+# - If value is 0 or empty: The flag is skipped entirely.
+
+# 3. COMMON SYNTAX ERRORS (Avoid these!)
+# -----------------------------------------------------------------------------
+# BASH IS VERY STRICT ABOUT SPACES.
+
+# ❌ WRONG (Spaces around '='):
+# export CHECK_INTERVAL = 1
+# GS_rt = 1
+
+# ✅ CORRECT (No spaces):
+# export CHECK_INTERVAL=1
+# GS_rt=1
+
+# ❌ WRONG (Missing quotes for strings with spaces):
+# export GAME_WRAPPER=mangohud --version
+
+# ✅ CORRECT (Use quotes for strings):
+# export GAME_WRAPPER="mangohud --version"
+
+# 4. EXPORT VS. REGULAR VARIABLES
+# -----------------------------------------------------------------------------
+# - Use 'export' for variables that need to be "seen" by other programs
+#   (like Steam, Intel drivers, or the sdy script).
+# - Do NOT use 'export' for GS_ variables. The launcher reads them directly
+#   from the file text to build the Gamescope command string.
+
+# 5. Based on the settings above, your command will look like this:
+# ------------------------------------------------------------------------------
+gamescope -e -f --output-width 1366 --output-height 768 --scaler fit --filter linear --sharpness 2 --rt --adaptive-sync --immediate-flips --xwayland-count 2 --backend auto -- steam
+
+# --- END OF CONFIG ---
