@@ -2,7 +2,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer 
 # VERSION:      1.0.0
-# DESCRIPTION:  Installer Tool with Multilib support and Atomic Session logic.
+# DESCRIPTION:  Installer Tool.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # LICENSE:      MIT
@@ -49,12 +49,26 @@ check_gpu_and_drivers() {
             info "Nvidia GPU detected (no proprietary drivers). Suggesting Nouveau."
             DRIVER_PKGS="vulkan-nouveau lib32-vulkan-nouveau"
         fi
+
     elif echo "$GPU_INFO" | grep -iq "amd"; then
-        info "AMD GPU detected. Suggesting vulkan-radeon."
-        DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon"
+        info "AMD GPU detected."
+        if pacman -Qs "vulkan-radeon" > /dev/null; then
+            warn "AMD Vulkan drivers already detected. Skipping driver re-installation."
+            SKIP_DRIVERS=true
+        else
+            info "Suggesting vulkan-radeon for AMD hardware."
+            DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon"
+        fi
+
     elif echo "$GPU_INFO" | grep -iq "intel"; then
-        info "Intel GPU detected. Suggesting vulkan-intel."
-        DRIVER_PKGS="vulkan-intel lib32-vulkan-intel"
+        info "Intel GPU detected."
+        if pacman -Qs "vulkan-intel" > /dev/null; then
+            warn "Intel Vulkan drivers already detected. Skipping driver re-installation."
+            SKIP_DRIVERS=true
+        else
+            info "Suggesting vulkan-intel for Intel hardware."
+            DRIVER_PKGS="vulkan-intel lib32-vulkan-intel"
+        fi
     fi
 }
 
@@ -171,7 +185,6 @@ EOF
 }
 
 # --- 6. Display Managers ---
-
 manage_display_manager() {
     info "Checking for active Display Managers..."
     
