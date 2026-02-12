@@ -30,7 +30,6 @@ export STEAM_CONSOLE_LOG="/home/${CONSOLE_USER}/.local/share/Steam/logs/console-
 # --- 4. DESKTOP SESSION CONFIG ---
 # Standard environment for launching Plasma Wayland from a TTY.
 export PLASMA_ENV="XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE KDE_WM_SYSTEMD_MANAGED=0"
-
 # --- 5. UI & VISUAL ENGINE ---
 # Centralized function for TTY visual feedback during session switches.
 ssoth_banner() {
@@ -54,8 +53,8 @@ ssoth_banner() {
     printf "${C}  ██◤      ◥██  ${G}━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
     printf "${C}  ██          ██  ${G}Powered by KISS${R}\n"
     printf "${C}  ██◣      ◢██  ${WHITE}USER   : ${G}%s${R}\n" "${CONSOLE_USER}"
-    printf "${C}    ◥██████◤   ${WHITE}MODE   : ${C}%-10s${R}\n" "${MODE^^}"
-    printf "               ${WHITE}STATUS : ${G}%s${R}\n" "${STATUS_MSG^^}"
+    printf "${C}    ◥██████◤    ${WHITE}MODE   : ${C}%-10s${R}\n" "${MODE^^}"
+    printf "                   ${WHITE}STATUS : ${G}%s${R}\n" "${STATUS_MSG^^}"
     
     sync
 }
