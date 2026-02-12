@@ -1,7 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# SteamMachine-DIY - Master Installer (v4.0.0)
-# Philosophy: Open-Source, Zero-Sudoers, Atomic Session Switching
+# PROJECT:      SteamMachine-DIY - Master Installer 
+# VERSION:      1.0.0
+# DESCRIPTION:  Installer.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# LICENSE:      MIT
 # =============================================================================
 
 set -e # Exit on error
