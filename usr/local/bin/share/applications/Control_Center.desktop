@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Name=Control_Center
+Comment=Hardware and Game Configuration Hub
+Exec=/usr/local/bin/steamos-diy-control
+Icon=preferences-system-performance
+Terminal=false
+Type=Application
+StartupWMClass=Control_Center
+Categories=Settings;System;
