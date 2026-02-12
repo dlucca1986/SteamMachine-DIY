@@ -1,1 +1,53 @@
+# =============================================================================
+# PROJECT:      SSOTH (Single Source of Truth) - SteamOS-DIY
+# DESCRIPTION:  Centralized System Identity and Global Paths.
+#               This is the ONLY file with hardcoded system paths.
+# LICENSE:      MIT
+# =============================================================================
 
+# --- 1. SYSTEM IDENTITY ---
+export CONSOLE_USER="lelo"
+export USER_ID="1000"
+
+# --- 2. ENVIRONMENT (Spostati qui dal config per pulizia) ---
+export XDG_RUNTIME_DIR="/run/user/${USER_ID}"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${USER_ID}/bus"
+
+# --- 3. SSOTH CORE PATHS ---
+export CONFIG_DIR="/home/${CONSOLE_USER}/.config/steamOs"
+export NEXT_SESSION_FILE="${CONFIG_DIR}/next_session"
+export LOG_FILE="${CONFIG_DIR}/session.log"
+export GAMES_CONF_DIR="${CONFIG_DIR}/games"
+export STEAM_CONSOLE_LOG="/home/${CONSOLE_USER}/.local/share/Steam/logs/console-linux.txt"
+
+# --- 4. DESKTOP SESSION CONFIG ---
+export PLASMA_ENV="XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE KDE_WM_SYSTEMD_MANAGED=0"
+
+# --- 5. UI & VISUAL ENGINE ---
+# Centralized banner function for consistent TTY feedback
+ssoth_banner() {
+    exec 1>/dev/tty1 2>/dev/null
+
+    local MODE="${1:-STEAM}"
+    local STATUS_MSG="${2:-READY}"
+    local WHITE='\033[1;37m' G='\033[0;90m' R='\033[0m'
+
+    # Dynamic Color Logic
+    local C='\033[1;34m' # Blue for Steam
+    [[ "${MODE^^}" == "PLASMA" || "${MODE^^}" == "DESKTOP" ]] && C='\033[1;32m' # Green for Desktop
+    [[ "${MODE^^}" == "CRASH" ]] && C='\033[1;31m' # Red for Errors
+
+    # Deep TTY Reset (ANSI codes)
+    printf "\033[H\033[2J\033[3J"
+
+    # Logo Construction
+    printf "${C}   ◢██████◣   ${C}◢◤ ${WHITE}SteamOs-Diy${R}\n"
+    printf "${C}  ██◤    ◥██  ${G}━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
+    printf "${C}  ██      ██  ${G}Powered by KISS${R}\n"
+    printf "${C}  ██◣    ◢██  ${WHITE}USER   : ${G}%s${R}\n" "${CONSOLE_USER}"
+    printf "${C}   ◥██████◤   ${WHITE}MODE   : ${C}%-10s${R}\n" "${MODE^^}"
+    printf "              ${WHITE}STATUS : ${G}%s${R}\n" "${STATUS_MSG^^}"
+
+    sync
+}
+#export -f sso
