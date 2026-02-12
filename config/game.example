@@ -1,0 +1,44 @@
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Game Override Examples
+# Version:      1.0.0
+# DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# FILE_PATH:         $HOME/.config/steamOs/game.example
+# GAMES_PATH:        $HOME/.config/steamOs/games/[GameName].conf
+# LICENSE:      MIT
+# =============================================================================
+
+# --- [ 🟢 HOW TO EDIT ] ---
+# 1. NO SPACES around '='! (e.g., GAME_WRAPPER="mangohud" is OK).
+# 2. These settings OVERRIDE the Global defaults in your main config.
+# 3. Use '#' to disable a setting and fallback to Global.
+# =============================================================================
+
+# --- [ 1. GAME WRAPPER ] ---
+# Overrides: export GAME_WRAPPER (default is usually gamemoderun)
+# This runs BEFORE the game executable.
+# -----------------------------------------------------------------------------
+# EXAMPLE: Use "Your_Option" for this specific game
+GAME_WRAPPER=""
+
+# EXAMPLE: Run without any wrapper (empty)
+# GAME_WRAPPER=""
+
+
+# --- [ 2. EXTRA ARGUMENTS ] ---
+# Overrides: export GAME_EXTRA_ARGS
+# These options are added AFTER the game executable.
+# -----------------------------------------------------------------------------
+# EXAMPLE: Use "Your_Argument" for this specific game
+GAME_EXTRA_ARGS=""
+
+# ⚠️ NOTE:
+# Do not add '--' here; the system handles the execution chain.
+# -----------------------------------------------------------------------------
+
+
+# --- [ 💡 FALLBACK LOGIC ] ---
+# If these variables are commented out or missing, SDY will
+# automatically use the Global values from your Main config file.
+# =============================================================================
