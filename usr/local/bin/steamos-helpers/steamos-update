@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
-# Version:      1.0.0
+# VERSION:      1.0.0
 # DESCRIPTION:  Compatibility shim for SteamOS OTA update infrastructure.
 #               Returns Exit Code 7 to simulate an "Up to Date" status.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
