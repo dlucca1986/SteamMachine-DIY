@@ -41,5 +41,6 @@ GAME_EXTRA_ARGS=""
 # --- [ 💡 FALLBACK LOGIC ] ---
 # If these variables are commented out or missing, SDY will
 # automatically use the Global values from your Main config file.
-# =============================================================================
+# -----------------------------------------------------------------------------
+
 # --- END OF EXAMPLES ---
