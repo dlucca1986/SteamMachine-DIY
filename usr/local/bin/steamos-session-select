@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Switcher (Trigger)
-# Version:      1.0.0
+# VERSION:      1.0.0
 # DESCRIPTION:  Dispatcher to trigger session switches between Steam and Desktop.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
