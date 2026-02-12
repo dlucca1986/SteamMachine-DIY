@@ -101,19 +101,20 @@ install_dependencies() {
 deploy_files() {
     info "Deploying system and user files (Overlay)..."
 
-    # System Config & SSOTH flattening (Recuperato: Sostituzione USERNAME)
+    # --- 1. System Config & SSOTH ---
     if [ -f etc/default/steamos-diy ]; then
         cp etc/default/steamos-diy /etc/default/
         sed -i "s/\[USERNAME\]/$REAL_USER/g" /etc/default/steamos-diy
+        sed -i "s/\[USERID\]/$(id -u $REAL_USER)/g" /etc/default/steamos-diy
     fi
 
-    # TTY1 Autologin Override
+    # --- 2. TTY1 Autologin Override ---
     mkdir -p /etc/systemd/system/getty@tty1.service.d/
     if [ -f etc/systemd/system/getty@tty1.service.d/override.conf ]; then
         cp etc/systemd/system/getty@tty1.service.d/override.conf /etc/systemd/system/getty@tty1.service.d/
         sed -i "s/\[USERNAME\]/$REAL_USER/g" /etc/systemd/system/getty@tty1.service.d/override.conf
     fi
-
+    
     # 3.1 Gamescope Capabilities & Hook
     info "Setting Gamescope capabilities and Pacman hook..."
     if [ -f /usr/bin/gamescope ]; then
@@ -169,22 +170,26 @@ setup_shim_links() {
 setup_bash_profile() {
     info "Configuring .bash_profile..."
     BP_FILE="$USER_HOME/.bash_profile"
+    
+    # Crea il file se non esiste
     [ ! -f "$BP_FILE" ] && touch "$BP_FILE"
 
     if ! grep -q "steamos-session-launch" "$BP_FILE"; then
-        cat << 'EOF' >> "$BP_FILE"
+        # Scrittura del blocco tra i nuovi tag BEGIN/END
+        cat << EOF >> "$BP_FILE"
 
-# --- STEAMOS-DIY TRIGGER ---
-if [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]]; then
+# --- BEGIN STEAMOS-DIY TRIGGER ---
+if [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]]; then
     LAUNCHER="/usr/local/bin/steamos-session-launch"
-    if [[ -x "$LAUNCHER" ]]; then
+    if [[ -x "\$LAUNCHER" ]]; then
         [[ -f /etc/default/steamos-diy ]] && . /etc/default/steamos-diy
-        exec "$LAUNCHER" >/dev/null 2>&1
+        exec "\$LAUNCHER" >/dev/null 2>&1
     fi
 fi
 [[ -f ~/.bashrc ]] && . ~/.bashrc
-# ---------------------------
+# --- END STEAMOS-DIY TRIGGER ---
 EOF
+        # Imposta correttamente il proprietario del file
         chown "$REAL_USER:$REAL_USER" "$BP_FILE"
         success "Trigger added to .bash_profile"
     else
