@@ -5,7 +5,7 @@
 # DESCRIPTION:  Compatibility shim for SteamOS timezone synchronization.
 #               Intercepts Steam Client requests to change system timezone.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# Repository:   https://github.com/dlucca1986/SteamMachine-DIY
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/bin/steamos-helpers/steamos-set-timezone
 # LICENSE:      MIT
 # =============================================================================
