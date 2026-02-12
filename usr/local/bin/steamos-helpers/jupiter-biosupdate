@@ -1,28 +1,43 @@
 #!/bin/bash
 # =============================================================================
-# SteamMachine-DIY - Hardware Compatibility Layer
-# =============================================================================
-# Script: jupiter-biosupdate
-# Version: 4.0.0
-# Philosophy:  KISS (Keep It Simple, Stupid)
-# Description: Compatibility shim for SteamOS BIOS update infrastructure.
-#              Prevents errors during session transitions on DIY hardware.
-# Repository: https://github.com/dlucca1986/SteamMachine-DIY
-# Path:        /usr/local/bin/steamos-helpers/jupiter-biosupdate
-# License: MIT
+# PROJECT:      SteamMachine-DIY
+# Version:      1.0.0
+# DESCRIPTION:  Compatibility shim for SteamOS BIOS update infrastructure.
+#               Prevents errors during session transitions on DIY hardware.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# Repository:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/bin/steamos-helpers/jupiter-biosupdate
+# LICENSE:      MIT
 # =============================================================================
 
-# Caricamento SSoT
-CONF="/etc/default/steamos-diy"
-[ -f "$CONF" ] && source "$CONF"
+# --- 1. CORE INITIALIZATION ---
+# Load the master configuration to inherit the centralized LOG_FILE path.
+MASTER_CONFIG="/etc/default/steamos-diy"
 
-log_info() {
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [BIOS-Shim] $1"
+if [ -f "$MASTER_CONFIG" ]; then
+    source "$MASTER_CONFIG"
+else
+    # Fallback log location if master config is missing during boot/install
+    LOG_FILE="/tmp/steamos-diy-fallback.log"
+fi
+
+# --- 2. LOGGING HELPER ---
+# Standardized logging format for compatibility shims.
+log_shim() {
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local msg="[$timestamp] [BIOS-SHIM] $1"
+    
+    # Output to stdout for systemd/journald and to the SSOTH log file.
     echo -e "$1"
-    echo "$msg" >> "${LOG_FILE:-/tmp/steamos-diy-fallback.log}"
+    echo "$msg" >> "$LOG_FILE"
 }
 
-log_info "Checking for system firmware updates..."
-log_info "System firmware is managed by host OS. Returning success."
+# --- 3. EXECUTION ---
+# On DIY hardware, we bypass the official Jupiter (Steam Deck) BIOS updates.
+# We return 0 (Success) to allow the Steam session to continue without errors.
+log_shim "Request intercepted: Checking for system firmware updates..."
+log_shim "DIY Hardware detected: Firmware is managed by the host OS. Bypassing."
 
+# Exit with success to satisfy SteamOS dependencies.
 exit 0
