@@ -5,7 +5,7 @@
 # DESCRIPTION:  Compatibility shim for SteamOS BIOS update infrastructure.
 #               Prevents errors during session transitions on DIY hardware.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# Repository:   https://github.com/dlucca1986/SteamMachine-DIY
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/bin/steamos-helpers/jupiter-biosupdate
 # LICENSE:      MIT
 # =============================================================================
