@@ -1,8 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# PROJECT:      SSOTH - Backup Tool (Mirror Logic)
-# DESCRIPTION:  Creates a mirror archive of system tools and configs.
-#               Maintains full path structure for seamless restoration.
+# PROJECT:      SteamMachine-DIY - Backup
+# VERSION:      1.0.0
+# DESCRIPTION:  Backup Tool for Control Center
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/bin/backup_system
 # LICENSE:      MIT
 # =============================================================================
 
