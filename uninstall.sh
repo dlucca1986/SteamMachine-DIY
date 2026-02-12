@@ -53,7 +53,6 @@ rm -rf /usr/local/bin/steamos-helpers/
 info "Removing desktop applications..."
 rm -f /usr/local/share/applications/Control_Center.desktop
 rm -f /usr/local/share/applications/Game_Mode.desktop
-# Rimuove tutti i file .desktop che iniziano con steamos- se presenti
 rm -f /usr/local/share/applications/steamos-*.desktop
 update-desktop-database /usr/local/share/applications 2>/dev/null || true
 
@@ -67,7 +66,6 @@ rm -rf /usr/bin/steamos-polkit-helpers/
 info "Cleaning .bash_profile for user $REAL_USER..."
 BP_FILE="$USER_HOME/.bash_profile"
 if [ -f "$BP_FILE" ]; then
-    # Rimuove il blocco di codice tra i tag STEAMOS-DIY TRIGGER
     sed -i '/# --- STEAMOS-DIY TRIGGER ---/,/# ---------------------------/d' "$BP_FILE"
 fi
 
@@ -88,7 +86,6 @@ fi
 # --- 8. Restore Display Manager (Funzione + Chiamata) ---
 restore_display_manager() {
     warn "SteamMachine-DIY is removed. You might want to re-enable a Display Manager."
-    # Cerchiamo i DM installati nel sistema
     for dm in sddm gdm lightdm lxdm; do
         if pacman -Qs "^$dm$" > /dev/null 2>&1; then
             echo -ne "${CYAN}Detected $dm. Re-enable it? [y/N] ${NC}"
@@ -96,7 +93,7 @@ restore_display_manager() {
             if [[ $reconfirm == [yY] ]]; then
                 systemctl enable "$dm"
                 success "$dm enabled."
-                return 0 # Esci dopo averne abilitato uno
+                return 0
             fi
         fi
     done
