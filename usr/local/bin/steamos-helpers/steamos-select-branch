@@ -4,7 +4,7 @@
 # DESCRIPTION:  Compatibility shim for SteamOS update channels.
 #               Simulates branch switching to satisfy Steam Client requirements.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# PATH:         /usr/local/bin/steamos-select-branch
+# PATH:         usr/local/bin/steamos-helpers/steamos-select-branch
 # LICENSE:      MIT
 # =============================================================================
 
