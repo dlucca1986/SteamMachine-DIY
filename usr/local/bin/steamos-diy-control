@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+# =============================================================================
+# PROJECT:      SSOTH - Control Center
+# DESCRIPTION:  PyQt6 Dashboard for SteamOS-DIY.
+#               Features: Log-based Dry Run, Standardized SDY Variables.
+# =============================================================================
+
+import sys
+import os
+import subprocess
+import re
+import getpass
+from datetime import datetime
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QLabel, QPushButton, QFrame,
+                             QTextEdit, QTabWidget, QGridLayout, QListWidget, QMessageBox)
+from PyQt6.QtCore import Qt, QTimer, QRegularExpression
+from PyQt6.QtGui import QPalette, QFont, QSyntaxHighlighter, QTextCharFormat, QColor
+
+# --- 1. SSoT NATIVE BRIDGE ---
+def get_master_config():
+    master_path = "/etc/default/steamos-diy"
+    if not os.path.exists(master_path):
+        return None
+
+    current_user = getpass.getuser()
+    config = {}
+    raw_vars = {}
+
+    with open(master_path, "r") as f:
+        for line in f:
+            line = line.split('#')[0].strip()
+            if "=" in line:
+                line = line.replace("export ", "")
+                key, val = line.split("=", 1)
+                raw_vars[key.strip()] = val.strip().strip('"').strip("'")
+
+    user = raw_vars.get("CONSOLE_USER", current_user)
+    config["CONSOLE_USER"] = user
+    config["SYSTEM_NAME"] = raw_vars.get("SYSTEM_NAME", "SteamOS-DIY")
+
+    def resolve(text):
+        return text.replace("${CONSOLE_USER}", user).replace("$CONSOLE_USER", user)
+
+    config["CONFIG_DIR"] = resolve(raw_vars.get("CONFIG_DIR", f"/home/{user}/.config/steamOs"))
+    log_raw = raw_vars.get("LOG_FILE", "${CONFIG_DIR}/session.log")
+    config["LOG_FILE"] = resolve(log_raw).replace("${CONFIG_DIR}", config["CONFIG_DIR"])
+
+    return config
+
+MASTER = get_master_config()
+
+if MASTER is None:
+    app = QApplication(sys.argv)
+    QMessageBox.critical(None, "SSoT Error", "Master configuration file not found at /etc/default/steamos-diy")
+    sys.exit(1)
+
+CONFIG_DIR = MASTER["CONFIG_DIR"]
+GAMES_CONF_DIR = os.path.join(CONFIG_DIR, "games")
+USER_CONFIG_PATH = os.path.join(CONFIG_DIR, "config")
+LOG_PATH = MASTER["LOG_FILE"]
+
+# --- 2. HIGHLIGHTERS ---
+class ConfHighlighter(QSyntaxHighlighter):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rules = []
+        fmt_gs = QTextCharFormat(); fmt_gs.setForeground(QColor("#00f2ff")); fmt_gs.setFontWeight(QFont.Weight.Bold)
+        fmt_exp = QTextCharFormat(); fmt_exp.setForeground(QColor("#2ecc71"))
+        fmt_n = QTextCharFormat(); fmt_n.setForeground(QColor("#f49b00"))
+        fmt_c = QTextCharFormat(); fmt_c.setForeground(QColor("#7f8c8d")); fmt_c.setFontItalic(True)
+        self.rules.append((QRegularExpression(r"\bGS_[A-Za-z0-9_]+(?==)"), fmt_gs))
+        self.rules.append((QRegularExpression(r"GAME_[A-Za-z0-9_]+(?==)"), fmt_exp))
+        self.rules.append((QRegularExpression(r"export\s+[A-Za-z0-9_]+(?==)"), fmt_exp))
+        self.rules.append((QRegularExpression(r"\b[0-9]+\b"), fmt_n))
+        self.rules.append((QRegularExpression(r"#.*"), fmt_c))
+
+    def highlightBlock(self, text):
+        for pattern, fmt in self.rules:
+            it = pattern.globalMatch(text)
+            while it.hasNext():
+                match = it.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), fmt)
+
+class LogHighlighter(QSyntaxHighlighter):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rules = []
+        fmt_err = QTextCharFormat(); fmt_err.setForeground(QColor("#e74c3c")); fmt_err.setFontWeight(QFont.Weight.Bold)
+        fmt_tag = QTextCharFormat(); fmt_tag.setForeground(QColor("#1a9fff"))
+        fmt_dry = QTextCharFormat(); fmt_dry.setForeground(QColor("#f49b00")); fmt_dry.setFontWeight(QFont.Weight.Bold)
+        self.rules.append((QRegularExpression(r"ERROR|failed|Error|Critical"), fmt_err))
+        self.rules.append((QRegularExpression(r"\[LAUNCHER\]|\[SDY\]|\[TRIGGER\]"), fmt_tag))
+        self.rules.append((QRegularExpression(r"\[DRY-RUN\]"), fmt_dry))
+
+    def highlightBlock(self, text):
+        for pattern, fmt in self.rules:
+            it = pattern.globalMatch(text)
+            while it.hasNext():
+                match = it.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), fmt)
+
+# --- 3. MAIN WINDOW ---
+class SteamDIYControl(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(f"{MASTER['SYSTEM_NAME']} Control Center")
+        self.setMinimumSize(950, 750)
+        self.init_ui()
+        self.load_main_config()
+        self.refresh_games_list()
+
+    def run_cmd(self, cmd):
+        try: return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+        except: return "N/A"
+
+    def strip_ansi(self, text):
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+
+    def init_ui(self):
+        accent = self.palette().color(QPalette.ColorRole.Highlight).name()
+        central = QWidget(); self.setCentralWidget(central)
+        layout = QVBoxLayout(central); self.tabs = QTabWidget(); layout.addWidget(self.tabs)
+
+        # TAB 1: GLOBAL CONFIG
+        self.tab_cfg = QWidget(); cfg_lay = QVBoxLayout(self.tab_cfg)
+        h_head = QHBoxLayout()
+        self.cfg_lbl = QLabel(f"Global Config: {USER_CONFIG_PATH}")
+        self.cfg_lbl.setStyleSheet(f"color: {accent}; font-weight: bold;")
+        self.btn_help_cfg = QPushButton(" 📖 View Template"); self.btn_help_cfg.setFixedWidth(180)
+        self.btn_help_cfg.clicked.connect(lambda: self.toggle_template(self.btn_help_cfg, "config"))
+        h_head.addWidget(self.cfg_lbl); h_head.addStretch(); h_head.addWidget(self.btn_help_cfg)
+
+        self.cfg_edit = QTextEdit(); self.cfg_edit.setFont(QFont("Monospace", 10))
+        self.cfg_highlighter = ConfHighlighter(self.cfg_edit.document())
+
+        btn_lay = QHBoxLayout()
+        self.cfg_save = QPushButton(" 💾 Save Configuration"); self.cfg_save.clicked.connect(self.save_main_config)
+        self.cfg_save.setMinimumHeight(45)
+        self.btn_dry = QPushButton(" 🔍 Dry Run (Check Logs)"); self.btn_dry.clicked.connect(self.dry_run_check)
+        self.btn_dry.setMinimumHeight(45)
+        self.btn_dry.setStyleSheet("background-color: #2c3e50; font-weight: bold;")
+
+        btn_lay.addWidget(self.cfg_save, 2); btn_lay.addWidget(self.btn_dry, 1)
+        cfg_lay.addLayout(h_head); cfg_lay.addWidget(self.cfg_edit); cfg_lay.addLayout(btn_lay)
+        self.tabs.addTab(self.tab_cfg, "Global Config")
+
+        # TAB 2: SYSTEM INFO
+        self.tab_info = QWidget(); info_lay = QVBoxLayout(self.tab_info)
+        grid_frame = QFrame(); grid_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        grid = QGridLayout(grid_frame); self.info_labels = {}
+        info_items = ["OS", "Kernel", "CPU", "GPU", "Memory"]
+        for i, item in enumerate(info_items):
+            grid.addWidget(QLabel(f"<b>{item}:</b>"), i, 0)
+            lbl = QLabel("..."); self.info_labels[item] = lbl; grid.addWidget(lbl, i, 1)
+
+        act_group = QVBoxLayout(); act_group.addWidget(QLabel("<b>SYSTEM MAINTENANCE</b>"))
+        h_btns = QHBoxLayout()
+        self.btn_backup = QPushButton(" 📦 Backup System"); self.btn_backup.setMinimumHeight(45)
+        self.btn_backup.clicked.connect(self.run_backup)
+        self.btn_restore = QPushButton(" 🕒 Restore Last Backup"); self.btn_restore.setMinimumHeight(45)
+        self.btn_restore.clicked.connect(self.run_restore)
+        h_btns.addWidget(self.btn_backup); h_btns.addWidget(self.btn_restore)
+
+        btn_term = QPushButton(" 🐚 Launch System Terminal"); btn_term.setMinimumHeight(50)
+        btn_term.clicked.connect(lambda: subprocess.Popen(["konsole"], start_new_session=True))
+
+        info_lay.addWidget(QLabel("<b>SYSTEM SPECIFICATIONS</b>"))
+        info_lay.addWidget(grid_frame); info_lay.addSpacing(20); info_lay.addLayout(act_group)
+        info_lay.addLayout(h_btns); info_lay.addStretch(); info_lay.addWidget(btn_term)
+        self.tabs.addTab(self.tab_info, "System Info")
+
+        # TAB 3: GAME OVERRIDES
+        self.tab_sdy = QWidget(); sdy_lay = QHBoxLayout(self.tab_sdy)
+        side = QVBoxLayout(); self.btn_target = QPushButton(" 🎯 Target Last Game"); self.btn_target.clicked.connect(self.target_last_game)
+        self.games_list = QListWidget(); self.games_list.setFixedWidth(200); self.games_list.itemClicked.connect(self.load_game_conf)
+        side.addWidget(self.btn_target); side.addWidget(self.games_list)
+
+        edit_side = QVBoxLayout(); sdy_h = QHBoxLayout()
+        self.sdy_lbl = QLabel("Select a game..."); self.sdy_lbl.setStyleSheet(f"color: {accent}; font-weight: bold;")
+        self.btn_help_game = QPushButton(" 📖 View Template"); self.btn_help_game.setFixedWidth(180)
+        self.btn_help_game.clicked.connect(lambda: self.toggle_template(self.btn_help_game, "game"))
+        sdy_h.addWidget(self.sdy_lbl); sdy_h.addStretch(); sdy_h.addWidget(self.btn_help_game)
+
+        self.sdy_edit = QTextEdit(); self.sdy_edit.setFont(QFont("Monospace", 10))
+        self.sdy_highlighter = ConfHighlighter(self.sdy_edit.document())
+        self.sdy_save = QPushButton(" 💾 Save Game Override"); self.sdy_save.clicked.connect(self.save_sdy_conf)
+        edit_side.addLayout(sdy_h); edit_side.addWidget(self.sdy_edit); edit_side.addWidget(self.sdy_save)
+        sdy_lay.addLayout(side); sdy_lay.addLayout(edit_side)
+        self.tabs.addTab(self.tab_sdy, "Game Overrides")
+
+        # TAB 4: LOGS
+        self.tab_log = QWidget(); log_lay = QVBoxLayout(self.tab_log)
+        self.log_out = QTextEdit(); self.log_out.setReadOnly(True); self.log_out.setFont(QFont("Monospace", 10))
+        self.log_highlighter = LogHighlighter(self.log_out.document())
+        log_btns = QHBoxLayout()
+        btn_copy = QPushButton(" 📋 Copy Logs"); btn_copy.clicked.connect(self.copy_logs)
+        btn_clear = QPushButton(" 🗑️ Clear Log File"); btn_clear.clicked.connect(self.clear_logs)
+        log_btns.addWidget(btn_copy); log_btns.addWidget(btn_clear)
+        log_lay.addWidget(self.log_out); log_lay.addLayout(log_btns)
+        self.tabs.addTab(self.tab_log, "Session Logs")
+
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        QTimer.singleShot(100, self.update_system_info)
+
+    # --- LOGIC METHODS ---
+    def dry_run_check(self):
+        """Standardized Dry-Run: Parsed from UI and written to session.log"""
+        try:
+            config_content = self.cfg_edit.toPlainText().splitlines()
+            dynamic_flags = []
+            wrapper = "gamemoderun" # fallback
+            extra_args = ""
+
+            for line in config_content:
+                line = line.split('#')[0].strip()
+                if not line or "=" not in line: continue
+
+                if line.startswith("export "):
+                    line = line.replace("export ", "")
+                    k, v = line.split("=", 1)
+                    v = v.strip().strip('"').strip("'")
+                    if k.strip() == "GAME_WRAPPER": wrapper = v
+                    if k.strip() == "GAME_EXTRA_ARGS": extra_args = v
+                elif line.startswith("GS_"):
+                    k, v = line.split("=", 1)
+                    flag = k.replace("GS_", "--").replace("_", "-")
+                    v = v.strip().strip('"').strip("'")
+                    if v == "1": dynamic_flags.append(flag)
+                    elif v and v != "0": dynamic_flags.append(f"{flag} {v}")
+
+            final_cmd = f"gamescope -e -f {' '.join(dynamic_flags)} -- {wrapper} steam -gamepadui {extra_args}"
+
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = f"\n[{ts}] [DRY-RUN] Simulation generated by Control Center:\n{'-'*80}\nCOMMAND: {final_cmd}\n{'-'*80}\n"
+
+            with open(LOG_PATH, "a") as f:
+                f.write(log_entry)
+
+            QMessageBox.information(self, "Dry Run", "Command generated and written to Session Logs.\nSwitch to 'Session Logs' tab to see it.")
+        except Exception as e:
+            QMessageBox.critical(self, "Dry Run Error", f"Failed to parse config: {e}")
+
+    def run_backup(self):
+        self.btn_backup.setText(" 🔄 Running Backup...")
+        try:
+            subprocess.Popen(["/usr/local/bin/backup_system"], start_new_session=True)
+            QTimer.singleShot(3000, lambda: self.btn_backup.setText(" 📦 Backup System"))
+        except: self.btn_backup.setText(" ❌ Backup Failed!")
+
+    def run_restore(self):
+        cmd = "konsole -e sudo /usr/local/bin/restore_system"
+        subprocess.Popen(cmd.split(), start_new_session=True)
+
+    def load_main_config(self):
+        if os.path.exists(USER_CONFIG_PATH):
+            with open(USER_CONFIG_PATH, "r") as f: self.cfg_edit.setPlainText(f.read())
+
+    def save_main_config(self):
+        with open(USER_CONFIG_PATH, "w") as f: f.write(self.cfg_edit.toPlainText())
+        self.cfg_save.setText(" ✅ Saved!"); QTimer.singleShot(2000, lambda: self.cfg_save.setText(" 💾 Save Configuration"))
+
+    def toggle_template(self, button, mode):
+        is_viewing = "Back" in button.text()
+        if is_viewing:
+            button.setText(" 📖 View Template"); button.setStyleSheet("")
+            if mode == "config": self.load_main_config(); self.cfg_lbl.setText(f"Global Config: {USER_CONFIG_PATH}")
+            else:
+                selected = self.games_list.selectedItems()
+                if selected: self.load_game_conf(selected[0])
+                else: self.sdy_edit.clear(); self.sdy_lbl.setText("Select a game...")
+        else:
+            filename = "config.example" if mode == "config" else "game.example"
+            path = os.path.join(CONFIG_DIR, filename)
+            if os.path.exists(path):
+                with open(path, "r") as f: content = f.read()
+                if mode == "config": self.cfg_edit.setPlainText(content); self.cfg_lbl.setText(f"VIEWING TEMPLATE: {filename}")
+                else: self.sdy_edit.setPlainText(content); self.sdy_lbl.setText(f"VIEWING TEMPLATE: {filename}")
+                button.setText(" 🔙 Back to Editor"); button.setStyleSheet("background-color: #2c3e50; color: #1a9fff; font-weight: bold;")
+
+    def refresh_games_list(self):
+        self.games_list.clear()
+        if os.path.exists(GAMES_CONF_DIR):
+            for f in sorted([f for f in os.listdir(GAMES_CONF_DIR) if f.endswith(".conf")]): self.games_list.addItem(f)
+
+    def load_game_conf(self, item):
+        self.btn_help_game.setText(" 📖 View Template"); self.btn_help_game.setStyleSheet("")
+        self.sdy_lbl.setText(f"Editing: {item.text()}")
+        with open(os.path.join(GAMES_CONF_DIR, item.text()), "r") as f: self.sdy_edit.setPlainText(f.read())
+
+    def save_sdy_conf(self):
+        fname = self.sdy_lbl.text().replace("Editing: ", "")
+        if ".conf" in fname:
+            with open(os.path.join(GAMES_CONF_DIR, fname), "w") as f: f.write(self.sdy_edit.toPlainText())
+            self.sdy_save.setText(" ✅ Saved!"); QTimer.singleShot(2000, lambda: self.sdy_save.setText(" 💾 Save Game Override"))
+
+    def target_last_game(self):
+        if not os.path.exists(LOG_PATH): return
+        detected_unconfigured = []; already_handled = set()
+        try:
+            with open(LOG_PATH, 'r') as f:
+                lines = f.readlines()
+                for line in reversed(lines):
+                    if "[SDY] START:" in line:
+                        match = re.search(r'START:\s*(.*?)\s*\|', line)
+                        conf_match = re.search(r'Conf:\s*(.*)', line)
+                        if match and conf_match:
+                            gname = match.group(1).strip()
+                            conf_status = conf_match.group(1).strip()
+                            if conf_status != "NONE":
+                                fname = conf_status if conf_status.endswith(".conf") else f"{conf_status}.conf"
+                                items = self.games_list.findItems(fname, Qt.MatchFlag.MatchExactly)
+                                if items: self.games_list.setCurrentItem(items[0]); self.load_game_conf(items[0]); return
+                            full_conf_name = f"{gname}.conf"
+                            if not os.path.exists(os.path.join(GAMES_CONF_DIR, full_conf_name)):
+                                if gname not in already_handled: detected_unconfigured.append(gname); already_handled.add(gname)
+                    if len(detected_unconfigured) > 0: break
+        except: pass
+        if detected_unconfigured:
+            game_to_create = detected_unconfigured[0]
+            # --- POPUP TRANSLATED TO ENGLISH ---
+            res = QMessageBox.question(self, "New Game Detected", f"Found '{game_to_create}' in logs without a profile.\nDo you want to create '{game_to_create}.conf'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if res == QMessageBox.StandardButton.Yes: self.create_game_conf(game_to_create)
+        else:
+            raw = self.run_cmd(f"grep '\[SDY\] START:' '{LOG_PATH}' | tail -n1")
+            match = re.search(r'START:\s*(.*?)\s*\|', raw)
+            if match:
+                gname = f"{match.group(1).strip()}.conf"
+                items = self.games_list.findItems(gname, Qt.MatchFlag.MatchExactly)
+                if items: self.games_list.setCurrentItem(items[0]); self.load_game_conf(items[0])
+
+    def create_game_conf(self, game_id):
+        """Creates a new game config using ONLY the standardized variables from template"""
+        new_file = f"{game_id}.conf"; target_path = os.path.join(GAMES_CONF_DIR, new_file); template_path = os.path.join(CONFIG_DIR, "game.example")
+        try:
+            os.makedirs(GAMES_CONF_DIR, exist_ok=True)
+
+            # --- CLEANER CREATION LOGIC ---
+            # Starts only with a header
+            final_lines = [f"# --- Game Override: {game_id} ---"]
+
+            if os.path.exists(template_path):
+                # Only extract lines containing '=' that are NOT comments
+                with open(template_path, "r") as f:
+                    for line in f:
+                        clean = line.strip()
+                        if "=" in clean and not clean.startswith("#"):
+                            final_lines.append(clean)
+
+            # Fallback if template is empty/missing
+            if len(final_lines) == 1:
+                final_lines.append('GAME_WRAPPER=""')
+                final_lines.append('GAME_EXTRA_ARGS=""')
+
+            with open(target_path, "w") as f: f.write("\n".join(final_lines) + "\n")
+
+            self.refresh_games_list()
+            items = self.games_list.findItems(new_file, Qt.MatchFlag.MatchExactly)
+            if items: self.games_list.setCurrentItem(items[0]); self.load_game_conf(items[0])
+        except Exception as e: QMessageBox.critical(self, "Error", f"Failed to create file: {e}")
+
+    def load_log_content(self):
+        if os.path.exists(LOG_PATH):
+            with open(LOG_PATH, "r") as f:
+                content = self.strip_ansi(f.read())
+                self.log_out.setPlainText(content)
+                self.log_out.verticalScrollBar().setValue(self.log_out.verticalScrollBar().maximum())
+
+    def copy_logs(self): QApplication.clipboard().setText(self.log_out.toPlainText())
+
+    def clear_logs(self):
+        if os.path.exists(LOG_PATH):
+            with open(LOG_PATH, "w") as f: f.write(f"--- Log cleared by Control Center ---\n")
+            self.load_log_content()
+
+    def update_system_info(self):
+        self.info_labels["OS"].setText(self.run_cmd("grep PRETTY_NAME /etc/os-release | cut -d'\"' -f2"))
+        self.info_labels["Kernel"].setText(self.run_cmd("uname -r"))
+        self.info_labels["CPU"].setText(self.run_cmd("grep -m1 'model name' /proc/cpuinfo | cut -d: -f2"))
+        self.info_labels["GPU"].setText(self.run_cmd("glxinfo -B | grep 'Device:' | cut -d: -f2"))
+        self.info_labels["Memory"].setText(self.run_cmd("free -h | grep Mem: | awk '{print $3 \" / \" $2}'"))
+
+    def on_tab_changed(self, index):
+        if self.tabs.tabText(index) == "Session Logs": self.load_log_content()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = SteamDIYControl(); win.show()
+    sys.exit(app.exec())
