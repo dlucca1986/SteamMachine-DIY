@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = gamescope
+
+[Action]
+Description = SteamMachine-DIY: Restoring caps on gamescope binary...
+When = PostTransaction
+Exec = /usr/bin/setcap 'cap_sys_nice=eip' /usr/bin/gamescope
