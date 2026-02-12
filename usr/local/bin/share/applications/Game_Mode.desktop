@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=Game_Mode
-Exec=steamos-session-select steam
-Icon=steam
-Terminal=false
-Type=Application
