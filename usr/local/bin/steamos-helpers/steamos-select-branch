@@ -1,9 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# PROJECT:      SSOTH - Release Channel Manager
+# PROJECT:      SteamMachine-DIY
+# Version:      1.0.0
 # DESCRIPTION:  Compatibility shim for SteamOS update channels.
 #               Simulates branch switching to satisfy Steam Client requirements.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# Repository:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         usr/local/bin/steamos-helpers/steamos-select-branch
 # LICENSE:      MIT
 # =============================================================================
