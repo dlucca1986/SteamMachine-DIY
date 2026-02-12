@@ -30,7 +30,7 @@ GS_scaler=""                     # -S       | upscaler (auto, integer, fit, fill
 GS_filter=""                     # -F       | filter (linear, nearest, fsr, nis, pixel)
                                  #            fsr => AMD FidelityFX™ Super Res 1.0
                                  #            nis => NVIDIA Image Scaling v1.0.3
-GS_sharpness="                   #          | --sharpness (0 max to 20 min)
+GS_sharpness=""                  #          | --sharpness (0 max to 20 min)
 
 # --- 4. CORE FEATURES (1=On, 0=Off) ---
 GS_rt=0                          # --rt     | Realtime scheduling
