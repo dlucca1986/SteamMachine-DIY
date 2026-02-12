@@ -6,17 +6,17 @@
 # =============================================================================
 
 # --- 1. SYSTEM IDENTITY ---
-# These are placeholder values replaced by the installer via 'sed'
-export CONSOLE_USER="REPLACE_ME_USER"
-export USER_ID="REPLACE_ME_ID"
+# These placeholders ([USERNAME] and [USERID]) are replaced by the installer.
+export CONSOLE_USER="[USERNAME]"
+export USER_ID="[USERID]"
 
 # --- 2. ENVIRONMENT ---
-# Dynamically calculated to ensure it works even if the user changes
+# Dynamically handles session bus and runtime paths based on the User ID.
 export XDG_RUNTIME_DIR="/run/user/${USER_ID}"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${USER_ID}/bus"
 
 # --- 3. SSOTH CORE PATHS ---
-# Using the home directory of the identified user
+# All paths are derived from the CONSOLE_USER to remain agnostic.
 export CONFIG_DIR="/home/${CONSOLE_USER}/.config/steamOs"
 export NEXT_SESSION_FILE="${CONFIG_DIR}/next_session"
 export LOG_FILE="${CONFIG_DIR}/session.log"
@@ -24,27 +24,34 @@ export GAMES_CONF_DIR="${CONFIG_DIR}/games"
 export STEAM_CONSOLE_LOG="/home/${CONSOLE_USER}/.local/share/Steam/logs/console-linux.txt"
 
 # --- 4. DESKTOP SESSION CONFIG ---
+# Standard environment for launching Plasma Wayland from a TTY.
 export PLASMA_ENV="XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE KDE_WM_SYSTEMD_MANAGED=0"
 
 # --- 5. UI & VISUAL ENGINE ---
+# Centralized function for TTY visual feedback during session switches.
 ssoth_banner() {
-    
-    exec 1>/dev/tty1 2>/dev/null
+    # Only run if output is a terminal
+    [ -t 1 ] || exec 1>/dev/tty1 2>/dev/null
 
     local MODE="${1:-STEAM}"
     local STATUS_MSG="${2:-READY}"
     local WHITE='\033[1;37m' G='\033[0;90m' R='\033[0m'
 
-    local C='\033[1;34m'
-    [[ "${MODE^^}" == "PLASMA" || "${MODE^^}" == "DESKTOP" ]] && C='\033[1;32m'
-    [[ "${MODE^^}" == "CRASH" ]] && C='\033[1;31m'
+    # Dynamic color scheme based on session type
+    local C='\033[1;34m' # Blue for Steam
+    [[ "${MODE^^}" == "PLASMA" || "${MODE^^}" == "DESKTOP" ]] && C='\033[1;32m' # Green for Desktop
+    [[ "${MODE^^}" == "CRASH" ]] && C='\033[1;31m' # Red for Errors
 
+    # Clear screen and reset cursor position
     printf "\033[H\033[2J\033[3J"
+
+    # ASCII Logo and Session Info
     printf "${C}    ◢██████◣   ${C}◢◤ ${WHITE}SteamOs-Diy${R}\n"
     printf "${C}  ██◤      ◥██  ${G}━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
     printf "${C}  ██         ██  ${G}Powered by KISS${R}\n"
     printf "${C}  ██◣      ◢██  ${WHITE}USER   : ${G}%s${R}\n" "${CONSOLE_USER}"
     printf "${C}    ◥██████◤   ${WHITE}MODE   : ${C}%-10s${R}\n" "${MODE^^}"
     printf "               ${WHITE}STATUS : ${G}%s${R}\n" "${STATUS_MSG^^}"
+    
     sync
 }
