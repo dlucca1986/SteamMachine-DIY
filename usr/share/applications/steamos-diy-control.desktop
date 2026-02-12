@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=SteamOS-DIY Control
-Comment=Hardware and Game Configuration Hub
-Exec=/usr/local/bin/steamos-diy-control
-Icon=preferences-system-performance
-Terminal=false
-Type=Application
-StartupWMClass=SteamOS-DIY Control
-Categories=Settings;System;
