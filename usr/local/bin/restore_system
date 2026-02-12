@@ -1,8 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# PROJECT:      SSOTH - System Restore Tool (Steam-DIY)
-# DESCRIPTION:  Restores system from a mirror backup tarball using rsync.
-#               Maintains original permissions, symlinks, and ownership.
+# PROJECT:      SteamMachine-DIY - Restore
+# VERSION:      1.0.0
+# DESCRIPTION:  Restore Tool for Control Center
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/bin/restore_system
 # LICENSE:      MIT
 # =============================================================================
 
