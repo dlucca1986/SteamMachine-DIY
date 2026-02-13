@@ -83,7 +83,7 @@ while true; do
             if [ $DURATION -lt 5 ]; then
                 log_info "CRASH DETECTED: Steam ended too quickly ($DURATION s)."
                 ssoth_banner "CRASH" "RECOVERING..."
-                sleep 2
+                sleep 5
             fi
 
             # Atomic update of the next session file
