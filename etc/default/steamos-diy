@@ -33,6 +33,7 @@ export PLASMA_ENV="XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=KDE KDE_WM_SYSTE
 
 # --- 5. UI & VISUAL ENGINE ---
 # Centralized function for TTY visual feedback during session switches.
+
 ssoth_banner() {
     # Only run if output is a terminal
     [ -t 1 ] || exec 1>/dev/tty1 2>/dev/null
@@ -49,8 +50,9 @@ ssoth_banner() {
     # Clear screen and reset cursor position
     printf "\033[H\033[2J\033[3J"
 
-    # ASCII Logo and Session Info
-    printf "${C}    ◢██████◣   ${C}◢◤ ${WHITE}SteamOs-Diy${R}\n"
+    # --- ASCII Logo and Session Info (Fixed Alignment) ---
+    # Usiamo spazi standard ed evitiamo tabulazioni nascoste
+    printf "${C}    ◢██████◣    ${C}◢◤ ${WHITE}SteamOs-Diy${R}\n"
     printf "${C}  ██◤      ◥██  ${G}━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
     printf "${C}  ██          ██  ${G}Powered by KISS${R}\n"
     printf "${C}  ██◣      ◢██  ${WHITE}USER   : ${G}%s${R}\n" "${CONSOLE_USER}"
