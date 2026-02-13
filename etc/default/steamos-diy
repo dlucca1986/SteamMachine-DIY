@@ -50,15 +50,14 @@ ssoth_banner() {
     # Clear screen and reset cursor position
     printf "\033[H\033[2J\033[3J"
 
-    # --- Vertical Stack Layout ---
-    printf "${C} ◢◤ ${WHITE}SteamOs-Diy${R}\n"
+    # --- Refined Minimalist Layout ---
+    printf "${C} ◢◤ ${WHITE}SteamOs-Diy ${G}v1.0${R}\n"
     printf "    ${G}Powered by KISS${R}\n"
     printf "${G} ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
-    printf "  ${WHITE}USER   : ${G}%-20s${R}\n" "${CONSOLE_USER}"
-    printf "  ${WHITE}MODE   : ${C}%-20s${R}\n" "${MODE^^}"
-    printf "  ${WHITE}STATUS : ${C}%-20s${R}\n" "${STATUS_MSG^^}"
+    printf "  ${WHITE}User   : ${G}%s${R}\n" "${CONSOLE_USER}"
+    printf "  ${WHITE}Mode   : ${C}%s${R}\n" "${MODE^^}"
+    printf "  ${WHITE}Status : ${C}● ${R}${C}%s${R}\n" "${STATUS_MSG^^}"
     printf "${G} ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
-    printf "  ${G}v1.0${R}\n"
     
     sync
 }
