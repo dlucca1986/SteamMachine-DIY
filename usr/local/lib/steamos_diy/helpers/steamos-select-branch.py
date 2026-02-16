@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# =============================================================================
+# PROJECT:      SteamMachine-DIY
+# VERSION:      1.0.0 - Phyton
+# DESCRIPTION:  Compatibility shim for SteamOS OTA update infrastructure.
+#               Returns Exit Code 7 to simulate an "Up to Date" status.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/lib/helpers/set-timezone.py
+# LICENSE:      MIT
+# =============================================================================
+
 import sys
 import subprocess
 
