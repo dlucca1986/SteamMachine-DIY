@@ -2,13 +2,14 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
 # VERSION:      1.0.0
-# DESCRIPTION:  Complete removal of DIY components and trigger cleanup.
-# PHILOSOPHY:   Leave no trace (but keep system dependencies).
+# DESCRIPTION:  Surgical removal of DIY components and environment restoration.
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# LICENSE:      MIT
 # =============================================================================
 
 set -e
 
-# --- Colors ---
+# --- Colors & UI ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -20,38 +21,47 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Root check
 if [ "$EUID" -ne 0 ]; then
     error "Please run as root (sudo ./uninstall.sh)"
     exit 1
 fi
 
+# Detect actual user behind sudo
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
-echo -e "${RED}"
-echo "=================================================="
-echo "      SteamMachine-DIY UNINSTALLER                "
-echo "=================================================="
-echo -e "${NC}"
-
-# --- 1. Remove Triggers ---
-cleanup_triggers() {
-    info "Removing trigger from .bash_profile..."
+# --- 1. Cleanup Triggers & Overrides ---
+cleanup_system_config() {
+    info "Cleaning up system configurations..."
+    
+    # Surgically remove the trigger block from .bash_profile
     BP_FILE="$USER_HOME/.bash_profile"
     if [ -f "$BP_FILE" ]; then
-        # Rimuove tutto ciò che sta tra i tag BEGIN ed END (inclusi i tag)
+        # Uses sed to delete everything between the DIY markers
         sed -i '/# --- BEGIN STEAMOS-DIY TRIGGER ---/,/# --- END STEAMOS-DIY TRIGGER ---/d' "$BP_FILE"
-        success "Bash profile cleaned."
+        info "Bash profile trigger removed."
     fi
 
-    info "Removing TTY1 autologin override..."
-    rm -rf /etc/systemd/system/getty@tty1.service.d/
-    success "TTY1 override removed."
+    # Remove the TTY1 autologin override directory
+    if [ -d /etc/systemd/system/getty@tty1.service.d/ ]; then
+        rm -rf /etc/systemd/system/getty@tty1.service.d/
+        info "TTY1 autologin override removed."
+    fi
+    
+    # Remove ALPM hooks and reset Gamescope capabilities
+    rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
+    if [ -f /usr/bin/gamescope ]; then
+        # Removing file capabilities to return to system default
+        setcap -r /usr/bin/gamescope 2>/dev/null || true
+    fi
 }
 
-# --- 2. Remove Shim Layer & Binaries ---
+# --- 2. Remove Files & Symlinks ---
 cleanup_files() {
-    info "Deleting symlinks and shim layer..."
+    info "Removing binaries and libraries..."
+    
+    # List of symlinks created by the installer
     SYMLINKS=(
         "/usr/bin/steamos-session-launch"
         "/usr/bin/steamos-session-select"
@@ -64,56 +74,72 @@ cleanup_files() {
         "/usr/bin/steamos-polkit-helpers"
     )
 
+    # Clean up /usr/bin/
     for link in "${SYMLINKS[@]}"; do
-        [ -L "$link" ] || [ -d "$link" ] && rm -rf "$link" && echo "  - Removed $link"
+        if [ -L "$link" ] || [ -e "$link" ]; then
+            rm -rf "$link"
+        fi
     done
 
-    info "Deleting core library..."
+    # Remove core directories and global configs
     rm -rf /usr/local/lib/steamos_diy
-    
-    info "Deleting system configurations..."
     rm -f /etc/default/steamos_diy.conf
-    rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
-    
-    info "Deleting state directory..."
     rm -rf /var/lib/steamos_diy
     
-    success "Filesystem cleaned."
-}
-
-# --- 3. Restore Display Manager ---
-restore_dm() {
-    warn "SteamMachine-DIY is disabled. You might need a Display Manager to boot into a GUI."
-    echo -ne "${YELLOW}Would you like to enable a Display Manager? (e.g., sddm, gdm, lightdm) [n]: ${NC}"
-    read -r dm_name
-    if [[ -n "$dm_name" ]]; then
-        if systemctl list-unit-files | grep -q "^$dm_name.service"; then
-            systemctl enable "$dm_name"
-            success "$dm_name enabled."
-        else
-            error "Service $dm_name not found."
-        fi
+    # Optional: cleanup user config folder
+    echo -ne "${YELLOW}Remove user configuration folder (~/.config/steamos_diy)? [y/N] ${NC}"
+    read -r remove_conf
+    if [[ $remove_conf == [yY] ]]; then
+        rm -rf "$USER_HOME/.config/steamos_diy"
+        success "User configurations deleted."
     fi
 }
 
-# --- 4. Finalization ---
-finalize() {
-    systemctl daemon-reload
-    echo -e "\n${GREEN}==================================================${NC}"
-    success "UNINSTALLATION COMPLETE!"
-    info "Note: Core dependencies (Steam, Gamescope, etc.) were NOT removed."
-    warn "Please REBOOT to apply changes."
-    echo -e "${GREEN}==================================================${NC}\n"
+# --- 3. Emergency DM Restoration ---
+# This ensures the user isn't left with a black screen on next boot
+restore_display_manager() {
+    info "Checking Display Manager status..."
+    
+    # List of common Display Managers to probe
+    DMS=("sddm" "gdm" "lightdm" "lxdm")
+    FOUND_DMS=()
+    
+    for dm in "${DMS[@]}"; do
+        if systemctl list-unit-files | grep -q "^$dm.service"; then
+            FOUND_DMS+=("$dm")
+        fi
+    done
+
+    if [ ${#FOUND_DMS[@]} -gt 0 ]; then
+        warn "Game Mode trigger removed. You need to enable a Display Manager to have a GUI."
+        echo -e "Found available DMs: ${FOUND_DMS[*]}"
+        echo -ne "${CYAN}Enter the name of the DM to enable (or leave empty to skip): ${NC}"
+        read -r selected_dm
+        
+        if [[ -n "$selected_dm" ]]; then
+            if systemctl list-unit-files | grep -q "^$selected_dm.service"; then
+                systemctl enable "$selected_dm"
+                success "$selected_dm has been enabled."
+            else
+                error "Service $selected_dm not found or not installed."
+            fi
+        fi
+    else
+        warn "No common Display Manager detected. You may need to install one (like SDDM) manually."
+    fi
 }
 
-# --- Execution ---
-echo -ne "${RED}Are you sure you want to completely remove SteamMachine-DIY? [y/N] ${NC}"
-read -r confirm
-if [[ $confirm == [yY] ]]; then
-    cleanup_triggers
-    cleanup_files
-    restore_dm
-    finalize
-else
-    info "Uninstall aborted."
-fi
+# --- 4. Execution Flow ---
+echo -e "${RED}==================================================${NC}"
+echo -e "${RED}       SteamMachine-DIY Uninstaller               ${NC}"
+echo -e "${RED}==================================================${NC}"
+
+cleanup_system_config
+cleanup_files
+restore_display_manager
+
+# Refresh systemd and finalize
+systemctl daemon-reload
+echo -e "\n${GREEN}==================================================${NC}"
+success "UNINSTALL COMPLETE. Please reboot your system."
+echo -e "${GREEN}==================================================${NC}\n"
