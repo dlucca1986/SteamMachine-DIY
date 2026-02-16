@@ -1,6 +1,6 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Override Examples
-# VERSION:      1.0.0 - Python
+# VERSION:      1.1.0 - Python
 # DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # PATH:         $HOME/.config/steamos_diy/game.example
@@ -8,9 +8,11 @@
 # =============================================================================
 
 # --- [ 🟢 HOW TO EDIT ] ---
-# 1. GESTIONE: Creato automaticamente dal Control Center per ogni gioco.
-# 2. OVERRIDE: Queste impostazioni VINCONO su quelle globali del Manifesto.
-# 3. DISABILITARE: Usa '#' per ignorare una riga e usare il default globale.
+# 1. ATTIVAZIONE: Per attivare questo sistema, vai su Steam -> Proprietà del
+#    gioco -> Opzioni di avvio e scrivi: sdy %command%
+# 2. GESTIONE: Creato automaticamente dal Control Center per ogni gioco.
+# 3. OVERRIDE: Queste impostazioni VINCONO su quelle globali del Manifesto.
+# 4. DISABILITARE: Usa '#' per ignorare una riga e usare il default globale.
 # =============================================================================
 
 # --- [ 1. GAME WRAPPER (Pre-Esecuzione) ] ---
@@ -55,7 +57,13 @@ GAME_EXTRA_ARGS=""
 
 # --- [ 💡 LOGICA DI FALLBACK ] ---
 # Se una riga è commentata con '#', lo script 'sdy' cercherà la stessa
-# variabile nel Manifesto globale (/etc/default/steamos_diy.conf).
+# variabile nel Manifesto globale (/etc/default/steamos_diy/config).
+# -----------------------------------------------------------------------------
+
+# 4. ESEMPIO RISULTANTE (Esecuzione Gioco)
+# -----------------------------------------------------------------------------
+# Se usi RADV_PERFTEST=rt, GAME_WRAPPER="mangohud" e GAME_EXTRA_ARGS="-novid":
+# RADV_PERFTEST=rt mangohud /percorso/del/gioco.exe -novid
 # -----------------------------------------------------------------------------
 
 # --- END OF EXAMPLES ---
