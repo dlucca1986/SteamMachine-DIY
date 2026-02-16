@@ -26,7 +26,7 @@ def select():
 
     # Carica SSoT per i path
     conf = {}
-    with open("/etc/default/steamos-diy.conf", "r") as f:
+    with open("/etc/default/steamos_diy.conf", "r") as f:
         for line in f:
             if "=" in line and not line.startswith("#"):
                 k, v = line.split("=", 1)
