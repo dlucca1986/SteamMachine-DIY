@@ -80,8 +80,8 @@ install_dependencies() {
     read -r confirm_update
     [[ $confirm_update == [yY] ]] && pacman -Syu --noconfirm
 
-   BASE_PKGS="python python-pyqt6 python-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader mesa-utils pciutils procps-ng"
-   
+    BASE_PKGS="python python-pyqt6 python-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader mesa-utils pciutils procps-ng"
+    
     info "Installing core dependencies..."
     pacman -S --needed --noconfirm $BASE_PKGS
 
@@ -115,7 +115,7 @@ deploy_files() {
     chmod 755 /usr/local/lib/steamos_diy/*.py
     chmod 755 /usr/local/lib/steamos_diy/helpers/*.py
 
-    # 3.4 Gamescope Caps & Hook (Crucial for Performance)
+    # 3.4 Gamescope Caps & Hook
     info "Setting Gamescope capabilities and ALPM hook..."
     if [ -f /usr/bin/gamescope ]; then
         setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
@@ -127,21 +127,16 @@ deploy_files() {
     mkdir -p /var/lib/steamos_diy
     chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
 
-   # 3.6 Skel & Home Configuration
+    # 3.6 Skel & Home Configuration (English version)
     info "Configuring user environment..."
-    
-    # Prepare the structure in /etc/skel (for future users)
     mkdir -p /etc/skel/.config/steamos_diy/games.d
     cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
     
-    # Prepare the structure for the current user
     mkdir -p "$USER_HOME/.config/steamos_diy/games.d"
     cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
     
-    # Personalize user configs (replace [USERNAME] placeholder with the actual user)
+    # Personalize user configs
     find "$USER_HOME/.config/steamos_diy" -type f -exec sed -i "s|\[USERNAME\]|$REAL_USER|g" {} +
-    
-    # Apply correct ownership to the entire config directory
     chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
 }
 
@@ -162,38 +157,31 @@ setup_shim_links() {
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-select-branch.py /usr/bin/steamos-select-branch
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-update
     
-    # Polkit Helpers (Steam Client expectations)
+    # Polkit Helpers
     ln -sf /usr/local/lib/steamos_diy/helpers/jupiter-biosupdate.py /usr/bin/steamos-polkit-helpers/jupiter-biosupdate
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-polkit-helpers/steamos-update
     ln -sf /usr/local/lib/steamos_diy/helpers/set-timezone.py /usr/bin/steamos-polkit-helpers/steamos-set-timezone
 }
 
-# --- 5. Bash Profile Integration ---
+# --- 5. Bash Profile Integration (Improved Stability) ---
 setup_bash_profile() {
     info "Integrating .bash_profile trigger..."
     
     BP_FILE="$USER_HOME/.bash_profile"
     TEMPLATE="etc/skel/.bash_profile"
     
-    # Crea il file se non esiste per evitare errori di lettura
     [ ! -f "$BP_FILE" ] && touch "$BP_FILE"
 
-    # Controllo di sicurezza: verifichiamo se il trigger è già presente
     if ! grep -q "steamos-session-launch" "$BP_FILE"; then
+        # Create a temporary file with the trigger at the BEGINNING
+        TMP_BP=$(mktemp)
+        
         if [ -f "$TEMPLATE" ]; then
-            info "Appending trigger from template..."
-            # Aggiungiamo una riga vuota di sicurezza e poi il contenuto del template
-            echo "" >> "$BP_FILE"
-            cat "$TEMPLATE" >> "$BP_FILE"
-            
-            # Applichiamo i permessi corretti all'utente reale
-            chown "$REAL_USER:$REAL_USER" "$BP_FILE"
-            success "Trigger successfully added to $BP_FILE"
+            info "Prepending trigger from template..."
+            cat "$TEMPLATE" > "$TMP_BP"
         else
-            warn "Template $TEMPLATE not found! Using fallback HEREDOC..."
-            # Fallback nel caso il file template mancasse nel repo locale
-            cat << EOF >> "$BP_FILE"
-
+            info "Using fallback HEREDOC..."
+            cat << EOF > "$TMP_BP"
 # --- BEGIN STEAMOS-DIY TRIGGER ---
 if [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]]; then
     LAUNCHER="/usr/bin/steamos-session-launch"
@@ -202,11 +190,17 @@ if [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]]; then
         exec "\$LAUNCHER" > >(logger -t steamos-diy) 2>&1
     fi
 fi
-[[ -f ~/.bashrc ]] && . ~/.bashrc
 # --- END STEAMOS-DIY TRIGGER ---
 EOF
-            chown "$REAL_USER:$REAL_USER" "$BP_FILE"
         fi
+        
+        # Append the old content to the new trigger
+        echo "" >> "$TMP_BP"
+        cat "$BP_FILE" >> "$TMP_BP"
+        mv "$TMP_BP" "$BP_FILE"
+        
+        chown "$REAL_USER:$REAL_USER" "$BP_FILE"
+        success "Trigger successfully prepended to $BP_FILE"
     else
         info "Trigger already detected in .bash_profile. Skipping."
     fi
@@ -216,40 +210,34 @@ EOF
 manage_display_manager() {
     info "Managing Display Managers..."
     
-    # Identify the currently enabled display manager (sddm, gdm, lightdm, etc.)
-    # We look for the symbolic link 'display-manager.service'
     CURRENT_DM_PATH=$(systemctl list-unit-files --type=service | grep "display-manager.service" | awk '{print $1}') || true
     
-    # If no generic alias is found, we probe for common specific services
     if [[ -z "$CURRENT_DM_PATH" ]]; then
         CURRENT_DM=$(systemctl list-units --type=service --state=running | grep -E 'sddm|gdm|lightdm|lxdm' | awk '{print $1}' | head -n 1)
     else
-        # Resolve the actual service name if using the generic alias
         CURRENT_DM=$(basename "$(readlink /etc/systemd/system/display-manager.service)" 2>/dev/null || echo "$CURRENT_DM_PATH")
     fi
 
     if [[ -n "$CURRENT_DM" && "$CURRENT_DM" != "getty@tty1.service" ]]; then
         warn "Detected active Display Manager: $CURRENT_DM"
-        echo -e "${YELLOW}NOTE: To boot directly into Game Mode, your current Display Manager must be disabled.${NC}"
+        echo -e "${YELLOW}NOTE: Display Manager must be disabled for Game Mode.${NC}"
         echo -ne "${YELLOW}Disable $CURRENT_DM now? [y/N] ${NC}"
         read -r confirm_dm
         
         if [[ $confirm_dm == [yY] ]]; then
-            # Stop it now and prevent it from starting on next boot
             systemctl disable "$CURRENT_DM"
-            success "$CURRENT_DM has been disabled. System will now default to TTY1."
-        else
-            warn "Display Manager remains enabled. You might need to disable it manually to start Game Mode."
+            success "$CURRENT_DM disabled."
         fi
-    else
-        info "No active Display Manager detected. TTY1 is clear for Game Mode."
     fi
 }
 
 # --- 7. Finalization ---
 finalize() {
+    info "Finalizing system configuration..."
+    systemctl unmask getty@tty1.service
     systemctl daemon-reload
     systemctl enable getty@tty1.service
+    
     echo -e "\n${GREEN}==================================================${NC}"
     success "INSTALLATION COMPLETE!"
     warn "Please REBOOT to enter Game Mode."
