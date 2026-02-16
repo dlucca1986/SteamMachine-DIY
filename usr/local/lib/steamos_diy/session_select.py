@@ -5,59 +5,62 @@
 # DESCRIPTION:  Dispatcher to trigger session switches between Steam and Desktop.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# PATH:         /usr/local/lib/steamos-diy/session_select.py
+# PATH:         /usr/local/lib/steamos_diy/session_select.py
 # LICENSE:      MIT
 # =============================================================================
 
+#!/usr/bin/env python3
 import os
 import sys
 import subprocess
 
-
 def log_msg(msg):
     """Invia un messaggio al journal di sistema per il Control Center."""
-    subprocess.run(["logger", "-t", "steamos-diy", f"[SELECT] {msg}"],
-                   check=False)
-
+    subprocess.run(["logger", "-t", "steamos-diy", f"[SELECT] {msg}"], check=False)
 
 def select():
     if len(sys.argv) < 2:
         return
 
-    # Carica SSoT per i path
+    # 1. Carica SSoT
     conf = {}
-    with open("/etc/default/steamos_diy.conf", "r") as f:
-        for line in f:
-            if "=" in line and not line.startswith("#"):
-                k, v = line.split("=", 1)
-                val = v.strip().strip('"').strip("'")
-                conf[k.strip()] = val
-                os.environ[k.strip()] = val
+    try:
+        with open("/etc/default/steamos_diy.conf", "r") as f:
+            for line in f:
+                if "=" in line and not line.startswith("#"):
+                    k, v = line.split("=", 1)
+                    conf[k.strip()] = v.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        # Fallback se il file non esiste ancora (es. durante l'installazione)
+        conf['next_session'] = "/var/lib/steamos_diy/next_session"
+        conf['bin_steam'] = "steam"
 
+    # 2. Validazione Target (Rigida)
     target = sys.argv[1].lower()
-    if target == "plasma":
-        target = "desktop"
+    if target not in ["desktop", "steam"]:
+        log_msg(f"Target '{target}' non riconosciuto. Solo 'desktop' o 'steam' sono ammessi.")
+        return
 
     log_msg(f"Richiesta cambio sessione verso: {target.upper()}")
 
-    # Scrittura atomica del target
+    # 3. Scrittura atomica (Evita corruzione se salta la corrente)
     next_session_file = conf['next_session']
     tmp = f"{next_session_file}.tmp"
     with open(tmp, "w") as f:
         f.write(target)
     os.replace(tmp, next_session_file)
 
-    # Shutdown basato sul target
+    # 4. Shutdown della sessione corrente
     if target == "desktop":
         log_msg("Chiusura Steam in corso...")
-        subprocess.run(["steam", "-shutdown"], stderr=subprocess.DEVNULL)
+        # Usiamo il binario definito nel SSoT (Flessibilità)
+        subprocess.run([conf.get('bin_steam', 'steam'), "-shutdown"], 
+                       stderr=subprocess.DEVNULL)
     else:
         log_msg("Logout sessione Plasma (KDE) in corso...")
         for cmd in ["qdbus6", "qdbus"]:
-            # Spezziamo il comando per non superare i 79 caratteri (E501)
             args = ["org.kde.Shutdown", "/Shutdown", "logout"]
             subprocess.run([cmd] + args, stderr=subprocess.DEVNULL)
-
 
 if __name__ == "__main__":
     select()
