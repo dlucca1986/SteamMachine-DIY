@@ -8,6 +8,20 @@
 # LICENSE:      MIT
 # =============================================================================
 
+Certamente, Daniele. Ho tradotto tutti i commenti e le stringhe di testo in inglese, integrando le migliorie di stabilità (come l'unmask della Getty e la pulizia di /etc/skel) per renderlo speculare all'installer che abbiamo appena rifinito.
+
+Ecco il codice completo e pulito:
+
+Bash
+#!/bin/bash
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Master Uninstaller
+# VERSION:      1.0.1
+# DESCRIPTION:  Surgical removal of DIY components and environment restoration.
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# LICENSE:      MIT
+# =============================================================================
+
 set -e
 
 # --- Colors & UI ---
@@ -39,10 +53,10 @@ cleanup_system_config() {
     # Surgically remove the trigger block from .bash_profile
     BP_FILE="$USER_HOME/.bash_profile"
     if [ -f "$BP_FILE" ]; then
-        # Eliminazione precisa del blocco tra i tag di inizio e fine
+        # Use sed to delete everything between the DIY markers
         sed -i '/# --- BEGIN STEAMOS-DIY TRIGGER ---/,/# --- END STEAMOS-DIY TRIGGER ---/d' "$BP_FILE"
-        # Rimuove eventuali righe vuote eccessive lasciate da sed
-        sed -i '${/^$/d;}' "$BP_FILE"
+        # Cleanup potential double empty lines left at the top
+        sed -i './^$/d;}' "$BP_FILE"
         info "Bash profile trigger removed from $BP_FILE."
     fi
 
@@ -52,12 +66,13 @@ cleanup_system_config() {
         info "TTY1 autologin override removed."
     fi
     
-    # Reset Getty status
+    # Reset Getty status (unmask if it was masked)
     systemctl unmask getty@tty1.service 2>/dev/null || true
     
     # Remove ALPM hooks and reset Gamescope capabilities
     rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
     if [ -f /usr/bin/gamescope ]; then
+        # Removing file capabilities to return to system default
         setcap -r /usr/bin/gamescope 2>/dev/null || true
         info "Gamescope capabilities reset."
     fi
@@ -80,11 +95,9 @@ cleanup_files() {
         "/usr/bin/steamos-polkit-helpers"
     )
 
-    # Clean up symlinks in /usr/bin/
+    # Clean up symlinks or real files in /usr/bin/
     for link in "${SYMLINKS[@]}"; do
-        if [ -L "$link" ]; then
-            rm "$link"
-        elif [ -d "$link" ]; then
+        if [ -L "$link" ] || [ -e "$link" ]; then
             rm -rf "$link"
         fi
     done
@@ -94,7 +107,7 @@ cleanup_files() {
     rm -f /etc/default/steamos_diy.conf
     rm -rf /var/lib/steamos_diy
     
-    # Cleanup /etc/skel
+    # Cleanup /etc/skel templates
     rm -rf /etc/skel/.config/steamos_diy
     
     # Optional: cleanup user config folder
@@ -107,9 +120,11 @@ cleanup_files() {
 }
 
 # --- 3. Emergency DM Restoration ---
+# This ensures the user isn't left with a black screen on next boot
 restore_display_manager() {
     info "Checking Display Manager status..."
     
+    # List of common Display Managers to probe
     DMS=("sddm" "gdm" "lightdm" "lxdm")
     FOUND_DMS=()
     
@@ -120,36 +135,35 @@ restore_display_manager() {
     done
 
     if [ ${#FOUND_DMS[@]} -gt 0 ]; then
-        warn "Game Mode trigger removed. You need a Display Manager to return to a GUI boot."
+        warn "Game Mode trigger removed. You need to enable a Display Manager for a GUI boot."
         echo -e "Available DMs: ${FOUND_DMS[*]}"
-        echo -ne "${CYAN}Enter the DM name to enable (leave empty to skip): ${NC}"
+        echo -ne "${CYAN}Enter the name of the DM to enable (or leave empty to skip): ${NC}"
         read -r selected_dm
         
         if [[ -n "$selected_dm" ]]; then
             if systemctl list-unit-files | grep -q "^$selected_dm.service"; then
                 systemctl enable "$selected_dm"
-                success "$selected_dm enabled."
+                success "$selected_dm has been enabled."
             else
-                error "Service $selected_dm not found."
+                error "Service $selected_dm not found or not installed."
             fi
         fi
     else
-        warn "No common Display Manager detected. You might boot into a TTY."
+        warn "No common Display Manager detected. You may need to install one manually."
     fi
 }
 
 # --- 4. Execution Flow ---
 echo -e "${RED}==================================================${NC}"
-echo -e "${RED}        SteamMachine-DIY Uninstaller              ${NC}"
+echo -e "${RED}         SteamMachine-DIY Uninstaller             ${NC}"
 echo -e "${RED}==================================================${NC}"
 
 cleanup_system_config
 cleanup_files
 restore_display_manager
 
-# Refresh systemd
+# Refresh systemd and finalize
 systemctl daemon-reload
-
 echo -e "\n${GREEN}==================================================${NC}"
-success "UNINSTALL COMPLETE. Please REBOOT to restore your desktop environment."
+success "UNINSTALL COMPLETE. Please REBOOT your system."
 echo -e "${GREEN}==================================================${NC}\n"
