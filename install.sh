@@ -127,16 +127,21 @@ deploy_files() {
     mkdir -p /var/lib/steamos_diy
     chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
 
-    # 3.6 Skel & Home Configuration
+   # 3.6 Skel & Home Configuration
     info "Configuring user environment..."
-    mkdir -p /etc/skel/.config/steamos_diy
+    
+    # Prepare the structure in /etc/skel (for future users)
+    mkdir -p /etc/skel/.config/steamos_diy/games.d
     cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
     
-    mkdir -p "$USER_HOME/.config/steamos_diy"
+    # Prepare the structure for the current user
+    mkdir -p "$USER_HOME/.config/steamos_diy/games.d"
     cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
     
-    # Personalize user configs
+    # Personalize user configs (replace [USERNAME] placeholder with the actual user)
     find "$USER_HOME/.config/steamos_diy" -type f -exec sed -i "s|\[USERNAME\]|$REAL_USER|g" {} +
+    
+    # Apply correct ownership to the entire config directory
     chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
 }
 
