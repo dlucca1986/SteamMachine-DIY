@@ -1,9 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# PROJECT:      SteamMachine-DIY - Master Installer 
-# VERSION:      1.2.1 - Unified Agnostic Logic
-# DESCRIPTION:  Installer with Hardware Audit & Template Personalization.
+# PROJECT:      SteamMachine-DIY - Master Installer
+# VERSION:      1.3.0 - Unified Agnostic Logic
+# DESCRIPTION:  Hardware Audit, Dependency Management & Template Personalization.
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# LICENSE:      MIT
 # =============================================================================
 
 set -e 
@@ -114,8 +115,11 @@ deploy_files() {
     chmod 755 /usr/local/lib/steamos_diy/*.py
     chmod 755 /usr/local/lib/steamos_diy/helpers/*.py
 
-    # 3.4 Gamescope Caps & Hook
-    [ -f /usr/bin/gamescope ] && setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
+    # 3.4 Gamescope Caps & Hook (Crucial for Performance)
+    info "Setting Gamescope capabilities and ALPM hook..."
+    if [ -f /usr/bin/gamescope ]; then
+        setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
+    fi
     mkdir -p /usr/share/libalpm/hooks/
     [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp usr/share/libalpm/hooks/gamescope-privs.hook /usr/share/libalpm/hooks/
 
@@ -123,25 +127,17 @@ deploy_files() {
     mkdir -p /var/lib/steamos_diy
     chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
 
-    # 3.6 Skel & Home
+    # 3.6 Skel & Home Configuration
     info "Configuring user environment..."
     mkdir -p /etc/skel/.config/steamos_diy
     cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
-    [ -f etc/skel/.bash_profile ] && cp etc/skel/.bash_profile /etc/skel/
-
+    
     mkdir -p "$USER_HOME/.config/steamos_diy"
     cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
     
-    # Sostituzione placeholder nei config utente
+    # Personalize user configs
     find "$USER_HOME/.config/steamos_diy" -type f -exec sed -i "s|\[USERNAME\]|$REAL_USER|g" {} +
-
-    # Sync .bash_profile
-    if [ -f etc/skel/.bash_profile ]; then
-        cp etc/skel/.bash_profile "$USER_HOME/.bash_profile"
-    fi
-
     chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
-    chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bash_profile"
 }
 
 # --- 4. Shim Layer (Symlinks) ---
@@ -149,20 +145,51 @@ setup_shim_links() {
     info "Creating SteamOS shim layer symlinks..."
     mkdir -p /usr/bin/steamos-polkit-helpers
 
+    # Core Binaries
     ln -sf /usr/local/lib/steamos_diy/session_launch.py /usr/bin/steamos-session-launch
     ln -sf /usr/local/lib/steamos_diy/session_select.py /usr/bin/steamos-session-select
     ln -sf /usr/local/lib/steamos_diy/sdy.py /usr/bin/sdy
+    ln -sf /usr/local/lib/steamos_diy/backup_tool.py /usr/bin/sdy-backup
+    ln -sf /usr/local/lib/steamos_diy/restore.py /usr/bin/sdy-restore
 
+    # Helpers & Shims
     ln -sf /usr/local/lib/steamos_diy/helpers/jupiter-biosupdate.py /usr/bin/jupiter-biosupdate
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-select-branch.py /usr/bin/steamos-select-branch
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-update
     
+    # Polkit Helpers (Steam Client expectations)
     ln -sf /usr/local/lib/steamos_diy/helpers/jupiter-biosupdate.py /usr/bin/steamos-polkit-helpers/jupiter-biosupdate
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-polkit-helpers/steamos-update
     ln -sf /usr/local/lib/steamos_diy/helpers/set-timezone.py /usr/bin/steamos-polkit-helpers/steamos-set-timezone
 }
 
-# --- 5. Display Manager Management ---
+# --- 5. Bash Profile Integration ---
+setup_bash_profile() {
+    info "Integrating .bash_profile trigger..."
+    BP_FILE="$USER_HOME/.bash_profile"
+    [ ! -f "$BP_FILE" ] && touch "$BP_FILE"
+
+    if ! grep -q "steamos-session-launch" "$BP_FILE"; then
+        cat << EOF >> "$BP_FILE"
+
+# --- BEGIN STEAMOS-DIY TRIGGER ---
+# Auto-start Game Mode on TTY1 if no display is active
+if [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]]; then
+    LAUNCHER="/usr/bin/steamos-session-launch"
+    if [[ -x "\$LAUNCHER" ]]; then
+        [[ -f /etc/default/steamos_diy.conf ]] && . /etc/default/steamos_diy.conf
+        exec "\$LAUNCHER" > >(logger -t steamos-diy) 2>&1
+    fi
+fi
+[[ -f ~/.bashrc ]] && . ~/.bashrc
+# --- END STEAMOS-DIY TRIGGER ---
+EOF
+        chown "$REAL_USER:$REAL_USER" "$BP_FILE"
+        success "Trigger added to .bash_profile"
+    fi
+}
+
+# --- 6. Display Manager Management ---
 manage_display_manager() {
     info "Managing Display Managers..."
     CURRENT_DM=$(systemctl list-unit-files --type=service | grep display-manager | awk '{print $1}' | head -n 1) || true
@@ -178,7 +205,7 @@ manage_display_manager() {
     fi
 }
 
-# --- 6. Finalization ---
+# --- 7. Finalization ---
 finalize() {
     systemctl daemon-reload
     systemctl enable getty@tty1.service
@@ -193,5 +220,6 @@ check_gpu_and_drivers
 install_dependencies
 deploy_files
 setup_shim_links
+setup_bash_profile
 manage_display_manager
 finalize
