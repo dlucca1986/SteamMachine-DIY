@@ -13,15 +13,18 @@ import os
 import sys
 import subprocess
 
+
 def log_msg(msg):
-    """Invia un messaggio al journal di sistema per il Control Center."""
-    subprocess.run(["logger", "-t", "steamos-diy", f"[SELECT] {msg}"], check=False)
+    """Sends a message to the system journal for the Control Center."""
+    subprocess.run(["logger", "-t", "steamos-diy", f"[SELECT] {msg}"],
+                   check=False)
+
 
 def select():
     if len(sys.argv) < 2:
         return
 
-    # 1. Carica SSoT
+    # 1. Load SSoT (Single Source of Truth)
     conf = {}
     try:
         with open("/etc/default/steamos_diy.conf", "r") as f:
@@ -30,36 +33,37 @@ def select():
                     k, v = line.split("=", 1)
                     conf[k.strip()] = v.strip().strip('"').strip("'")
     except FileNotFoundError:
-        # Fallback se il file non esiste ancora (es. durante l'installazione)
+        # Fallback if config doesn't exist yet (e.g., during installation)
         conf['next_session'] = "/var/lib/steamos_diy/next_session"
         conf['bin_steam'] = "steam"
 
-    # 2. Validazione Target (Rigida)
+    # 2. Target Validation (Strict)
     target = sys.argv[1].lower()
     if target not in ["desktop", "steam"]:
-        log_msg(f"Target '{target}' non riconosciuto. Solo 'desktop' o 'steam' sono ammessi.")
+        log_msg(f"Target '{target}' not recognized. Only 'desktop' or 'steam'.")
         return
 
-    log_msg(f"Richiesta cambio sessione verso: {target.upper()}")
+    log_msg(f"Session switch requested towards: {target.upper()}")
 
-    # 3. Scrittura atomica (Evita corruzione se salta la corrente)
+    # 3. Atomic Write (Prevents corruption on power loss)
     next_session_file = conf['next_session']
     tmp = f"{next_session_file}.tmp"
     with open(tmp, "w") as f:
         f.write(target)
     os.replace(tmp, next_session_file)
 
-    # 4. Shutdown della sessione corrente
+    # 4. Current Session Shutdown
     if target == "desktop":
-        log_msg("Chiusura Steam in corso...")
-        # Usiamo il binario definito nel SSoT (Flessibilità)
-        subprocess.run([conf.get('bin_steam', 'steam'), "-shutdown"], 
-                       stderr=subprocess.DEVNULL)
+        log_msg("Closing Steam...")
+        # Use binary defined in SSoT for flexibility
+        steam_bin = conf.get('bin_steam', 'steam')
+        subprocess.run([steam_bin, "-shutdown"], stderr=subprocess.DEVNULL)
     else:
-        log_msg("Logout sessione Plasma (KDE) in corso...")
+        log_msg("KDE Plasma logout in progress...")
         for cmd in ["qdbus6", "qdbus"]:
             args = ["org.kde.Shutdown", "/Shutdown", "logout"]
             subprocess.run([cmd] + args, stderr=subprocess.DEVNULL)
+
 
 if __name__ == "__main__":
     select()
