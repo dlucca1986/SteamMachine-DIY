@@ -1,20 +1,23 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer 
-# VERSION:      1.1.2 - Full Skel & Profile Integration
-# DESCRIPTION:  Agnostic Installer for GitHub.
+# VERSION:      1.2.0 - Final Unified Version
+# DESCRIPTION:  Agnostic Installer with Hardware Audit & DM Management.
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # =============================================================================
 
 set -e 
 
 # --- Colors & UI ---
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
 RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 if [ "$EUID" -ne 0 ]; then
@@ -28,66 +31,123 @@ REAL_UID=$(id -u "$REAL_USER")
 
 info "Starting installation for user: $REAL_USER"
 
-# --- 1. File Deployment ---
-deploy_files() {
-    info "Deploying project files..."
+# --- 1. Hardware & Driver Audit ---
+check_gpu_and_drivers() {
+    info "Auditing Hardware and Drivers..."
+    GPU_INFO=$(lspci | grep -i vga)
+    SKIP_DRIVERS=false
+    DRIVER_PKGS=""
 
-    # 1.1 Core Library & Helpers
+    if echo "$GPU_INFO" | grep -iq "nvidia"; then
+        if lsmod | grep -q "nvidia"; then
+            warn "Proprietary Nvidia drivers detected. SKIPPING open-source driver install."
+            SKIP_DRIVERS=true
+        else
+            info "Nvidia GPU detected (no proprietary drivers). Suggesting Nouveau."
+            DRIVER_PKGS="vulkan-nouveau lib32-vulkan-nouveau"
+        fi
+    elif echo "$GPU_INFO" | grep -iq "amd"; then
+        info "AMD GPU detected."
+        if pacman -Qs "vulkan-radeon" > /dev/null; then
+            warn "AMD Vulkan drivers already detected. Skipping driver re-installation."
+            SKIP_DRIVERS=true
+        else
+            info "Suggesting vulkan-radeon for AMD hardware."
+            DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon"
+        fi
+    elif echo "$GPU_INFO" | grep -iq "intel"; then
+        info "Intel GPU detected."
+        if pacman -Qs "vulkan-intel" > /dev/null; then
+            warn "Intel Vulkan drivers already detected. Skipping driver re-installation."
+            SKIP_DRIVERS=true
+        else
+            info "Suggesting vulkan-intel for Intel hardware."
+            DRIVER_PKGS="vulkan-intel lib32-vulkan-intel"
+        fi
+    fi
+}
+
+# --- 2. Dependencies & Repositories ---
+install_dependencies() {
+    if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+        info "Enabling multilib repository..."
+        echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+        pacman -Sy
+    fi
+
+    echo -ne "${YELLOW}Update system (pacman -Syu) first? [y/N] ${NC}"
+    read -r confirm_update
+    [[ $confirm_update == [yY] ]] && pacman -Syu --noconfirm
+
+    BASE_PKGS="steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader mesa-utils python-pyqt6 pciutils procps-ng"
+    
+    info "Installing core dependencies..."
+    pacman -S --needed --noconfirm $BASE_PKGS
+
+    if [[ "$SKIP_DRIVERS" == "false" && -n "$DRIVER_PKGS" ]]; then
+        info "Installing drivers: $DRIVER_PKGS"
+        pacman -S --needed --noconfirm $DRIVER_PKGS
+    fi
+}
+
+# --- 3. File Deployment ---
+deploy_files() {
+    info "Deploying project files to /usr/local/lib/steamos_diy..."
+
+    # 3.1 Core Library & Helpers
     mkdir -p /usr/local/lib/steamos_diy/helpers
     cp -r usr/local/lib/steamos_diy/* /usr/local/lib/steamos_diy/
     chmod 755 /usr/local/lib/steamos_diy/*.py
     chmod 755 /usr/local/lib/steamos_diy/helpers/*.py
 
-    # 1.2 System Configs (TTY1, Hooks, Desktop)
+    # 3.2 TTY1 Autologin
     mkdir -p /etc/systemd/system/getty@tty1.service.d/
-    [ -f etc/systemd/system/getty@tty1.service.d/override.conf ] && \
-        cp etc/systemd/system/getty@tty1.service.d/override.conf /etc/systemd/system/getty@tty1.service.d/ && \
+    if [ -f etc/systemd/system/getty@tty1.service.d/override.conf ]; then
+        cp etc/systemd/system/getty@tty1.service.d/override.conf /etc/systemd/system/getty@tty1.service.d/
         sed -i "s/\[USERNAME\]/$REAL_USER/g" /etc/systemd/system/getty@tty1.service.d/override.conf
+    fi
 
+    # 3.3 Gamescope Caps & Hook
+    [ -f /usr/bin/gamescope ] && setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
     mkdir -p /usr/share/libalpm/hooks/
     [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp usr/share/libalpm/hooks/gamescope-privs.hook /usr/share/libalpm/hooks/
 
+    # 3.4 Applications (.desktop)
     mkdir -p /usr/local/share/applications/
     cp usr/local/share/applications/*.desktop /usr/local/share/applications/ 2>/dev/null || true
+    update-desktop-database /usr/local/share/applications 2>/dev/null || true
 
-    # 1.3 Var Lib (State)
+    # 3.5 State Directory
     mkdir -p /var/lib/steamos_diy
     chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
 
-    # 1.4 Configurazione Skel & .bash_profile
+    # 3.6 Skel & Home Configs
     info "Configuring /etc/skel and user home..."
     mkdir -p /etc/skel/.config/steamos_diy
     cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
     [ -f etc/skel/.bash_profile ] && cp etc/skel/.bash_profile /etc/skel/
 
-    # Copia nella Home dell'utente attuale
     mkdir -p "$USER_HOME/.config/steamos_diy"
     cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
     
-    # Gestione intelligente del .bash_profile dell'utente corrente (non sovrascrivere se esiste già)
-    if [ -f etc/skel/.bash_profile ]; then
-        if [ ! -f "$USER_HOME/.bash_profile" ]; then
-            cp etc/skel/.bash_profile "$USER_HOME/"
-        else
-            warn ".bash_profile already exists in $USER_HOME. Check if trigger is present."
-        fi
+    # Sync .bash_profile per utente attuale
+    if [ -f etc/skel/.bash_profile ] && [ ! -f "$USER_HOME/.bash_profile" ]; then
+        cp etc/skel/.bash_profile "$USER_HOME/"
     fi
 
     chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
     chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bash_profile" 2>/dev/null || true
 }
 
-# --- 2. Shim Layer (Symlinks) ---
+# --- 4. Shim Layer (Symlinks) ---
 setup_shim_links() {
     info "Creating SteamOS shim layer symlinks..."
     mkdir -p /usr/bin/steamos-polkit-helpers
 
-    # Main Project Binaries
     ln -sf /usr/local/lib/steamos_diy/session_launch.py /usr/bin/steamos-session-launch
     ln -sf /usr/local/lib/steamos_diy/session_select.py /usr/bin/steamos-session-select
     ln -sf /usr/local/lib/steamos_diy/sdy.py /usr/bin/sdy
 
-    # Compatibility Helpers
     ln -sf /usr/local/lib/steamos_diy/helpers/jupiter-biosupdate.py /usr/bin/jupiter-biosupdate
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-select-branch.py /usr/bin/steamos-select-branch
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-update
@@ -97,7 +157,7 @@ setup_shim_links() {
     ln -sf /usr/local/lib/steamos_diy/helpers/set-timezone.py /usr/bin/steamos-polkit-helpers/steamos-set-timezone
 }
 
-# --- 3. SSOTH Generation ---
+# --- 5. SSOTH Generation ---
 generate_ssoth() {
     info "Generating /etc/default/steamos_diy.conf..."
     cat <<EOF > /etc/default/steamos_diy.conf
@@ -115,15 +175,37 @@ KDE_WM_SYSTEMD_MANAGED=0
 EOF
 }
 
-# --- 4. Finalizzazione ---
+# --- 6. Display Manager Management ---
+manage_display_manager() {
+    info "Managing Display Managers..."
+    CURRENT_DM=$(systemctl list-unit-files --type=service | grep display-manager | awk '{print $1}' | head -n 1) || true
+    
+    if [[ -n "$CURRENT_DM" ]]; then
+        warn "Detected active Display Manager: $CURRENT_DM"
+        echo -ne "${YELLOW}Disable $CURRENT_DM to boot directly into Game Mode? [y/N] ${NC}"
+        read -r confirm_dm
+        if [[ $confirm_dm == [yY] ]]; then
+            systemctl disable "$CURRENT_DM"
+            success "$CURRENT_DM disabled."
+        fi
+    fi
+}
+
+# --- 7. Finalization ---
 finalize() {
     systemctl daemon-reload
     systemctl enable getty@tty1.service
-    success "INSTALLATION COMPLETE! Struttura coerente e .bash_profile configurati."
+    echo -e "\n${GREEN}==================================================${NC}"
+    success "INSTALLATION COMPLETE!"
+    warn "Please REBOOT to enter Game Mode."
+    echo -e "${GREEN}==================================================${NC}\n"
 }
 
-# --- Esecuzione ---
+# --- Execution Flow ---
+check_gpu_and_drivers
+install_dependencies
 deploy_files
 setup_shim_links
 generate_ssoth
+manage_display_manager
 finalize
