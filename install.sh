@@ -124,21 +124,25 @@ deploy_files() {
     mkdir -p /usr/share/libalpm/hooks/
     [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp usr/share/libalpm/hooks/gamescope-privs.hook /usr/share/libalpm/hooks/
 
-    # 3.5 State Directory
+# --- 3.5 State Directory & Session Initialization ---
+    info "Deploying state directory and next_session..."
     mkdir -p /var/lib/steamos_diy
-    chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
+    
+    # Copy next_session file from repository if it exists
+    if [ -f var/lib/steamos_diy/next_session ]; then
+        cp var/lib/steamos_diy/next_session /var/lib/steamos_diy/next_session
+        info "next_session initialized from repository."
+    else
+        # Fallback if the file is missing from the repo for any reason
+        echo "steam" > /var/lib/steamos_diy/next_session
+        warn "next_session not found in repo, creating fallback with 'steam'."
+    fi
 
-    # 3.6 Skel & Home Configuration (English version)
-    info "Configuring user environment..."
-    mkdir -p /etc/skel/.config/steamos_diy/games.d
-    cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
-    
-    mkdir -p "$USER_HOME/.config/steamos_diy/games.d"
-    cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
-    
-    # Personalize user configs
-    find "$USER_HOME/.config/steamos_diy" -type f -exec sed -i "s|\[USERNAME\]|$REAL_USER|g" {} +
-    chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
+    # Crucial: set correct ownership and permissions for the real user
+    # This allows the session selector to update the file without root privileges
+    chown -R "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
+    chmod 755 /var/lib/steamos_diy
+    chmod 644 /var/lib/steamos_diy/next_session
 }
 
 # --- 4. Shim Layer (Symlinks) ---
