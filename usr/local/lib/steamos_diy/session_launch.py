@@ -14,11 +14,16 @@ import os
 import time
 import subprocess
 
+
 def log_msg(msg):
-    subprocess.run(["logger", "-t", "steamos-diy", f"[LAUNCHER] {msg}"], check=False)
+    """Sends a message to the system logger."""
+    subprocess.run(["logger", "-t", "steamos-diy", f"[LAUNCHER] {msg}"],
+                   check=False)
+
 
 def run():
-    # 1. Carica SSoT (Configurazione di Sistema)
+    """Main execution loop for managing sessions."""
+    # 1. Load SSoT (System Configuration)
     conf = {}
     with open("/etc/default/steamos_diy.conf", "r") as f:
         for line in f:
@@ -26,23 +31,23 @@ def run():
                 k, v = line.split("=", 1)
                 conf[k.strip()] = v.strip().strip('"').strip("'")
 
-    # 2. Configura l'ambiente Globale (XDG/KDE)
+    # 2. Configure Global Environment (XDG/KDE)
     for k, v in conf.items():
         if k.startswith(("XDG_", "KDE_")):
             os.environ[k] = v
 
     while True:
-        # 3. Leggi il target della sessione
+        # 3. Read session target
         try:
             with open(conf['next_session'], "r") as f:
                 target = f.read().strip()
-        except:
+        except Exception:
             target = "steam"
 
-        # 4. Esecuzione e Switch
+        # 4. Execution and Switch
         if target == "steam":
-            log_msg("Avvio STEAM (Game Mode) con Manifesto...")
-            
+            log_msg("Starting STEAM (Game Mode) with Manifesto...")
+
             gs_params = []
             if os.path.exists(conf['user_config']):
                 with open(conf['user_config'], "r") as f:
@@ -50,34 +55,38 @@ def run():
                         line = line.strip()
                         if not line or line.startswith("#"):
                             continue
-                        
+
                         if "=" in line:
-                            # Iniezione Variabili d'Ambiente (es. ENABLE_GAMESCOPE_WSI=1)
+                            # Environment Variable Injection
                             key, val = line.split("=", 1)
                             os.environ[key.strip()] = val.strip().strip('"').strip("'")
                         else:
-                            # Flag Gamescope (es. --rt o -W 1920)
+                            # Gamescope Flags
                             gs_params.extend(line.split())
-            
-            # Parametri di sicurezza minimi
-            if "-e" not in gs_params: gs_params.append("-e")
-            if "-f" not in gs_params: gs_params.append("-f")
-            
-            cmd = [conf['bin_gs']] + gs_params + ["--", conf['bin_steam'], "-gamepadui", "-steamos3"]
+
+            # Minimum safety parameters
+            if "-e" not in gs_params:
+                gs_params.append("-e")
+            if "-f" not in gs_params:
+                gs_params.append("-f")
+
+            cmd = ([conf['bin_gs']] + gs_params +
+                   ["--", conf['bin_steam'], "-gamepadui", "-steamos3"])
             subprocess.run(cmd)
             next_val = "desktop"
         else:
-            log_msg("Avvio DESKTOP (Plasma)...")
+            log_msg("Starting DESKTOP (Plasma)...")
             subprocess.run([conf['bin_plasma']])
             next_val = "steam"
 
-        # 5. Scrittura atomica per il prossimo stato
+        # 5. Atomic write for next state
         tmp = f"{conf['next_session']}.tmp"
         with open(tmp, "w") as f:
             f.write(next_val)
         os.replace(tmp, conf['next_session'])
-        
+
         time.sleep(0.5)
+
 
 if __name__ == "__main__":
     run()
