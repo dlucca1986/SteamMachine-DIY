@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Session Switcher (Trigger)
+# VERSION:      1.0.0 - Phyton
+# DESCRIPTION:  Dispatcher to trigger session switches between Steam and Desktop.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/lib/steamos-diy/session_select.py
+# LICENSE:      MIT
+# =============================================================================
+
 import os
 import sys
 import subprocess
