@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      1.3.0 - Unified Agnostic Logic
+# VERSION:      1.0.0 - Unified Agnostic Logic
 # DESCRIPTION:  Hardware Audit, Dependency Management & Template Personalization.
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # LICENSE:      MIT
