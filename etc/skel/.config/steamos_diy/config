@@ -1,1 +1,124 @@
 
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Complete Dynamic Configuration
+# VERSION:      1.0.0  - Phyton
+# DESCRIPTION:  Full Gamescope parameters mapping.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         $HOME/.config/steamOs/config
+# LICENSE:      MIT
+# =============================================================================
+
+# =============================================================================
+# STEAMOS-DIY: THE COMPLETE GAMESCOPE MANIFESTO
+# Formato: Flag pure per Gamescope o Variabili Ambiente con '='
+# Commenti originali dall'help ufficiale (In inglese)
+# =============================================================================
+
+# --- ENVIRONMENT VARIABLES (Injection) ---
+
+# --- GENERAL OPTIONS ---
+# -W, --output-width: output width
+#-W 1920
+# -H, --output-height: output height
+#-H 1080
+# -w, --nested-width: game width
+#-w 1920
+# -h, --nested-height: game height
+#-h 1080
+# -r, --nested-refresh: game refresh rate (frames per second)
+#-r 60
+# -m, --max-scale: maximum scale factor
+# -m 1.5
+# -S, --scaler: upscaler type (auto, integer, fit, fill, stretch)
+#-S fit
+# -F, --filter: upscaler filter (linear, nearest, fsr, nis, pixel)
+#-F fsr
+# --sharpness, --fsr-sharpness: upscaler sharpness from 0 (max) to 20 (min)
+#--sharpness 5
+# --expose-wayland: support wayland clients using xdg-shell
+# --expose-wayland
+# -s, --mouse-sensitivity: multiply mouse movement by given decimal number
+# -s 1.0
+# --backend: select rendering backend (auto, drm, sdl, openvr, headless, wayland)
+--backend auto
+# --cursor: path to default cursor image
+# --cursor /path/to/image
+# -R, --ready-fd: notify FD when ready
+# --rt: Use realtime scheduling
+--rt
+# -T, --stats-path: write statistics to path
+# -C, --hide-cursor-delay: hide cursor image after delay
+# --xwayland-count: create N xwayland servers
+# --prefer-vk-device: prefer Vulkan device for compositing (ex: 1002:7300)
+# --force-orientation: rotate the internal display (left, right, normal, upsidedown)
+# --cursor-scale-height: sets a base output height to linearly scale the cursor against
+# --virtual-connector-strategy: Specifies how we should make virtual connectors
+
+# --- HDR & COLOR MANAGEMENT ---
+# --hdr-enabled: enable HDR output
+# --sdr-gamut-wideness: Set the 'wideness' of the gamut for SDR comment. 0 - 1.
+# --hdr-sdr-content-nits: set the luminance of SDR content in nits. Default: 400 nits.
+# --hdr-itm-enabled: enable SDR->HDR inverse tone mapping. only works for SDR input.
+# --hdr-itm-sdr-nits: set the luminance of SDR content in nits used as the input for ITM.
+# --hdr-itm-target-nits: set the target luminace of the inverse tone mapping process.
+# --framerate-limit: Set a simple framerate limit.
+# --mangoapp: Launch with the mangoapp (mangohud) performance overlay enabled.
+#--mangoapp
+# --adaptive-sync: Enable adaptive sync if available (variable rate refresh)
+#--adaptive-sync
+
+# --- NESTED MODE OPTIONS ---
+# -o, --nested-unfocused-refresh: game refresh rate when unfocused
+# -b, --borderless: make the window borderless
+# -g, --grab: grab the keyboard
+
+# --- EMBEDDED MODE OPTIONS ---
+# -O, --prefer-output: list of connectors in order of preference (ex: DP-1,HDMI-A-1)
+# --default-touch-mode: 0:hover, 1:L, 2:R, 3:M, 4:pass
+# --generate-drm-mode: DRM mode generation algorithm (cvt, fixed)
+# --immediate-flips: Enable immediate flips, may result in tearing
+--immediate-flips
+
+# --- VR MODE OPTIONS ---
+# --vr-overlay-key
+# --vr-app-overlay-key
+# --vr-overlay-explicit-name
+# --vr-overlay-default-name
+# --vr-overlay-icon
+# --vr-overlay-show-immediately
+# --vr-overlay-enable-control-bar
+# --vr-overlay-enable-control-bar-keyboard
+# --vr-overlay-enable-control-bar-close
+# --vr-overlay-enable-click-stabilization
+# --vr-overlay-modal
+# --vr-overlay-physical-width
+# --vr-overlay-physical-curvature
+# --vr-overlay-physical-pre-curve-pitch
+# --vr-scrolls-speed
+
+# --- DEBUG OPTIONS ---
+# --disable-layers: disable libliftoff (hardware planes)
+# --debug-layers: debug libliftoff
+# --debug-focus: debug XWM focus
+# --synchronous-x11: force X11 connection synchronization
+# --debug-hud: paint HUD with debug info
+# --debug-events: debug X11 events
+# --force-composition: disable direct scan-out
+# --composite-debug: draw frame markers
+# --disable-color-management: disable color management
+# --disable-xres: disable XRes for PID lookup
+# --hdr-debug-force-support
+# --hdr-debug-force-output
+# --hdr-debug-heatmap
+
+# --- RESHADE SHADER OPTIONS ---
+# --reshade-effect: sets the name of a reshade shader
+# --reshade-technique-idx: sets technique idx
+
+# --- STEAM DECK & PLATFORM OPTIONS ---
+# --mura-map: Set the mura compensation map to use for the display.
+# --allow-deferred-backend: Allows initting the backend in a deferred way.
+# --keep-alive: Keep Gamescope alive even when the primary process has died.
+
+# --- END OF CONFIG ---
