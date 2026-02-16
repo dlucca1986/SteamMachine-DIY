@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer 
-# VERSION:      1.2.0 - Final Unified Version
-# DESCRIPTION:  Agnostic Installer with Hardware Audit & DM Management.
+# VERSION:      1.2.1 - Unified Agnostic Logic
+# DESCRIPTION:  Installer with Hardware Audit & Template Personalization.
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # =============================================================================
 
@@ -29,7 +29,7 @@ REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 REAL_UID=$(id -u "$REAL_USER")
 
-info "Starting installation for user: $REAL_USER"
+info "Starting installation for user: $REAL_USER (UID: $REAL_UID)"
 
 # --- 1. Hardware & Driver Audit ---
 check_gpu_and_drivers() {
@@ -90,39 +90,41 @@ install_dependencies() {
     fi
 }
 
-# --- 3. File Deployment ---
+# --- 3. File Deployment & Personalization ---
 deploy_files() {
-    info "Deploying project files to /usr/local/lib/steamos_diy..."
+    info "Deploying and personalizing files..."
 
-    # 3.1 Core Library & Helpers
-    mkdir -p /usr/local/lib/steamos_diy/helpers
-    cp -r usr/local/lib/steamos_diy/* /usr/local/lib/steamos_diy/
-    chmod 755 /usr/local/lib/steamos_diy/*.py
-    chmod 755 /usr/local/lib/steamos_diy/helpers/*.py
+    # 3.1 SSOTH Config
+    if [ -f etc/default/steamos_diy.conf ]; then
+        cp etc/default/steamos_diy.conf /etc/default/steamos_diy.conf
+        sed -i "s|\[USERNAME\]|$REAL_USER|g" /etc/default/steamos_diy.conf
+        sed -i "s|\[USERID\]|$REAL_UID|g" /etc/default/steamos_diy.conf
+    fi
 
     # 3.2 TTY1 Autologin
     mkdir -p /etc/systemd/system/getty@tty1.service.d/
     if [ -f etc/systemd/system/getty@tty1.service.d/override.conf ]; then
         cp etc/systemd/system/getty@tty1.service.d/override.conf /etc/systemd/system/getty@tty1.service.d/
-        sed -i "s/\[USERNAME\]/$REAL_USER/g" /etc/systemd/system/getty@tty1.service.d/override.conf
+        sed -i "s|\[USERNAME\]|$REAL_USER|g" /etc/systemd/system/getty@tty1.service.d/override.conf
     fi
 
-    # 3.3 Gamescope Caps & Hook
+    # 3.3 Core Library & Helpers
+    mkdir -p /usr/local/lib/steamos_diy/helpers
+    cp -r usr/local/lib/steamos_diy/* /usr/local/lib/steamos_diy/
+    chmod 755 /usr/local/lib/steamos_diy/*.py
+    chmod 755 /usr/local/lib/steamos_diy/helpers/*.py
+
+    # 3.4 Gamescope Caps & Hook
     [ -f /usr/bin/gamescope ] && setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
     mkdir -p /usr/share/libalpm/hooks/
     [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp usr/share/libalpm/hooks/gamescope-privs.hook /usr/share/libalpm/hooks/
-
-    # 3.4 Applications (.desktop)
-    mkdir -p /usr/local/share/applications/
-    cp usr/local/share/applications/*.desktop /usr/local/share/applications/ 2>/dev/null || true
-    update-desktop-database /usr/local/share/applications 2>/dev/null || true
 
     # 3.5 State Directory
     mkdir -p /var/lib/steamos_diy
     chown "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
 
-    # 3.6 Skel & Home Configs
-    info "Configuring /etc/skel and user home..."
+    # 3.6 Skel & Home
+    info "Configuring user environment..."
     mkdir -p /etc/skel/.config/steamos_diy
     cp -r etc/skel/.config/steamos_diy/* /etc/skel/.config/steamos_diy/ 2>/dev/null || true
     [ -f etc/skel/.bash_profile ] && cp etc/skel/.bash_profile /etc/skel/
@@ -130,13 +132,16 @@ deploy_files() {
     mkdir -p "$USER_HOME/.config/steamos_diy"
     cp -r etc/skel/.config/steamos_diy/* "$USER_HOME/.config/steamos_diy/" 2>/dev/null || true
     
-    # Sync .bash_profile per utente attuale
-    if [ -f etc/skel/.bash_profile ] && [ ! -f "$USER_HOME/.bash_profile" ]; then
-        cp etc/skel/.bash_profile "$USER_HOME/"
+    # Sostituzione placeholder nei config utente
+    find "$USER_HOME/.config/steamos_diy" -type f -exec sed -i "s|\[USERNAME\]|$REAL_USER|g" {} +
+
+    # Sync .bash_profile
+    if [ -f etc/skel/.bash_profile ]; then
+        cp etc/skel/.bash_profile "$USER_HOME/.bash_profile"
     fi
 
     chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/steamos_diy"
-    chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bash_profile" 2>/dev/null || true
+    chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bash_profile"
 }
 
 # --- 4. Shim Layer (Symlinks) ---
@@ -157,25 +162,7 @@ setup_shim_links() {
     ln -sf /usr/local/lib/steamos_diy/helpers/set-timezone.py /usr/bin/steamos-polkit-helpers/steamos-set-timezone
 }
 
-# --- 5. SSOTH Generation ---
-generate_ssoth() {
-    info "Generating /etc/default/steamos_diy.conf..."
-    cat <<EOF > /etc/default/steamos_diy.conf
-user=$REAL_USER
-uid=$REAL_UID
-next_session=/var/lib/steamos_diy/next_session
-user_config=$USER_HOME/.config/steamos_diy/config
-games_conf_dir=$USER_HOME/.config/steamos_diy/games.d
-bin_gs=$(which gamescope)
-bin_steam=$(which steam)
-bin_plasma=$(which startplasma-wayland)
-XDG_SESSION_TYPE=wayland
-XDG_CURRENT_DESKTOP=KDE
-KDE_WM_SYSTEMD_MANAGED=0
-EOF
-}
-
-# --- 6. Display Manager Management ---
+# --- 5. Display Manager Management ---
 manage_display_manager() {
     info "Managing Display Managers..."
     CURRENT_DM=$(systemctl list-unit-files --type=service | grep display-manager | awk '{print $1}' | head -n 1) || true
@@ -191,7 +178,7 @@ manage_display_manager() {
     fi
 }
 
-# --- 7. Finalization ---
+# --- 6. Finalization ---
 finalize() {
     systemctl daemon-reload
     systemctl enable getty@tty1.service
@@ -206,6 +193,5 @@ check_gpu_and_drivers
 install_dependencies
 deploy_files
 setup_shim_links
-generate_ssoth
 manage_display_manager
 finalize
