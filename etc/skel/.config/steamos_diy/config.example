@@ -1,12 +1,13 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Dynamic Configuration Examples
-# VERSION:      1.0.0 - Python
-# DESCRIPTION:  Configuration Examples.
+# VERSION:      1.1.0 - Python
+# DESCRIPTION:  Full Gamescope & Environment Manifesto (Example)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         $HOME/.config/steamos_diy/config.example
 # LICENSE:      MIT
 # =============================================================================
+
 # --- [ 🟢 HOW TO EDIT ] ---
 # 1. ATTIVARE: Rimuovi il carattere '#' davanti a una riga.
 # 2. DISATTIVARE: Aggiungi il carattere '#' all'inizio della riga.
@@ -14,13 +15,19 @@
 # 4. NUOVE FLAG: Se Gamescope si aggiorna, aggiungi la nuova flag in fondo.
 # =============================================================================
 
-# --- [ 1. ENVIRONMENT VARIABLES (Injection) ] ---
-# Variabili iniettate nella sessione Steam (Game Mode).
+# --- [ 1. SYSTEM ENVIRONMENT ] ---
+# Variabili iniettate nella sessione Steam (Game Mode) e nei giochi (sdy).
 INTEL_DEBUG=noccs
 STEAM_GAMESCOPE_VRR_SUPPORTED=1
 MANGOHUD=0
 
-# --- [ 2. GENERAL GAMESCOPE OPTIONS ] ---
+# --- [ 2. GLOBAL GAME DEFAULTS (SDY) ] ---
+# Impostazioni base usate da 'sdy' per tutti i giochi.
+# Possono essere sovrascritte dai file in games.d/
+GAME_WRAPPER="gamemoderun"
+GAME_EXTRA_ARGS=""
+
+# --- [ 3. GENERAL GAMESCOPE OPTIONS ] ---
 # Risoluzione e Proporzioni
 -W 1920
 -H 1080
@@ -45,7 +52,7 @@ MANGOHUD=0
 #--mangoapp
 #--debug-hud
 
-# --- [ 3. FUTURE PROOFING: AGGIUNTA MANUALE ] ---
+# --- [ 4. FUTURE PROOFING: AGGIUNTA MANUALE ] ---
 # Se Gamescope introduce nuove opzioni (es. --new-flag), puoi scriverle qui:
 # --new-flag
 # --custom-option value
@@ -62,7 +69,7 @@ MANGOHUD=0
 
 # 2. LOGICA DI PARSING
 # -----------------------------------------------------------------------------
-# Il Launcher distingue automaticamente:
+# Il Launcher e 'sdy' distinguono automaticamente:
 # - Riga con '=': Viene impostata come Variabile d'Ambiente.
 # - Riga senza '=': Viene passata come Argomento a Gamescope.
 
@@ -77,7 +84,7 @@ MANGOHUD=0
 #
 # Al prossimo riavvio di Steam, il Launcher la leggerà e la userà subito.
 
-# 4. ESEMPIO RISULTANTE
+# 4. ESEMPIO RISULTANTE (Sessione Steam)
 # -----------------------------------------------------------------------------
 # Con le impostazioni attive sopra (senza #), il comando finale sarà:
 # gamescope -W 1920 -H 1080 -S fit -F fsr --sharpness 2 --rt --immediate-flips --backend auto -- steam ...
