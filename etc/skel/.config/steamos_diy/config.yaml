@@ -1,31 +1,45 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Complete Dynamic Configuration
-# VERSION:      1.0.0 - YAML Architecture
+# VERSION:      1.3.0 - YAML Architecture
 # DESCRIPTION:  Full Gamescope parameters mapping (Converted from Manifesto).
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid) - Hardcore Libre Mode
 # PATH:         $HOME/.config/steamos_diy/config.yaml
 # LICENSE:      MIT
 # =============================================================================
 
-# =============================================================================
-# PROJECT:      SteamMachine-DIY - Complete Dynamic Configuration
-# VERSION:      1.3.0 - YAML Architecture "LIBRE"
-# DESCRIPTION:  Full Gamescope flags mapping (Converted from Manifesto).
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid) - Hardcore Libre Mode
-# PATH:         $HOME/.config/steamos_diy/config.yaml
-# =============================================================================
-
-# --- ENVIRONMENTAL VARIABLES (Injection) ---
-# Iniezione variabili d'ambiente (KEY: VALUE)
+# --- ENVIRONMENT VARIABLES (Injection) ---
 env_vars:
-
+  # Base environment settings
+  # NODEVICE_SELECT: 1
+  
+  # Performance wrapper (e.g., gamemoderun, mangohud)
+  # GAME_WRAPPER: ""
+  
+  # Extra arguments for the Steam command
+  # GAME_EXTRA_ARGS: ""
 
 # --- GAMESCOPE FLAGS (Libre Mode) ---
-# Formato: Lista secca. Togli il '#' per attivare la flag.
-# Python leggerà solo le righe che iniziano con il trattino '-'.
+# Format: Flat list. Remove '#' to activate a flag.
+# Python will parse every line starting with a dash '-'.
 flags:
+  # --- GENERAL OPTIONS ---
+  # - "-W 1920"                # --output-width
+  # - "-H 1080"                # --output-height
+  # - "-r 60"                  # --nested-refresh
+  
+  # --- FILTERS & SCALERS ---
+  # - "-S fit"                 # --scaler: auto, integer, fit, fill, stretch
+  # - "-F fsr"                 # --filter: linear, nearest, fsr, nis, pixel
+  # - "--sharpness 5"          # --fsr-sharpness (0-20)
 
+  # --- HDR & COLOR ---
+  # - "--hdr-enabled"        # Enable HDR output
+  # - "--mangoapp"           # Performance overlay (mangohud)
+  # - "--adaptive-sync"        # Enable VRR / FreeSync
 
+  # --- ADVANCED ---
+  # - "--backend auto"         # auto, drm, sdl, wayland
+  # - "--rt"                   # Use realtime scheduling
+  # - "--immediate-flips"    # May result in tearing
 
 # --- END OF CONFIG ---
