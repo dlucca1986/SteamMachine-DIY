@@ -3,10 +3,10 @@
 # PROJECT:      SteamMachine-DIY
 # VERSION:      1.0.0 - Python
 # DESCRIPTION:  Compatibility shim for SteamOS OTA update infrastructure.
-#               Returns Exit Code 7 to simulate an "Up to Date" status.
+#               Intercepts timezone change requests from Steam Client.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# PATH:         /usr/local/lib/helpers/set-timezone.py
+# PATH:         /usr/local/lib/steamos_diy/helpers/set-timezone.py
 # LICENSE:      MIT
 # =============================================================================
 
@@ -17,8 +17,8 @@ from datetime import datetime
 
 
 def get_log_file():
-    """Determina il file di log dal SSoT o usa un fallback."""
-    ssot_path = "/etc/default/steamos-diy.conf"
+    """Determines the log file from SSoT or uses a fallback."""
+    ssot_path = "/etc/default/steamos_diy.conf"
     if os.path.exists(ssot_path):
         with open(ssot_path, "r") as f:
             for line in f:
@@ -28,22 +28,25 @@ def get_log_file():
 
 
 def main():
-    # 1. Recupera la timezone (default UTC)
+    """
+    Handles timezone requests by logging them without altering host settings.
+    """
+    # 1. Retrieve the timezone (default UTC)
     target_zone = sys.argv[1] if len(sys.argv) > 1 else "UTC"
     log_file = get_log_file()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 2. Messaggi
+    # 2. Messages
     msg1 = f"Intercepting Steam Client timezone request: {target_zone}"
     msg2 = ("Timezone request acknowledged. System settings remain unchanged "
             "to preserve host OS integrity.")
 
-    # 3. Log verso il Journal (per il Control Center)
+    # 3. Log to Journal (for the Control Center)
     tag = "steamos-diy"
     subprocess.run(["logger", "-t", tag, f"[TIME-SHIM] {msg1}"], check=False)
     subprocess.run(["logger", "-t", tag, f"[TIME-SHIM] {msg2}"], check=False)
 
-    # 4. Log verso il file fisico (come da script originale)
+    # 4. Log to physical file
     try:
         with open(log_file, "a") as f:
             f.write(f"[{timestamp}] [TIME-SHIM] {msg1}\n")
@@ -51,7 +54,7 @@ def main():
     except OSError:
         pass
 
-    # 5. Exit 0 per Steam
+    # 5. Exit 0 for Steam
     sys.exit(0)
 
 
