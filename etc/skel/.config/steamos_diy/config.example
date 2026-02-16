@@ -1,99 +1,85 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Dynamic Configuration Examples
-# VERSION:      1.0.0
+# VERSION:      1.0.0 - Python
 # DESCRIPTION:  Configuration Examples.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# PATH:         $HOME/.config/steamOs/config.example
+# PATH:         $HOME/.config/steamos_diy/config.example
 # LICENSE:      MIT
 # =============================================================================
 # --- [ 🟢 HOW TO EDIT ] ---
-# 1. GS_variable=1 (Enable flag) / 0 (Disable) or "value".
-# 2. GS_ variables are auto-converted to flags (e.g., GS_rt -> --rt).
-# 3. Variables with 'export' are for System Environment or SDY wrapper.
+# 1. ATTIVARE: Rimuovi il carattere '#' davanti a una riga.
+# 2. DISATTIVARE: Aggiungi il carattere '#' all'inizio della riga.
+# 3. VALORI: Se una riga ha un valore (es. -W 1920), modificalo a piacere.
+# 4. NUOVE FLAG: Se Gamescope si aggiorna, aggiungi la nuova flag in fondo.
 # =============================================================================
 
-# --- [ 1. SYSTEM & ENVIRONMENT ] ---
-export INTEL_DEBUG="noccs"
-export STEAM_GAMESCOPE_VRR_SUPPORTED=1
-export CHECK_INTERVAL=1
+# --- [ 1. ENVIRONMENT VARIABLES (Injection) ] ---
+# Variabili iniettate nella sessione Steam (Game Mode).
+INTEL_DEBUG=noccs
+STEAM_GAMESCOPE_VRR_SUPPORTED=1
+MANGOHUD=0
 
-# --- [ 2. GLOBAL GAME DEFAULTS (SDY) ] ---
-# Used by the 'sdy' wrapper for every game launched.
-export GAME_WRAPPER="gamemoderun"
-export GAME_EXTRA_ARGS=""
+# --- [ 2. GENERAL GAMESCOPE OPTIONS ] ---
+# Risoluzione e Proporzioni
+-W 1920
+-H 1080
+#-w 1280
+#-h 720
 
-# --- [ 3. OUTPUT & RESOLUTION ] ---
-# ✅ CORRECT SYNTAX: GS_variable=value
-GS_output_width=1366             # -W (Output resolution)
-GS_output_height=768             # -H
-GS_nested_width=""               # -w (Game resolution)
-GS_nested_height=""              # -h
-GS_scaler="fit"                  # -S (auto, integer, fit, fill, stretch)
-GS_filter="linear"               # -F (linear, nearest, fsr, nis, pixel)
-GS_sharpness=2                   # --sharpness (0 to 20)
+# Upscaling e Filtri
+-S fit
+-F fsr
+--sharpness 2
 
-# --- [ 4. CORE FEATURES (1=On, 0=Off) ] ---
-# ✅ CORRECT SYNTAX: GS_variable=1 or 0
-GS_rt=1                          # --rt (Realtime scheduling)
-GS_mangoapp=0                    # --mangoapp (Performance overlay)
-GS_adaptive_sync=1               # --adaptive-sync (VRR)
-GS_immediate_flips=1             # --immediate-flips (Tearing)
-GS_xwayland_count=2              # --xwayland-count
+# Performance e Latenza
+--rt
+--immediate-flips
+--backend auto
 
-# --- [ 5. DISPLAY & ORIENTATION ] ---
-GS_borderless=0                  # -b
-GS_fullscreen=1                  # -f
-# GS_force_orientation="normal"  # --force-orientation (left, right, normal)
+# HDR e Funzioni Avanzate
+#--hdr-enabled
+#--adaptive-sync
 
-# --- [ 6. BACKEND & ADVANCED ] ---
-GS_backend="auto"                # --backend (auto, drm, sdl, wayland)
+# Overlay e Debug
+#--mangoapp
+#--debug-hud
+
+# --- [ 3. FUTURE PROOFING: AGGIUNTA MANUALE ] ---
+# Se Gamescope introduce nuove opzioni (es. --new-flag), puoi scriverle qui:
+# --new-flag
+# --custom-option value
 
 # =============================================================================
-# --- [ 📘 DOCUMENTATION & SYNTAX RULES ] ---
+# --- [ 📘 DOCUMENTATION & RULES ] ---
 # =============================================================================
 
-# 1. THE '#' SYMBOL (Commenting)
+# 1. FUNZIONAMENTO DEI COMMENTI (#)
 # -----------------------------------------------------------------------------
-# In this SSOTH system, the '#' at the start of a line serves two purposes:
-# - Bash ignores the line (it isn't loaded into memory).
-# - The Launcher's 'grep' ignores it. If you comment out a GS_ variable,
-#   that specific flag will be COMPLETELY REMOVED from the Gamescope command.
+# Tutto ciò che inizia con '#' è invisibile al Launcher. 
+# Se vuoi cambiare risoluzione da 1080p a 720p, commenta la riga '-W 1920' 
+# e decommenta (togli il #) la riga '-W 1280'.
 
-# 2. VARIABLE MAPPING (How the command is built)
+# 2. LOGICA DI PARSING
 # -----------------------------------------------------------------------------
-# The launcher automatically transforms GS_ variables into CLI flags:
-# - If value is 1: Becomes a standalone flag (GS_rt=1 -> --rt)
-# - If value is a string: Becomes flag + value (GS_scaler="fit" -> --scaler fit)
-# - If value is 0 or empty: The flag is skipped entirely.
+# Il Launcher distingue automaticamente:
+# - Riga con '=': Viene impostata come Variabile d'Ambiente.
+# - Riga senza '=': Viene passata come Argomento a Gamescope.
 
-# 3. COMMON SYNTAX ERRORS (Avoid these!)
+# 3. COMPATIBILITÀ FUTURA (Esempio Pratico)
 # -----------------------------------------------------------------------------
-# BASH IS VERY STRICT ABOUT SPACES.
+# Questo sistema è "indipendente". Se tra un anno Gamescope aggiunge una 
+# funzione ipotetica chiamata '--ultra-latency' con valore 'on', non devi 
+# aspettare che noi aggiorniamo il codice Python del Launcher.
+#
+# Ti basterà aggiungere manualmente questa riga in fondo al file:
+# --ultra-latency on
+#
+# Al prossimo riavvio di Steam, il Launcher la leggerà e la userà subito.
 
-# ❌ WRONG (Spaces around '='):
-# export CHECK_INTERVAL = 1
-# GS_rt = 1
-
-# ✅ CORRECT (No spaces):
-# export CHECK_INTERVAL=1
-# GS_rt=1
-
-# ❌ WRONG (Missing quotes for strings with spaces):
-# export GAME_WRAPPER=mangohud --version
-
-# ✅ CORRECT (Use quotes for strings):
-# export GAME_WRAPPER="mangohud --version"
-
-# 4. EXPORT VS. REGULAR VARIABLES
+# 4. ESEMPIO RISULTANTE
 # -----------------------------------------------------------------------------
-# - Use 'export' for variables that need to be "seen" by other programs
-#   (like Steam, Intel drivers, or the sdy script).
-# - Do NOT use 'export' for GS_ variables. The launcher reads them directly
-#   from the file text to build the Gamescope command string.
-
-# 5. Based on the settings above, your command will look like this:
-# ------------------------------------------------------------------------------
-gamescope -e -f --output-width 1366 --output-height 768 --scaler fit --filter linear --sharpness 2 --rt --adaptive-sync --immediate-flips --xwayland-count 2 --backend auto -- steam
+# Con le impostazioni attive sopra (senza #), il comando finale sarà:
+# gamescope -W 1920 -H 1080 -S fit -F fsr --sharpness 2 --rt --immediate-flips --backend auto -- steam ...
 
 # --- END OF EXAMPLES ---
