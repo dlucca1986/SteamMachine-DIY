@@ -7,6 +7,7 @@
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/session_launch.py
+# LICENSE:      MIT
 # =============================================================================
 
 import os
