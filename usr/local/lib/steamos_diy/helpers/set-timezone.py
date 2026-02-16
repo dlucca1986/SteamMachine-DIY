@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
 # VERSION:      1.0.0 - Phyton
