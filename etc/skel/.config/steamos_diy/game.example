@@ -1,46 +1,61 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Override Examples
-# VERSION:      1.0.0
+# VERSION:      1.0.0 - Python
 # DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# FILE_PATH:         $HOME/.config/steamOs/game.example
-# GAMES_PATH:        $HOME/.config/steamOs/games/[GameName].conf
-# LICENSE:      MIT
+# PATH:         $HOME/.config/steamos_diy/game.example
+# DESTINATION:  Managed by Control Center -> games.d/[GameName].conf
 # =============================================================================
 
 # --- [ 🟢 HOW TO EDIT ] ---
-# 1. NO SPACES around '='! (e.g., GAME_WRAPPER="mangohud" is OK).
-# 2. These settings OVERRIDE the Global defaults in your main config.
-# 3. Use '#' to disable a setting and fallback to Global.
+# 1. GESTIONE: Creato automaticamente dal Control Center per ogni gioco.
+# 2. OVERRIDE: Queste impostazioni VINCONO su quelle globali del Manifesto.
+# 3. DISABILITARE: Usa '#' per ignorare una riga e usare il default globale.
 # =============================================================================
 
-# --- [ 1. GAME WRAPPER ] ---
-# Overrides: export GAME_WRAPPER (default is usually gamemoderun)
-# This runs BEFORE the game executable.
-# -----------------------------------------------------------------------------
-# EXAMPLE: Use "Your_Option" for this specific game
-GAME_WRAPPER=""
+# --- [ 1. GAME WRAPPER (Pre-Esecuzione) ] ---
+# Sovrascrive il GAME_WRAPPER globale definito nel Manifesto principale.
+# Viene inserito PRIMA del comando del gioco.
+# Esempio: "mangohud gamemoderun" o lasciarlo vuoto "".
+GAME_WRAPPER="gamemoderun"
 
-# EXAMPLE: Run without any wrapper (empty)
-# GAME_WRAPPER=""
-
-
-# --- [ 2. EXTRA ARGUMENTS ] ---
-# Overrides: export GAME_EXTRA_ARGS
-# These options are added AFTER the game executable.
-# -----------------------------------------------------------------------------
-# EXAMPLE: Use "Your_Argument" for this specific game
+# --- [ 2. EXTRA ARGUMENTS (Post-Esecuzione) ] ---
+# Opzioni aggiunte DOPO l'eseguibile del gioco.
+# Esempio: "-novid -skipintro"
 GAME_EXTRA_ARGS=""
 
-# ⚠️ NOTE:
-# Do not add '--' here; the system handles the execution chain.
-# -----------------------------------------------------------------------------
+# --- [ 3. VARIABILI AMBIENTE SPECIFICHE ] ---
+# Variabili iniettate esclusivamente per questo gioco.
+# Queste non sporcano il sistema e non influenzano altri giochi.
+# Esempio: RADV_PERFTEST=rt
+# DXVK_HUD=fps
 
+# =============================================================================
+# --- [ 📘 COME VIENE COSTRUITO IL COMANDO FINALE ] ---
+# =============================================================================
+# Lo script 'sdy' assembla i pezzi in questo ordine preciso:
+#
+# [WRAPPER]  +  [GIOCO]  +  [ARGOMENTI EXTRA]
+#
+# ESEMPIO 1 (Tutto attivo):
+# Se scrivi: GAME_WRAPPER="mangohud" e GAME_EXTRA_ARGS="-novid"
+# Il risultato sarà:
+# > mangohud ./gioco.exe -novid
+#
+# ESEMPIO 2 (Solo Wrapper):
+# Se scrivi: GAME_WRAPPER="gamemoderun" e lasci Extra vuoto
+# Il risultato sarà:
+# > gamemoderun ./gioco.exe
+#
+# ESEMPIO 3 (Solo Argomenti):
+# Se lasci Wrapper vuoto e scrivi: GAME_EXTRA_ARGS="-fullscreen"
+# Il risultato sarà:
+# > ./gioco.exe -fullscreen
+# =============================================================================
 
-# --- [ 💡 FALLBACK LOGIC ] ---
-# If these variables are commented out or missing, SDY will
-# automatically use the Global values from your Main config file.
+# --- [ 💡 LOGICA DI FALLBACK ] ---
+# Se una riga è commentata con '#', lo script 'sdy' cercherà la stessa
+# variabile nel Manifesto globale (/etc/default/steamos_diy.conf).
 # -----------------------------------------------------------------------------
 
 # --- END OF EXAMPLES ---
