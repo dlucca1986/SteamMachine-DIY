@@ -4,6 +4,7 @@
 # VERSION:      1.1.0 - Python
 # DESCRIPTION:  Executes games with per-game overrides and global manifesto.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/bin/sdy.py
 # =============================================================================
 
