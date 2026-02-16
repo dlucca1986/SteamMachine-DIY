@@ -1,10 +1,12 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Override Examples
-# VERSION:      1.1.0 - Python
+# VERSION:      1.0.0 - Python
 # DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         $HOME/.config/steamos_diy/game.example
 # DESTINATION:  Managed by Control Center -> games.d/[GameName].conf
+# LICENSE:      MIT
 # =============================================================================
 
 # --- [ 🟢 HOW TO EDIT ] ---
