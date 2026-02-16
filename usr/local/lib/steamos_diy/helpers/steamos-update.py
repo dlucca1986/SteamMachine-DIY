@@ -28,7 +28,6 @@ def main():
     # 3. Exit Code 7 (Il "segreto" per dire a Steam che non ci sono update)
     sys.exit(7)
 
-
 if __name__ == "__main__":
     main()
   
