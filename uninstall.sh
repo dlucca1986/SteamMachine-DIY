@@ -3,6 +3,7 @@
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
 # VERSION:      1.0.0
 # DESCRIPTION:  Surgical removal of DIY components and environment restoration.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # LICENSE:      MIT
 # =============================================================================
