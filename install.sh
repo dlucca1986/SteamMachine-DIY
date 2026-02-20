@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      1.3.0 - Update Prompt & Optimized Flow
+# VERSION:      1.4.0 - Ultra-Safe Driver Audit & Optimized Flow
 # DESCRIPTION:  Hardware Audit, Dependency Management & Service Configuration.
 # =============================================================================
 
@@ -40,25 +40,38 @@ ask_system_update() {
     fi
 }
 
-# --- 1. Hardware & Driver Audit ---
+# --- 1. Hardware & Driver Audit (Ultra-Safe) ---
 check_gpu_and_drivers() {
     info "Auditing Hardware and Drivers..."
     GPU_INFO=$(lspci | grep -i vga)
     DRIVER_PKGS=""
 
+    # --- NVIDIA Logic ---
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
         if lsmod | grep -q "nvidia"; then
-            warn "Proprietary Nvidia drivers detected. SKIPPING open-source driver install."
+            warn "Active NVIDIA proprietary drivers detected. Skipping driver install."
         else
-            info "Nvidia GPU detected. Suggesting Nouveau."
+            info "Nvidia GPU detected (no proprietary driver). Suggesting Nouveau."
             DRIVER_PKGS="vulkan-nouveau lib32-vulkan-nouveau"
         fi
+
+    # --- AMD Logic ---
     elif echo "$GPU_INFO" | grep -iq "amd"; then
-        info "AMD GPU detected."
-        pacman -Qs "vulkan-radeon" > /dev/null || DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon"
+        if lsmod | grep -q "amdgpu"; then
+            warn "Active AMDGPU driver detected in kernel. Skipping driver install."
+        else
+            info "AMD GPU detected. Preparing Vulkan-Radeon."
+            DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon"
+        fi
+
+    # --- Intel Logic ---
     elif echo "$GPU_INFO" | grep -iq "intel"; then
-        info "Intel GPU detected."
-        pacman -Qs "vulkan-intel" > /dev/null || DRIVER_PKGS="vulkan-intel lib32-vulkan-intel"
+        if lsmod | grep -q "i915" || lsmod | grep -q "xe"; then
+            warn "Active Intel driver detected in kernel. Skipping driver install."
+        else
+            info "Intel GPU detected. Preparing Vulkan-Intel."
+            DRIVER_PKGS="vulkan-intel lib32-vulkan-intel"
+        fi
     fi
 }
 
@@ -76,7 +89,7 @@ install_dependencies() {
     pacman -S --needed --noconfirm $BASE_PKGS
 
     if [[ -n "$DRIVER_PKGS" ]]; then
-        info "Installing drivers: $DRIVER_PKGS"
+        info "Installing detected driver packages: $DRIVER_PKGS"
         pacman -S --needed --noconfirm $DRIVER_PKGS
     fi
 
@@ -153,12 +166,11 @@ disable_display_managers() {
             systemctl disable "$dm"
         fi
     done
-    success "Display Managers disabled. Your DIY service will manage the session."
 }
 
 # --- Execution Flow ---
 info "Starting installation for user: $REAL_USER (UID: $REAL_UID)"
-ask_system_update      # New Step
+ask_system_update
 check_gpu_and_drivers
 install_dependencies
 deploy_files
@@ -167,6 +179,8 @@ setup_systemd
 disable_display_managers
 
 finalize() {
-    success "INSTALLATION COMPLETE! Please REBOOT."
+    success "INSTALLATION COMPLETE!"
+    info "The DIY Steam Session will take control of TTY1 on next boot."
+    success "Please REBOOT now."
 }
 finalize
