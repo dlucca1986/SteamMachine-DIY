@@ -1,0 +1,46 @@
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Game Override Examples
+# VERSION:      1.0.0 - Python
+# DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         $HOME/.config/steamos_diy/games.d/game.examole.yaml
+# DESTINATION:  Managed by Control Center -> games.d/[GameName].yaml
+# LICENSE:      MIT
+# =============================================================================
+
+
+# --- [ 📘 CONFIGURATION HIERARCHY ] ---
+# 1. INHERIT: If a key is commented out (#) or deleted, this game will
+#    automatically use the global value from config.yaml.
+# 2. OVERRIDE: If a key is defined here, it has HIGHER PRIORITY and
+#    completely replaces the global setting for this game only.
+# 3. DISABLE: To disable a global setting for THIS game only,
+#    set it to empty quotes. Example: GAME_WRAPPER: ""
+
+# --- [ 🚀 HOW TO ACTIVATE ON STEAM ] ---
+# 1. Open Steam -> Right Click Game -> Properties
+# 2. In 'Launch Options', paste exactly this:
+#    sdy %command%
+# ---------------------------------------
+
+# --- 1. GAME WRAPPER ---
+# Local override. Example: "mangohud gamemoderun"
+"GAME_WRAPPER": "mangohud gamemoderun"
+
+# --- 2. EXTRA ARGUMENTS ---
+# Appended AFTER the game executable.
+"GAME_EXTRA_ARGS": ""
+
+# --- 3. SPECIFIC ENVIRONMENT VARIABLES ---
+# Define variables ONLY for this game.
+# IMPORTANT: Maintain exactly 2 spaces of indentation for the keys below!
+env_vars:
+  # CORRECT: Key and value separated by ": " (Space after colon is MANDATORY)
+  "DXVK_HUD": "fps"
+  "MANGOHUD_CONFIG": "cpu_temp,gpu_temp,fps"
+
+  # WRONG (EXAMPLES):
+  #DXVK_HUD:"fps"     # ERROR: Missing space after colon
+  # DXVK_HUD : "fps"  # ERROR: Space before colon
+  #   DXVK_HUD: "fps" # ERROR: Too many spaces (indentation)
