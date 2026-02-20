@@ -1,11 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      1.0.0
-# DESCRIPTION:  Surgical removal of DIY components and environment restoration.
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
-# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# LICENSE:      MIT
+# VERSION:      1.1.0
+# DESCRIPTION:  Interactive removal of DIY components and system restoration.
 # =============================================================================
 
 set -e
@@ -22,141 +19,95 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Root check
 if [ "$EUID" -ne 0 ]; then
     error "Please run as root (sudo ./uninstall.sh)"
     exit 1
 fi
 
-# Detect actual user behind sudo
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
-# --- 1. Cleanup Triggers & Overrides ---
-cleanup_system_config() {
-    info "Cleaning up system configurations..."
-    
-    # Surgically remove the trigger block from .bash_profile
-    BP_FILE="$USER_HOME/.bash_profile"
-    if [ -f "$BP_FILE" ]; then
-        # Use sed to delete everything between the DIY markers
-        sed -i '/# --- BEGIN STEAMOS-DIY TRIGGER ---/,/# --- END STEAMOS-DIY TRIGGER ---/d' "$BP_FILE"
-        # Cleanup potential double empty lines left at the top
-        sed -i './^$/d;}' "$BP_FILE"
-        info "Bash profile trigger removed from $BP_FILE."
-    fi
+info "Starting uninstallation for user: $REAL_USER"
 
-    # Remove the TTY1 autologin override directory
-    if [ -d /etc/systemd/system/getty@tty1.service.d/ ]; then
-        rm -rf /etc/systemd/system/getty@tty1.service.d/
-        info "TTY1 autologin override removed."
-    fi
-    
-    # Reset Getty status (unmask if it was masked)
-    systemctl unmask getty@tty1.service 2>/dev/null || true
-    
-    # Remove ALPM hooks and reset Gamescope capabilities
-    rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
-    if [ -f /usr/bin/gamescope ]; then
-        # Removing file capabilities to return to system default
-        setcap -r /usr/bin/gamescope 2>/dev/null || true
-        info "Gamescope capabilities reset."
-    fi
+# --- 1. Service Cleanup ---
+cleanup_services() {
+    info "Stopping and disabling SteamMachine-DIY service..."
+    systemctl stop steamos_diy.service || warn "Service already stopped."
+    systemctl disable steamos_diy.service || warn "Service already disabled."
+    rm -f /etc/systemd/system/steamos_diy.service
+    systemctl daemon-reload
 }
 
-# --- 2. Remove Files & Symlinks ---
-cleanup_files() {
-    info "Removing binaries, libraries and symlinks..."
-    
-    # List of symlinks created by the installer
-    SYMLINKS=(
-        "/usr/bin/steamos-session-launch"
-        "/usr/bin/steamos-session-select"
-        "/usr/bin/sdy"
-        "/usr/bin/sdy-backup"
-        "/usr/bin/sdy-restore"
-        "/usr/bin/jupiter-biosupdate"
-        "/usr/bin/steamos-select-branch"
-        "/usr/bin/steamos-update"
-    )
-
-    # Clean up symlinks
-    for link in "${SYMLINKS[@]}"; do
-        if [ -L "$link" ] || [ -e "$link" ]; then
-            rm -f "$link"
-        fi
-    done
-
-    # Remove the Polkit Helpers directory and its content
-    if [ -d /usr/bin/steamos-polkit-helpers ]; then
-        rm -rf /usr/bin/steamos-polkit-helpers
-        info "Polkit helpers directory removed."
-    fi
-
-    # Remove core directories and global configs
-    rm -rf /usr/local/lib/steamos_diy
-    rm -f /etc/default/steamos_diy.conf
-    rm -rf /var/lib/steamos_diy
-    
-    # Cleanup /etc/skel and Desktop entries
-    rm -rf /etc/skel/.config/steamos_diy
-    rm -f /usr/share/applications/return_to_gamemode.desktop
-    rm -f "$USER_HOME/Desktop/return_to_gamemode.desktop"
-    
-    # Optional: cleanup user config folder
-    echo -ne "${YELLOW}Remove user configuration folder (~/.config/steamos_diy)? [y/N] ${NC}"
-    read -r remove_conf
-    if [[ $remove_conf == [yY] ]]; then
-        rm -rf "$USER_HOME/.config/steamos_diy"
-        success "User configurations deleted."
-    fi
-}
-
-# --- 3. Emergency DM Restoration ---
-# This ensures the user isn't left with a black screen on next boot
+# --- 2. Restore Display Manager (Interactive) ---
 restore_display_manager() {
-    info "Checking Display Manager status..."
-    
-    # List of common Display Managers to probe
-    DMS=("sddm" "gdm" "lightdm" "lxdm")
-    FOUND_DMS=()
-    
-    for dm in "${DMS[@]}"; do
-        if systemctl list-unit-files | grep -q "^$dm.service"; then
-            FOUND_DMS+=("$dm")
-        fi
-    done
-
-    if [ ${#FOUND_DMS[@]} -gt 0 ]; then
-        warn "Game Mode trigger removed. You need to enable a Display Manager for a GUI boot."
-        echo -e "Available DMs: ${FOUND_DMS[*]}"
-        echo -ne "${CYAN}Enter the name of the DM to enable (or leave empty to skip): ${NC}"
-        read -r selected_dm
-        
-        if [[ -n "$selected_dm" ]]; then
-            if systemctl list-unit-files | grep -q "^$selected_dm.service"; then
-                systemctl enable "$selected_dm"
-                success "$selected_dm has been enabled."
-            else
-                error "Service $selected_dm not found or not installed."
-            fi
+    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (SDDM/GDM)? (y/n)${NC}"
+    read -r -p "> " confirm_dm
+    if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
+        if systemctl list-unit-files | grep -q "sddm.service"; then
+            info "Re-enabling SDDM..."
+            systemctl enable sddm.service
+        elif systemctl list-unit-files | grep -q "gdm.service"; then
+            info "Re-enabling GDM..."
+            systemctl enable gdm.service
+        else
+            warn "No common Display Manager (SDDM/GDM) found installed."
         fi
     else
-        warn "No common Display Manager detected. You may need to install one manually."
+        info "Skipping Display Manager restoration."
     fi
 }
 
-# --- 4. Execution Flow ---
-echo -e "${RED}==================================================${NC}"
-echo -e "${RED}         SteamMachine-DIY Uninstaller             ${NC}"
-echo -e "${RED}==================================================${NC}"
+# --- 3. Remove Files & Library ---
+remove_files() {
+    info "Removing DIY system files..."
+    
+    # Remove System Library & State
+    rm -rf /usr/local/lib/steamos_diy
+    rm -rf /var/lib/steamos_diy
+    
+    # Remove Desktop Entries & Icons
+    info "Cleaning up application shortcuts and icons..."
+    rm -f /usr/local/share/applications/sdy-*.desktop
+    # If you have specific icons in /usr/share/icons, add them here
+    
+    # Remove SSoT Config
+    rm -f /etc/default/steamos_diy.conf
 
-cleanup_system_config
-cleanup_files
+    # Interactive User Config Wipe
+    echo -e "${RED}>>> Do you want to DELETE user configurations in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
+    read -r -p "> " confirm_wipe
+    if [[ "$confirm_wipe" =~ ^[Yy]$ ]]; then
+        info "Wiping user configuration directory..."
+        rm -rf "$USER_HOME/.config/steamos_diy"
+    else
+        info "Keeping user configuration directory."
+    fi
+}
+
+# --- 4. Remove Shim Layer ---
+remove_shim_links() {
+    info "Removing shim layer symlinks..."
+    rm -f /usr/bin/steamos-session-launch
+    rm -f /usr/bin/steamos-session-select
+    rm -f /usr/bin/sdy
+    rm -f /usr/local/bin/sdy-control-center
+    rm -rf /usr/bin/steamos-polkit-helpers
+}
+
+# --- Execution Flow ---
+cleanup_services
 restore_display_manager
+remove_shim_links
+remove_files
 
-# Refresh systemd and finalize
-systemctl daemon-reload
-echo -e "\n${GREEN}==================================================${NC}"
-success "UNINSTALL COMPLETE. Please REBOOT your system."
-echo -e "${GREEN}==================================================${NC}\n"
+# --- Finalize & Reboot ---
+success "UNINSTALLATION FINISHED!"
+
+echo -e "${CYAN}>>> Do you want to REBOOT now? (y/n)${NC}"
+read -r -p "> " confirm_reboot
+if [[ "$confirm_reboot" =~ ^[Yy]$ ]]; then
+    info "Rebooting system..."
+    reboot
+else
+    info "Uninstallation complete. Please remember to reboot later."
+fi
