@@ -1,75 +1,46 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Dynamic Configuration Examples
-# VERSION:      1.3.0 - YAML Architecture
+# VERSION:      1.0.0 - YAML Architecture
 # DESCRIPTION:  Full Gamescope & Environment Mapping (Example Template)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid) - Hardcore Libre Mode
 # PATH:         $HOME/.config/steamos_diy/config.example.yaml
 # LICENSE:      MIT
 # =============================================================================
 
-# --- [ 🟢 HOW TO EDIT ] ---
-# 1. ACTIVATE: Remove the '#' character at the beginning of a line.
-# 2. DEACTIVATE: Add '#' at the start of the line.
-# 3. VALUES: Modify values (e.g., -W 1920) as needed.
-# 4. CUSTOM FLAGS: Add any new Gamescope flags at the end of the 'flags' list.
+# =============================================================================
+# SteamMachine-DIY - Global Configuration
+# Path: $HOME/.config/steamos_diy/config.yaml
+# Description: Global defaults for all games.
 # =============================================================================
 
-# --- ENVIRONMENT VARIABLES (Injection) ---
-# These variables are injected into the Steam session and game environment.
+# --- GLOBAL ENVIRONMENT VARIABLES ---
+# These apply to ALL games unless overridden by a specific game profile.
 env_vars:
-  # Base performance & hardware settings
-  NODEVICE_SELECT: 1
-  # INTEL_DEBUG: "noccs"
-  # STEAM_GAMESCOPE_VRR_SUPPORTED: 1
-  
-  # Performance wrapper (e.g., gamemoderun, mangohud)
-  # Set to "" to disable the wrapper.
+  # Enable hardware features
+  STEAM_GAMESCOPE_VRR_SUPPORTED: "1"
+
+  # Default performance wrapper (e.g., gamemoderun, mangohud)
+  # To disable globally, use "" or comment the line.
   GAME_WRAPPER: "gamemoderun"
-  
-  # Extra arguments passed directly to the Steam command
+
+  # Default extra arguments (usually empty for global)
   GAME_EXTRA_ARGS: ""
 
-# --- GAMESCOPE FLAGS (Libre Mode) ---
-# Format: Flat list. Every uncommented line starting with '-' is a flag.
-# If Gamescope updates, you can just add the new flag here.
+# --- GLOBAL GAMESCOPE FLAGS ---
+# These flags define the Steam Game Mode behavior.
+# For a full list of available flags, see: gamescope.example.yaml
+# IMPORTANT: This is a YAML LIST. Each item must start with a dash "-".
 flags:
-  # --- GENERAL OPTIONS (Resolution & Refresh) ---
-  - "-W 1920"                # Internal resolution width
-  - "-H 1080"                # Internal resolution height
-  # - "-w 1280"              # Output width (if different)
-  # - "-h 720"               # Output height (if different)
-  - "-r 60"                  # Refresh rate
-  - "-f"                     # Fullscreen mode
-  - "-e"                     # Steam integration mode
+  # --- RIGHT SYNTAX ---
+  - "-H 720"                 # Parameter + Value: MUST be in the same quotes
+  - "-r 60"                  # Refresh rate: Correct "-r 60"
+  - "-F fsr"                 # Upscaling: Correct "-F fsr"
+  - "--sharpness 5"          # Sharpness (0-20)
+  - "--rt"                   # Realtime scheduling
+  - "--immediate-flips"      # Minimize latency (Tearing might occur)
 
-  # --- FILTERS & SCALERS ---
-  - "-S fit"                 # Scaler: auto, integer, fit, fill, stretch
-  - "-F fsr"                 # Filter: linear, nearest, fsr, nis, pixel
-  - "--sharpness 5"          # FSR Sharpness (0-20)
+  # --- WRONG SYNTAX (EXAMPLES) ---
+  # - -H 720                 # ERROR: Missing quotes
+  # - "-H" "720"             # ERROR: Space between quotes breaks the flag
+  # - "-H720"                # ERROR: Missing space between flag and value
 
-  # --- PERFORMANCE & LATENCY ---
-  - "--rt"                   # Use realtime scheduling
-  - "--backend auto"         # Backend: auto, drm, sdl, wayland
-  # - "--immediate-flips"    # May reduce latency but cause tearing
-
-  # --- HDR & ADVANCED FEATURES ---
-  # - "--hdr-enabled"        # Enable HDR output (if supported)
-  - "--adaptive-sync"        # Enable VRR / FreeSync
-  # - "--mangoapp"           # Enable MangoHud overlay inside Gamescope
-
-# =============================================================================
-# --- [ 📘 DOCUMENTATION & RULES ] ---
-# =============================================================================
-# 1. YAML STRUCTURE:
-#    The 'env_vars' section uses KEY: VALUE format.
-#    The 'flags' section is a LIST (starting with '-').
-#
-# 2. FUTURE PROOFING:
-#    If a new version of Gamescope introduces a flag like '--ultra-low-latency',
-#    you don't need to update the Python code. Just add it here under 'flags':
-#    - "--ultra-low-latency"
-#
-# 3. RESULTING COMMAND EXAMPLE:
-#    With the active settings above, the launcher will execute:
-#    gamemoderun gamescope -W 1920 -H 1080 -r 60 -f -e -S fit -F fsr ... -- steam
-# =============================================================================
