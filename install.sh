@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      1.1.0 - Agnostic & SSoT Optimized
-# DESCRIPTION:  Hardware Audit, Dependency Management & Path Personalization.
+# VERSION:      1.2.0 - DM Management & SSoT Optimized
+# DESCRIPTION:  Hardware Audit, Dependency Management & Service Configuration.
 # =============================================================================
 
 set -e 
@@ -34,13 +34,11 @@ info "Starting installation for user: $REAL_USER (UID: $REAL_UID)"
 check_gpu_and_drivers() {
     info "Auditing Hardware and Drivers..."
     GPU_INFO=$(lspci | grep -i vga)
-    SKIP_DRIVERS=false
     DRIVER_PKGS=""
 
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
         if lsmod | grep -q "nvidia"; then
             warn "Proprietary Nvidia drivers detected. SKIPPING open-source driver install."
-            SKIP_DRIVERS=true
         else
             info "Nvidia GPU detected. Suggesting Nouveau."
             DRIVER_PKGS="vulkan-nouveau lib32-vulkan-nouveau"
@@ -62,7 +60,9 @@ install_dependencies() {
         pacman -Sy
     fi
 
-BASE_PKGS="python python-pyqt6 python-yaml python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader mesa-utils pciutils procps-ng"    
+    # Added python-ruamel-yaml for Control Center compatibility
+    BASE_PKGS="python python-pyqt6 python-yaml python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader mesa-utils pciutils procps-ng"    
+    
     info "Installing core dependencies..."
     pacman -S --needed --noconfirm $BASE_PKGS
 
@@ -72,8 +72,8 @@ BASE_PKGS="python python-pyqt6 python-yaml python-ruamel-yaml steam gamescope xo
     fi
 
     info "Updating user groups for $REAL_USER..."
-    # Groups: added video, render, input, and autologin as requested
-    for grp in video render input audio wheel storage autologin; do
+    # Including systemd-journal for Control Center log access
+    for grp in video render input audio wheel storage autologin systemd-journal; do
         groupadd -f "$grp"
         usermod -aG "$grp" "$REAL_USER"
     done
@@ -121,13 +121,11 @@ setup_shim_links() {
     mkdir -p /usr/bin/steamos-polkit-helpers
     mkdir -p /usr/local/bin
 
-    # Master Links
     ln -sf /usr/local/lib/steamos_diy/session_launch.py /usr/bin/steamos-session-launch
     ln -sf /usr/local/lib/steamos_diy/session_select.py /usr/bin/steamos-session-select
     ln -sf /usr/local/lib/steamos_diy/sdy.py /usr/bin/sdy
     ln -sf /usr/local/lib/steamos_diy/control_center.py /usr/local/bin/sdy-control-center
     
-    # Helpers
     ln -sf /usr/local/lib/steamos_diy/helpers/jupiter-biosupdate.py /usr/bin/steamos-polkit-helpers/jupiter-biosupdate
     ln -sf /usr/local/lib/steamos_diy/helpers/steamos-update.py /usr/bin/steamos-polkit-helpers/steamos-update
     ln -sf /usr/local/lib/steamos_diy/helpers/set-timezone.py /usr/bin/steamos-polkit-helpers/steamos-set-timezone
@@ -137,11 +135,23 @@ setup_shim_links() {
 setup_systemd() {
     info "Configuring systemd service..."
     cp etc/systemd/system/steamos_diy.service /etc/systemd/system/
-    # Replace the %u placeholder with the real user
     sed -i "s/%u/$REAL_USER/g" /etc/systemd/system/steamos_diy.service
     
     systemctl daemon-reload
     systemctl enable steamos_diy.service
+}
+
+# --- 6. Display Manager Management ---
+disable_display_managers() {
+    info "Disabling standard Display Managers to avoid TTY1 conflicts..."
+    # Common Display Managers list
+    for dm in sddm gdm lightdm lxdm; do
+        if systemctl is-enabled "$dm" &>/dev/null; then
+            warn "Disabling $dm service..."
+            systemctl disable "$dm"
+        fi
+    done
+    success "Display Managers disabled. Your DIY service will manage the session."
 }
 
 # --- Execution Flow ---
@@ -150,6 +160,8 @@ install_dependencies
 deploy_files
 setup_shim_links
 setup_systemd
+disable_display_managers
+
 finalize() {
     success "INSTALLATION COMPLETE! Please REBOOT."
 }
