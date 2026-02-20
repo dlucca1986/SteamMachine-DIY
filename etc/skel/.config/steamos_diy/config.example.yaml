@@ -7,12 +7,6 @@
 # LICENSE:      MIT
 # =============================================================================
 
-# =============================================================================
-# SteamMachine-DIY - Global Configuration
-# Path: $HOME/.config/steamos_diy/config.yaml
-# Description: Global defaults for all games.
-# =============================================================================
-
 # --- GLOBAL ENVIRONMENT VARIABLES ---
 # These apply to ALL games unless overridden by a specific game profile.
 env_vars:
