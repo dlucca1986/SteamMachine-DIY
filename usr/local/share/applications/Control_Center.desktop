@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Control Center
 Comment=SteamMachine-DIY Management Tool
-Exec=/usr/local/bin/sdy-control-center
+Exec=sdy-control-center
 Icon=preferences-system-performance
 Terminal=false
 Type=Application
