@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      1.1.0
-# DESCRIPTION:  Interactive removal of DIY components and system restoration.
+# VERSION:      1.5.0 - Full Cleanup (Icons & Hooks)
+# DESCRIPTION:  Interactive removal of DIY components and target cleanup.
 # =============================================================================
 
 set -e
@@ -29,69 +29,102 @@ USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
 info "Starting uninstallation for user: $REAL_USER"
 
-# --- 1. Service Cleanup ---
+# --- 1. Service & Target Cleanup ---
 cleanup_services() {
-    info "Stopping and disabling SteamMachine-DIY service..."
-    systemctl stop steamos_diy.service || warn "Service already stopped."
-    systemctl disable steamos_diy.service || warn "Service already disabled."
-    rm -f /etc/systemd/system/steamos_diy.service
+    info "Cleaning up services and restoring targets..."
+
+    if systemctl is-enabled steamos_diy.service &>/dev/null; then
+        systemctl disable steamos_diy.service || true
+    fi
+
+    # Remove "Hard Lock" link
+    if [ -L /etc/systemd/system/graphical.target.wants/steamos_diy.service ]; then
+        info "Removing manual graphical.target link..."
+        rm -f /etc/systemd/system/graphical.target.wants/steamos_diy.service
+    fi
+
+    if [ -f /etc/systemd/system/steamos_diy.service ]; then
+        rm -f /etc/systemd/system/steamos_diy.service
+    fi
+
     systemctl daemon-reload
 }
 
-# --- 2. Restore Display Manager (Interactive) ---
+# --- 2. Restore Display Manager & Target ---
 restore_display_manager() {
     echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (SDDM/GDM)? (y/n)${NC}"
     read -r -p "> " confirm_dm
     if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
         if systemctl list-unit-files | grep -q "sddm.service"; then
-            info "Re-enabling SDDM..."
             systemctl enable sddm.service
+            success "SDDM re-enabled."
         elif systemctl list-unit-files | grep -q "gdm.service"; then
-            info "Re-enabling GDM..."
             systemctl enable gdm.service
-        else
-            warn "No common Display Manager (SDDM/GDM) found installed."
+            success "GDM re-enabled."
         fi
+        systemctl set-default graphical.target || true
     else
-        info "Skipping Display Manager restoration."
+        warn "Restoring system to CLI (multi-user.target)..."
+        systemctl set-default multi-user.target || true
     fi
 }
 
-# --- 3. Remove Files & Library ---
+# --- 3. Remove Shim Links ---
+remove_shim_links() {
+    info "Removing all 15 shim layer symlinks..."
+
+    # 3.1 Polkit Helpers
+    rm -f /usr/bin/steamos-polkit-helpers/jupiter-biosupdate
+    rm -f /usr/bin/steamos-polkit-helpers/steamos-update
+    rm -f /usr/bin/steamos-polkit-helpers/steamos-set-timezone
+    rm -f /usr/bin/steamos-polkit-helpers/jupiter-dock-updater
+    [ -d /usr/bin/steamos-polkit-helpers ] && rmdir /usr/bin/steamos-polkit-helpers 2>/dev/null || true
+
+    # 3.2 Core Session Binaries
+    rm -f /usr/bin/steamos-session-launch
+    rm -f /usr/bin/steamos-session-select
+    rm -f /usr/bin/sdy
+
+    # 3.3 DIY Tools
+    rm -f /usr/bin/sdy-backup
+    rm -f /usr/bin/sdy-restore
+    rm -f /usr/local/bin/sdy
+    rm -f /usr/local/bin/sdy-control-center
+
+    # 3.4 Compatibility Helpers
+    rm -f /usr/bin/jupiter-biosupdate
+    rm -f /usr/bin/steamos-select-branch
+    rm -f /usr/bin/steamos-update
+}
+
+# --- 4. Remove Files, Library, Icons & Hooks ---
 remove_files() {
     info "Removing DIY system files..."
-    
-    # Remove System Library & State
     rm -rf /usr/local/lib/steamos_diy
     rm -rf /var/lib/steamos_diy
-    
-    # Remove Desktop Entries & Icons
-    info "Cleaning up application shortcuts and icons..."
-    rm -f /usr/local/share/applications/sdy-*.desktop
-    # If you have specific icons in /usr/share/icons, add them here
-    
-    # Remove SSoT Config
     rm -f /etc/default/steamos_diy.conf
 
-    # Interactive User Config Wipe
+    # --- Cleanup Icons ---
+    info "Removing desktop menu entries..."
+    rm -f /usr/local/share/applications/Control_Center.desktop
+    rm -f /usr/local/share/applications/Game_Mode.desktop
+
+    # --- Cleanup Hooks ---
+    info "Removing Pacman hooks..."
+    rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
+
+    # Optional: Reset gamescope caps (safer to leave them, but for a "pure" uninstall...)
+    if [ -f /usr/bin/gamescope ]; then
+        info "Dropping gamescope capabilities..."
+        setcap -r /usr/bin/gamescope 2>/dev/null || true
+    fi
+
     echo -e "${RED}>>> Do you want to DELETE user configurations in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
     read -r -p "> " confirm_wipe
     if [[ "$confirm_wipe" =~ ^[Yy]$ ]]; then
         info "Wiping user configuration directory..."
         rm -rf "$USER_HOME/.config/steamos_diy"
-    else
-        info "Keeping user configuration directory."
     fi
-}
-
-# --- 4. Remove Shim Layer ---
-remove_shim_links() {
-    info "Removing shim layer symlinks..."
-    rm -f /usr/bin/steamos-session-launch
-    rm -f /usr/bin/steamos-session-select
-    rm -f /usr/bin/sdy
-    rm -f /usr/local/bin/sdy-control-center
-    rm -rf /usr/bin/steamos-polkit-helpers
 }
 
 # --- Execution Flow ---
@@ -100,14 +133,11 @@ restore_display_manager
 remove_shim_links
 remove_files
 
-# --- Finalize & Reboot ---
-success "UNINSTALLATION FINISHED!"
+success "UNINSTALLATION COMPLETED!"
+info "System target, links, and hooks restored."
 
-echo -e "${CYAN}>>> Do you want to REBOOT now? (y/n)${NC}"
+echo -e "${CYAN}>>> Reboot now? (y/n)${NC}"
 read -r -p "> " confirm_reboot
 if [[ "$confirm_reboot" =~ ^[Yy]$ ]]; then
-    info "Rebooting system..."
     reboot
-else
-    info "Uninstallation complete. Please remember to reboot later."
 fi
