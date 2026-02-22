@@ -3,6 +3,7 @@
 # VERSION:      1.0.0 - YAML Architecture
 # DESCRIPTION:  Full Gamescope parameters mapping (Converted from Manifesto).
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid) - Hardcore Libre Mode
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         $HOME/.config/steamos_diy/config.yaml
 # LICENSE:      MIT
 # =============================================================================
