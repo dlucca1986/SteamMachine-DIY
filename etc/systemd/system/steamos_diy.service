@@ -1,24 +1,27 @@
+# =============================================================================
+# PROJECT:      SteamMachine-DIY
+# VERSION:      1.0.0
+# DESCRIPTION:  Systemd service for automated session management.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /etc/systemd/system/steamos_diy.service
+# LICENSE:      MIT
+# =============================================================================
+
 [Unit]
 Description=SteamMachine-DIY - Session Launcher
 After=systemd-user-sessions.service network.target
-# Ensure the TTY is available by conflicting with the default getty
-Conflicts=getty@tty1.service
 
 [Service]
-# Dynamically uses the user assigned during installation or service override
-User=%u
+User={{USER}}
 PAMName=login
+Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
+Environment=SSOT_CONF=/etc/default/steamos_diy.conf
 
-# Load the SSoT configuration as environment variables
-EnvironmentFile=/etc/default/steamos_diy.conf
-
-# Set the runtime directory based on the User ID (%U) to stay agnostic
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-
-# Main execution command
+# Main execution logic handled by the Python launcher
 ExecStart=/usr/bin/python3 /usr/local/lib/steamos_diy/session_launch.py
 
-# Resilience settings
+# Resilience & TTY Management
 Restart=always
 RestartSec=2
 StandardInput=tty
