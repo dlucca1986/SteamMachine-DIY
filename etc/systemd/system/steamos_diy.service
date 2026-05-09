@@ -1,0 +1,39 @@
+# =============================================================================
+# PROJECT:      SteamMachine-DIY
+# VERSION:      1.0.1
+# DESCRIPTION:  Systemd service for automated session management.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /etc/systemd/system/steamos_diy.service
+# LICENSE:      MIT
+# =============================================================================
+
+[Unit]
+Description=SteamMachine-DIY - Session Launcher
+After=systemd-user-sessions.service network.target
+
+[Service]
+User={{USER}}
+PAMName=login
+Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
+Environment=SSOT_CONF=/etc/default/steamos_diy.conf
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_DESKTOP_PORTAL_DIR=/usr/share/xdg-desktop-portal/portals
+
+# Main execution logic handled by the Python launcher
+ExecStart=/usr/bin/python3 /usr/local/lib/steamos_diy/session_launch.py
+
+# Resilience & TTY Management
+Restart=always
+RestartSec=1.0s
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVTDisallocate=yes
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical.target

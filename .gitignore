@@ -1,0 +1,3 @@
+libcore.so
+__pycache__/
+*.pyc

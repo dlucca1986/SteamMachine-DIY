@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Control Center
+Comment=SteamMachine-DIY Management Tool
+Exec=python3 /usr/local/lib/steamos_diy/control_center.py
+Icon=preferences-system-performance
+Terminal=false
+Type=Application
+Categories=Settings;System;

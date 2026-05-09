@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Return To Game Mode
+Comment=Switch session back to Steam Gaming Mode
+Exec=steamos-session-select steam
+Icon=steam
+Terminal=false
+Type=Application
+Categories=System;Game;
+Keywords=steam;steamos;gaming;mode;
+StartupNotify=false
+X-KDE-SubstituteUID=false

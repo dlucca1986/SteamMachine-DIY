@@ -1,0 +1,45 @@
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Game Override Examples
+# VERSION:      1.0.0 - Python
+# DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         $HOME/.config/steamos_diy/games.d/game.example.yaml
+# DESTINATION:  Managed by Control Center -> games.d/[GameName].yaml
+# LICENSE:      MIT
+# =============================================================================
+
+# --- [ 🆔 IDENTIFICATION ] ---
+# Identifiers for sdy.py matching. 
+# Control Center injects these during "Scan History".
+SDY_ID: 1091500
+STEAM_APPID: "1091500"
+
+# --- [ 📘 CONFIGURATION HIERARCHY ] ---
+# 1. INHERIT: Commented keys (#) use global values from config.yaml.
+# 2. OVERRIDE: Defined keys replace global settings.
+# 3. DISABLE: Set to "" to disable a feature for this game.
+
+# --- [ 🚀 HOW TO ACTIVATE ON STEAM ] ---
+# 1. Open Steam -> Right Click Game -> Properties
+# 2. In 'Launch Options', paste: sdy %command%
+# ---------------------------------------
+
+# --- [ ⚙️ EXECUTION OVERRIDES ] ---
+# These keys override global settings in config.yaml.
+# If commented (#), the global value is used.
+GAME_WRAPPER: "mangohud gamemoderun"
+GAME_EXTRA_ARGS: ""
+
+# --- [ 🌿 ENVIRONMENT VARIABLES ] ---
+# Specific game variables grouped here.
+# Maintain exactly 2 spaces of indentation!
+env_vars:
+  PROTON_USE_WINED3D: "1"
+  DXVK_HUD: "fps"
+  MANGOHUD_CONFIG: "cpu_temp,gpu_temp,fps"
+
+# --- [ ❌ WRONG SYNTAX EXAMPLES ] ---
+# DXVK_HUD:"fps"      # ERROR: Missing space after colon
+#  DXVK_HUD: "fps"    # ERROR: Only 1 space (must be 2)
+# PROTON_USE_WINED3D: 1 # WARNING: Always use quotes "1" for safety with strings
