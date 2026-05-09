@@ -328,7 +328,9 @@ def run_backup() -> None:
     is returned. The previous archive (if any) is never touched.
     """
     check_root()
-    load_ssot()
+    if not load_ssot():
+        jlog("SYSTEM", "BACKUP_FAILED: SSoT config not found", level="ERROR")
+        sys.exit(1)
 
     user, home = get_real_user()
 

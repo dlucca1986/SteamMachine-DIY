@@ -426,8 +426,9 @@ def _run_restore_script(tar: tarfile.TarFile) -> None:
     Args:
         tar: Open tar archive containing restore_links.sh.
     """
-    member = tar.getmember(_RESTORE_SCRIPT_ARCNAME)
-    if member is None:
+    try:
+        member = tar.getmember(_RESTORE_SCRIPT_ARCNAME)
+    except KeyError:
         return
 
     # mkdtemp returns a 0700 dir owned by the calling user (root here)
@@ -495,7 +496,9 @@ def run_restore(archive_path: str) -> None:
         archive_path: Filesystem path to a *.tar.gz produced by backup.py.
     """
     check_root()
-    load_ssot()
+    if not load_ssot():
+        jlog("SYSTEM", "RESTORE_FAILED: SSoT config not found", level="ERROR")
+        sys.exit(1)
 
     if not os.path.exists(archive_path):
         jlog(

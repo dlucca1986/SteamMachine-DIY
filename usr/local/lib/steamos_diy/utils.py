@@ -356,7 +356,7 @@ def spawn_native(path: str, args: list[str]) -> int:
 
     Args:
         path: Full path to the executable.
-        args: List of command arguments (excluding argv[0]).
+        args: Full argv passed to execv, including argv[0] (the program name).
 
     Returns:
         Child process PID on success, 0 on failure (including encoding
