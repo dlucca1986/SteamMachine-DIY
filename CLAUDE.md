@@ -49,16 +49,16 @@ All runtime paths, timeouts, and log levels are read from `/etc/default/steamos_
 
 Source: `steamos_diy_core.c`. Compiled to `libcore.so` at install time via `Makefile`. Python binds it via `ctypes` in `utils.py`. Functions:
 
-| Funzione | Firma C | Note |
-|----------|---------|------|
-| `c_jlog` | `void(tag, msg, priority)` | syslog con tag dinamico |
-| `c_notify` | `void(status, clear)` | scrive su `/dev/tty1` con escape ANSI |
+| Function | C signature | Notes |
+|----------|-------------|-------|
+| `c_jlog` | `void(tag, msg, priority)` | syslog with dynamic tag |
+| `c_notify` | `void(status, clear)` | writes to `/dev/tty1` with ANSI escapes |
 | `c_write_atomic` | `void(path, val)` | `open`+`fdatasync`+`rename` |
-| `c_get_conf_val` | `int(path, key, dest, len)` | parser key=value SSoT |
-| `c_read_file_simple` | `int(path, dest, len)` | legge prima riga |
-| `c_spawn_detached` | `int(path, argv[])` | fork/exec, restituisce PID figlio o 0 |
-| `c_monitor_process` | `int(pid, timeout_sec)` | polling `/proc/<pid>` ogni 200ms |
-| `c_sd_notify_ready` | `void()` | invia `READY=1` su `NOTIFY_SOCKET` (gestisce socket astratti `@`) |
+| `c_get_conf_val` | `int(path, key, dest, len)` | key=value SSoT parser |
+| `c_read_file_simple` | `int(path, dest, len)` | reads first line |
+| `c_spawn_detached` | `int(path, argv[])` | fork/exec, returns child PID or 0 |
+| `c_monitor_process` | `int(pid, timeout_sec)` | polls `/proc/<pid>` every 200ms |
+| `c_sd_notify_ready` | `void()` | sends `READY=1` over `NOTIFY_SOCKET` (handles abstract `@` sockets) |
 
 All C-Core calls go through wrappers in `utils.py`. Do not call `ctypes` directly elsewhere.
 
@@ -76,7 +76,7 @@ Writes the target session name to the `next_session` file, then tells systemd to
 
 ### SteamOS Compatibility Shims
 
-Stub scripts in `/usr/bin/steamos-polkit-helpers/` intercept Steam Deck UI polkit calls (BIOS update, dock update, timezone, branch select) so the unmodified Steam client doesn't error out. These are intentionally no-ops.
+Stub scripts in `/usr/bin/steamos-polkit-helpers/` intercept Steam Deck UI polkit calls (BIOS update, dock update, timezone, branch select) so the unmodified Steam client doesn't error out. These are intentionally no-ops. **Source lives in `usr/local/lib/steamos_diy/helpers/*.py`** — `install.sh` deploys them to `/usr/local/lib/steamos_diy/helpers/` and symlinks each into `/usr/bin/steamos-polkit-helpers/`. Edit the sources, not the symlink targets.
 
 ### Control Center (`control_center.py`)
 
