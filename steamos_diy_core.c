@@ -12,7 +12,7 @@
 
 static char current_tag[64] = "";
 
-// Ottimizzazione: Forza l'inlining per eliminare il costo della chiamata
+// Inlined to eliminate call overhead on the hot path
 static inline void trim_inplace(char *s) {
     char *p = s;
     int l = strlen(p);
@@ -21,7 +21,7 @@ static inline void trim_inplace(char *s) {
     memmove(s, p, l + 1);
 }
 
-// 1. LOGGING NATIVO
+// 1. NATIVE LOGGING
 __attribute__((visibility("default")))
 void c_jlog(const char *tag, const char *msg, int priority) {
     if (tag && strcmp(current_tag, tag) != 0) {
@@ -32,7 +32,7 @@ void c_jlog(const char *tag, const char *msg, int priority) {
     syslog(priority, "%s", msg);
 }
 
-// 2. NOTIFICHE TTY (Low-PSI con O_NOCTTY)
+// 2. TTY NOTIFICATION (low-PSI write via O_NOCTTY)
 __attribute__((visibility("default")))
 void c_notify(const char *status, int clear) {
     int fd = open("/dev/tty1", O_WRONLY | O_NOCTTY);
@@ -50,7 +50,7 @@ void c_notify(const char *status, int clear) {
     close(fd);
 }
 
-// 3. SCRITTURA ATOMICA (Hardware Sync)
+// 3. ATOMIC WRITE (fdatasync + rename for hardware durability)
 __attribute__((visibility("default")))
 void c_write_atomic(const char *path, const char *val) {
     char tmp_path[512];
@@ -63,7 +63,7 @@ void c_write_atomic(const char *path, const char *val) {
     rename(tmp_path, path);
 }
 
-// 4. LETTURA CONFIGURAZIONE SSoT (Reintrodotta)
+// 4. SSoT CONFIG READER (key=value parser)
 __attribute__((visibility("default")))
 int c_get_conf_val(const char *path, const char *key, char *dest, int dest_len) {
     FILE *f = fopen(path, "r");
@@ -89,7 +89,7 @@ int c_get_conf_val(const char *path, const char *key, char *dest, int dest_len) 
     return found;
 }
 
-// 5. LETTURA FILE SEMPLICE (Reintrodotta)
+// 5. SIMPLE FILE READ (first line only)
 __attribute__((visibility("default")))
 int c_read_file_simple(const char *path, char *dest, int dest_len) {
     FILE *f = fopen(path, "r");
@@ -103,7 +103,7 @@ int c_read_file_simple(const char *path, char *dest, int dest_len) {
     return 0;
 }
 
-// 6. SPAWN DETACHED
+// 6. DETACHED SPAWN (fork/exec, returns child PID or 0 on failure)
 __attribute__((visibility("default")))
 int c_spawn_detached(const char *path, char *const argv[]) {
     pid_t pid = fork();
@@ -121,7 +121,7 @@ int c_spawn_detached(const char *path, char *const argv[]) {
     return (pid > 0) ? (int)pid : 0;
 }
 
-// 7. MONITORAGGIO (Polling /proc per evitare conflitti con waitpid di Python)
+// 7. PROCESS MONITOR (/proc polling every 200ms, avoids waitpid conflict with Python subprocess)
 __attribute__((visibility("default")))
 int c_monitor_process(int pid, int timeout_sec) {
     char path[64];
@@ -134,7 +134,7 @@ int c_monitor_process(int pid, int timeout_sec) {
     return 1;
 }
 
-// 8. NOTIFICA SYSTEMD
+// 8. SYSTEMD READINESS NOTIFICATION (handles abstract sockets via '@' prefix)
 __attribute__((visibility("default")))
 void c_sd_notify_ready() {
     const char *sock_path = getenv("NOTIFY_SOCKET");
@@ -144,7 +144,7 @@ void c_sd_notify_ready() {
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    // NOTIFY_SOCKET può iniziare con '@' per socket astratti (standard systemd)
+    // NOTIFY_SOCKET may use '@' prefix for abstract sockets (systemd standard)
     if (sock_path[0] == '@') {
         addr.sun_path[0] = '\0';
         strncpy(addr.sun_path + 1, sock_path + 1, sizeof(addr.sun_path) - 2);
