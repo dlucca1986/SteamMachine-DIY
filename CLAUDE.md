@@ -100,3 +100,11 @@ YAML game profiles use `STEAM_APPID` or `SDY_ID` as the identifier. Global confi
 - **SSoT reads are cached**: `get_conf_val` caches after first read per process. Changes to `steamos_diy.conf` require a service restart to take effect.
 - **Root for install, user for runtime**: The service drops to the real user's UID (resolved via `SUDO_UID` / `PKEXEC_UID`). The Python modules in `/usr/local/lib/steamos_diy/` run as user.
 - **Gamescope capabilities**: `cap_sys_admin,cap_sys_nice,cap_ipc_lock` are set on the binary via `setcap`. Replacing the gamescope binary loses these and requires re-running `install.sh`.
+
+## Coding Gotchas
+
+- **`load_ssot()` returns `bool`** — always check the return value before proceeding. Ignoring it causes silent failures where backup/restore runs with wrong or default paths. Pattern: `if not load_ssot(): sys.exit(1)`.
+- **`spawn_native(path, args)` — `args` includes `argv[0]`** — the full argv array is passed directly to `execv`, so `args[0]` must be the program name (e.g. `["/usr/bin/steam", "-shutdown"]`). Do not strip `argv[0]`.
+- **`tar.getmember()` raises `KeyError`**, it never returns `None`. Use `try/except KeyError`, not `if member is None`.
+- **`c_monitor_process` uses `/proc/<pid>` polling** — not `waitpid`. Do not mix it with Python's `subprocess.wait()` on the same PID; they are compatible precisely because neither reaps the process.
+- **`uninstall.sh` removes `[multilib]` from `pacman.conf`** interactively — it only removes the block if the exact `[multilib]` + `Include` lines are present. If the user had multilib before installing, they will be asked anyway; they can safely answer `n`.
