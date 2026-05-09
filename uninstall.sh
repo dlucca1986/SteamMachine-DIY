@@ -117,6 +117,16 @@ remove_files() {
         setcap -r /usr/bin/gamescope 2>/dev/null || true
     fi
 
+    # Optional: Remove multilib from pacman.conf
+    if grep -q "^\[multilib\]" /etc/pacman.conf; then
+        echo -e "${YELLOW}>>> Remove [multilib] from /etc/pacman.conf? (y/n)${NC}"
+        read -r -p "> " confirm_ml
+        if [[ "$confirm_ml" =~ ^[Yy]$ ]]; then
+            sed -i '/^\[multilib\]/,/^Include = \/etc\/pacman.d\/mirrorlist$/d' /etc/pacman.conf
+            info "Multilib removed from pacman.conf."
+        fi
+    fi
+
     # Optional Wipe of User Configurations
     echo -e "${RED}>>> Delete user configurations in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
     read -r -p "> " confirm_wipe
