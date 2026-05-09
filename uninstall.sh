@@ -53,7 +53,7 @@ cleanup_services() {
 
 # --- 2. Restore Display Manager & Target ---
 restore_display_manager() {
-    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (KDE/SDDM/GDM)? (y/n)${NC}"
+    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (/SDDM/PLM)? (y/n)${NC}"
     read -r -p "> " confirm_dm
     if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
         # Check for Plasmalogin (Plasma 6), SDDM, or GDM
