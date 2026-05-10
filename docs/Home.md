@@ -4,22 +4,25 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
-[![Drivers](https://img.shields.io/badge/Drivers-Full%20Open--Source-orange.svg)](#)
+[![Drivers](https://img.shields.io/badge/Drivers-AMD%20%7C%20Intel%20%7C%20NVIDIA-orange.svg)](#)
 
 ---
 
+Transforms Arch Linux into a console-style gaming system — no display manager, direct Gamescope integration, atomic session management, and per-game profile support.
+
+---
 
 ### 🏗️ Architecture & Setup
 * 📖 **[Project Overview](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Project-Overview)**: System requirements and design principles.
 * 🚀 **[Installer Workflow](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Installer-Workflow)**: Breakdown of the installation process and system configuration.
-* 🏗️ **[Architecture & Stability](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture)**: Technical implementation of **Atomic Writes** and session transition logic.
+* 🏗️ **[Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture)**: Technical implementation of **Atomic Writes** and session transition logic.
 * 🛠️ **[The Utilities Engine](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine)**: Shared modules for I/O handling, SSoT parsing, and logging.
 * ⚡ **[Zero-DM Boot & TTY1](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Zero-DM-Setup)**: TTY1 session management and display manager bypass configuration.
 
 ### 🎮 Gaming & Compatibility
-* 🎮 **[SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch)**: Documentation for `session_launch.py` and the session management loop.
+* 🖥️ **[SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch)**: Documentation for `session_launch.py` and the session management loop.
 * ⚙️ **[Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping)**: Parsing logic for injecting custom **Gamescope** arguments.
-* 🎮 **[Game Wrapper (sdy)](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Game-Wrapper-(sdy))**: Game discovery, `AppID`matching, and profile overrides logic.
+* 🎮 **[Game Wrapper (sdy)](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Game-Wrapper-(sdy))**: Game discovery, `AppID` matching, and profile overrides logic.
 
 ### 🛠️ Tools & Maintenance
 * 🛠️ **[SteamMachine-DIY Control Center](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center)**: Reference for the PyQt6 configuration dashboard.
