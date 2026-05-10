@@ -60,8 +60,9 @@ The supervisor uses an event-driven mechanism to monitor process health and prev
 The launcher utilizes the `jlog` system. Session logs can be monitored via journalctl:
 `journalctl -u steamos_diy.service -f`
 
-* **Core Tags**: `CORE`, `STEAM`, `SYSTEM`.
+* **Tags used by this module**: `CORE` (lifecycle, crash recovery, signals), `STEAM` (Gamescope launch args, game events).
 * **Configuration**: Logging verbosity is defined by `LOG_LEVEL` in `steamos_diy.conf`.
+* **Readiness**: Because the service uses `Type=notify`, `systemctl status steamos_diy.service` shows `active (running)` only after `sd_notify_ready()` has been called — i.e., after the session has passed the validation window.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

@@ -11,12 +11,13 @@ This page outlines the deployment procedure for the framework and the associated
 ## 🚀 Installation Stages
 
 ### 1. Hardware & Driver Audit
-The installer identifies the GPU via `lspci` to deploy the Vulkan stack (32/64-bit) required for Proton compatibility:
+The installer identifies the GPU via `lspci` (scanning both `VGA compatible controller` and `3D controller` entries, covering NVIDIA multi-GPU setups where the discrete card appears as a 3D controller) to deploy the Vulkan stack (32/64-bit) required for Proton compatibility:
 
 * **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`.
 * **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva-mesa-driver`, `lib32-libva-mesa-driver`, `mesa`, `lib32-mesa`.
 * **NVIDIA (Proprietary):** If the `nvidia` kernel module package is already installed, installs `nvidia-utils`, `lib32-nvidia-utils`.
 * **NVIDIA (NVK/Nouveau):** If no proprietary driver is detected, installs `mesa`, `lib32-mesa` for the open-source Vulkan ICD.
+* **Unrecognized GPU:** If no known vendor is detected, driver-specific packages are skipped and a warning is printed. The base stack is still installed.
 
 ### 2. Dependency & Privilege Management
 Configures system access and installs the software stack:
@@ -43,6 +44,7 @@ Deploys symbolic links to align the environment with **SteamOS** expectations:
 Replaces traditional Display Managers with a custom systemd service:
 * **Getty Masking:** The installer **masks** `getty@tty1.service` to prevent terminal conflicts and ensures exclusive control of TTY1.
 * **PAM Initialization:** Uses `PAMName=login` to grant the session full access to hardware resources (Pipewire, GPU) without a manual login.
+* **Readiness Notification:** `Type=notify` is set so systemd only marks the service as active after `READY=1` is received — which happens only after the session passes the validation window.
 * **Watchdog Protection:** Configured with `Restart=always` for automatic session recovery.
 * **Default Target:** Sets `graphical.target` as the systemd default via `systemctl set-default graphical.target`.
 

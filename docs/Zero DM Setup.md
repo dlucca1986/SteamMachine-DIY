@@ -29,6 +29,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 *   **Targeting**: The unit is linked to `graphical.target.wants/`. Standard DMs (SDDM, plasmalogin) are disabled to avoid resource conflicts.
 *   **TTY Exclusive Access**: The service masks `getty@tty1.service` to take direct control of `/dev/tty1`, preventing login prompts from flickering during boot.
 *   **PAM Authentication**: By using `PAMName=login`, the service initializes a full authenticated session, ensuring proper permissions for **Pipewire**, **DRI/GPU acceleration**, and device mounting.
+*   **Readiness Notification**: `Type=notify` is set so systemd receives `READY=1` only after the session survives the validation window. This means dependent units and `systemctl start` calls block until the session is confirmed stable.
 
 ### Environment & Recovery
 *   **Runtime Context**: The service manages `XDG_RUNTIME_DIR` manually to support Wayland/Gamescope outside of a standard desktop environment.
@@ -39,7 +40,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 >
 > Modern Plasma 6.x environments may use `plasmalogin.service`.
 >
-> The SteamMachine-DIY installer (v1.2.2+) automatically detects and disables this to ensure framework priority.
+> The SteamMachine-DIY installer (v1.3.4+) automatically detects and disables this to ensure framework priority.
 >
 > Please refer to the **[Arch Wiki](https://wiki.archlinux.org/title/Plasma_Login_Manager)** for technical details.
 
