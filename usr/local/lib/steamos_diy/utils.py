@@ -4,7 +4,7 @@
 # PROJECT:      SteamMachine-DIY - Shared Library
 # VERSION:      1.7.9
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
-# PHILOSOPHY:   KISS & Comprehensive.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/utils.py
 # LICENSE:      MIT

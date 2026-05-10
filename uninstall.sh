@@ -3,9 +3,8 @@
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
 # VERSION:      1.3.5 - Atomic Restoration
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
-# PHILOSOPHY:   Aggressive VT takeover to prevent black screens and lockups.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# PATH:         /usr/local/lib/steamos_diy/uninstall.sh
 # LICENSE:      MIT
 # =============================================================================
 
@@ -37,7 +36,6 @@ USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
     warn "Active DIY session detected. Relocating process to safe scope..."
     exec systemd-run --scope --slice=app.slice --unit="sdy-uninstaller-$(date +%s)" bash "$(realpath "$0")" "$@"
-    exit 0
 fi
 
 info "Starting Atomic Uninstallation for user: $REAL_USER"
@@ -53,9 +51,6 @@ cleanup_services() {
     info "Unmasking and forcing Getty on TTY1 (Emergency Access)..."
     systemctl unmask getty@tty1.service 2>/dev/null || true
     systemctl enable getty@tty1.service 2>/dev/null || true
-
-    # Force kernel to switch to VT1 immediately to avoid black screen hang
-    chvt 1 || true
 
     # Clean unit files
     rm -f /etc/systemd/system/steamos_diy.service
@@ -149,10 +144,11 @@ remove_components
 success "UNINSTALLATION COMPLETED!"
 info "The system has been restored. TTY1 is now the primary output."
 
-finalize_uninstallation
-
 echo -e "${CYAN}>>> Reboot now to ensure a clean state? (y/n)${NC}"
 read -r -p "> " confirm_reboot
+
+finalize_uninstallation
+
 if [[ "$confirm_reboot" =~ ^[Yy]$ ]]; then
     reboot
 fi
