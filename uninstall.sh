@@ -1,10 +1,12 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      1.3.4 - Precision Cleanup
+# VERSION:      1.3.5 - Atomic Restoration
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
-# PHILOSOPHY:   Ensures system accessibility and clean symlink removal.
+# PHILOSOPHY:   Aggressive VT takeover to prevent black screens and lockups.
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/lib/steamos_diy/uninstall.sh
+# LICENSE:      MIT
 # =============================================================================
 
 set -e
@@ -21,7 +23,7 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# --- Root Check ---
+# --- Root & Environment Check ---
 if [ "$EUID" -ne 0 ]; then
     error "Please run as root (sudo ./uninstall.sh)"
     exit 1
@@ -30,139 +32,126 @@ fi
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
-# --- Cgroup Safety Check ---
-# If this shell is inside steamos_diy.service's cgroup (e.g. running from
-# Konsole in Desktop mode or a terminal in Gaming mode), stopping the service
-# would kill this process before the uninstall completes.
-# Fix: re-exec inside a transient systemd scope outside that cgroup.
+# --- Cgroup Escape (Survival Mechanism) ---
+# Prevents the script from being killed when steamos_diy.service stops.
 if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
-    warn "Running inside the active DIY session cgroup."
-    info "Re-launching in an isolated scope to survive the session stop..."
-    set +e
-    exec systemd-run --scope --collect --wait --pty bash "$(realpath "$0")" "$@"
-    set -e
-    error "Auto-relocation failed. Please run from TTY2 instead:"
-    warn "  Press Ctrl+Alt+F2, log in, then: sudo $(realpath "$0")"
-    exit 1
+    warn "Active DIY session detected. Relocating process to safe scope..."
+    exec systemd-run --scope --slice=app.slice --unit="sdy-uninstaller-$(date +%s)" bash "$(realpath "$0")" "$@"
+    exit 0
 fi
 
-info "Starting uninstallation for user: $REAL_USER"
+info "Starting Atomic Uninstallation for user: $REAL_USER"
 
-# --- 1. Service & Getty Restoration (Anti-Lockdown) ---
+# --- 1. Service & TTY Restoration (Emergency First) ---
 cleanup_services() {
-    info "Disarming DIY services and restoring Getty access..."
+    info "Preparing system restoration..."
 
-    if systemctl is-active steamos_diy.service &>/dev/null; then
-        info "Stopping active DIY session..."
-        systemctl stop steamos_diy.service || true
-    fi
+    # Disable DIY to prevent respawning
+    systemctl disable steamos_diy.service 2>/dev/null || true
 
-    if systemctl is-enabled steamos_diy.service &>/dev/null; then
-        systemctl disable steamos_diy.service || true
-    fi
+    # CRITICAL: Force TTY1 Getty to be ready and active
+    info "Unmasking and forcing Getty on TTY1 (Emergency Access)..."
+    systemctl unmask getty@tty1.service 2>/dev/null || true
+    systemctl enable getty@tty1.service 2>/dev/null || true
 
+    # Force kernel to switch to VT1 immediately to avoid black screen hang
+    chvt 1 || true
+
+    # Clean unit files
     rm -f /etc/systemd/system/steamos_diy.service
-
-    info "Unmasking Getty on TTY1 (Emergency Access)..."
-    systemctl unmask getty@tty1.service
-    systemctl enable getty@tty1.service || true
-
     systemctl daemon-reload
 }
 
-# --- 2. Restore Display Manager & Target ---
+# --- 2. Robust Display Manager Restoration ---
 restore_display_manager() {
-    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (SDDM/plasmalogin)? (y/n)${NC}"
-    read -r -p "> " confirm_dm
-    if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
-        # Check for Plasmalogin (Plasma 6), SDDM, or GDM
-        if systemctl list-unit-files | grep -q "plasmalogin.service"; then
-            systemctl enable plasmalogin.service
-            success "Plasma Login Manager re-enabled."
-        elif systemctl list-unit-files | grep -q "sddm.service"; then
-            systemctl enable sddm.service
-            success "SDDM re-enabled."
-        elif systemctl list-unit-files | grep -q "gdm.service"; then
-            systemctl enable gdm.service
-            success "GDM re-enabled."
+    info "Detecting system Display Manager..."
+    local dm_service=""
+
+    # Prioritize standard DM services
+    if systemctl list-unit-files | grep -q "plasmalogin.service"; then
+        dm_service="plasmalogin.service"
+    elif systemctl list-unit-files | grep -q "sddm.service"; then
+        dm_service="sddm.service"
+    elif systemctl list-unit-files | grep -q "gdm.service"; then
+        dm_service="gdm.service"
+    elif systemctl list-unit-files | grep -q "lightdm.service"; then
+        dm_service="lightdm.service"
+    fi
+
+    if [ -n "$dm_service" ]; then
+        echo -e "${YELLOW}>>> Found $dm_service. Re-enable as default? (y/n)${NC}"
+        read -r -p "> " confirm_dm
+        if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
+            systemctl unmask "$dm_service" 2>/dev/null || true
+            systemctl enable "$dm_service" --force
+            systemctl set-default graphical.target
+            success "Target set to graphical.target ($dm_service)."
+        else
+            warn "Setting system to multi-user.target (CLI mode)."
+            systemctl set-default multi-user.target
         fi
-        systemctl set-default graphical.target || true
     else
-        warn "Restoring system to default CLI (multi-user.target)..."
-        systemctl set-default multi-user.target || true
+        warn "No standard Display Manager found. Defaulting to CLI."
+        systemctl set-default multi-user.target
     fi
 }
 
-# --- 3. Remove Shim Links ---
-remove_shim_links() {
-    info "Removing SteamOS compatibility shim layer..."
+# --- 3. Comprehensive File Cleanup ---
+remove_components() {
+    info "Removing DIY shims and libraries..."
 
+    # SteamOS Shims
     rm -rf /usr/bin/steamos-polkit-helpers
+    rm -f /usr/bin/steamos-session-launch /usr/bin/steamos-session-select \
+          /usr/bin/steamos-select-branch /usr/bin/jupiter-biosupdate \
+          /usr/bin/steamos-update /usr/bin/steamos-set-timezone
 
-    rm -f /usr/bin/steamos-session-launch
-    rm -f /usr/bin/steamos-session-select
-    rm -f /usr/bin/steamos-select-branch
-    rm -f /usr/bin/jupiter-biosupdate
-    rm -f /usr/bin/steamos-update
-    rm -f /usr/bin/steamos-set-timezone
+    # SDY Tools (Sync with utils.py standards)
+    rm -f /usr/local/bin/sdy /usr/local/bin/sdy-control-center \
+          /usr/local/bin/sdy-backup /usr/local/bin/sdy-restore
 
-    rm -f /usr/local/bin/sdy
-    rm -f /usr/local/bin/sdy-control-center
-    rm -f /usr/local/bin/sdy-backup
-    rm -f /usr/local/bin/sdy-restore
-    
-    success "Symlinks cleaned."
-}
-
-# --- 4. Remove System Files ---
-remove_files() {
-    info "Removing DIY libraries and system configurations..."
-    
+    # Project Files
     rm -rf /usr/local/lib/steamos_diy
     rm -rf /var/lib/steamos_diy
     rm -f /etc/default/steamos_diy.conf
-    
-    # Desktop entries and ALPM hooks
     rm -f /usr/local/share/applications/Control_Center.desktop
     rm -f /usr/local/share/applications/Game_Mode.desktop
     rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
 
-    # Reset capabilities for gamescope
+    # Reset Capabilities
     if [ -x /usr/bin/gamescope ]; then
-        info "Resetting gamescope binary capabilities..."
         setcap -r /usr/bin/gamescope 2>/dev/null || true
     fi
 
-    # Optional: Remove multilib from pacman.conf
-    if grep -q "^\[multilib\]" /etc/pacman.conf; then
-        echo -e "${YELLOW}>>> Remove [multilib] from /etc/pacman.conf? (y/n)${NC}"
-        read -r -p "> " confirm_ml
-        if [[ "$confirm_ml" =~ ^[Yy]$ ]]; then
-            sed -i '/^\[multilib\]/,/^Include = \/etc\/pacman.d\/mirrorlist$/d' /etc/pacman.conf
-            sed -i '/^$/{N;/^\n$/d}' /etc/pacman.conf
-            info "Multilib removed from pacman.conf."
-        fi
-    fi
-
-    # Optional Wipe of User Configurations
-    echo -e "${RED}>>> Delete user configurations in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
+    # User Configs
+    echo -e "${RED}>>> Delete user data in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
     read -r -p "> " confirm_wipe
     if [[ "$confirm_wipe" =~ ^[Yy]$ ]]; then
         rm -rf "$USER_HOME/.config/steamos_diy"
-        info "User configurations deleted."
+        info "User configurations purged."
+    fi
+}
+
+# --- 4. Finalize & Session Handoff ---
+finalize_uninstallation() {
+    if systemctl is-active steamos_diy.service &>/dev/null; then
+        warn "Terminating DIY session in 2 seconds..."
+        # We stop the service in the background and immediately start Getty
+        ( sleep 2; systemctl stop steamos_diy.service; systemctl start getty@tty1.service ) &
     fi
 }
 
 # --- Execution Flow ---
 cleanup_services
 restore_display_manager
-remove_shim_links
-remove_files
+remove_components
 
 success "UNINSTALLATION COMPLETED!"
-info "System restored. TTY1 Getty is now active."
+info "The system has been restored. TTY1 is now the primary output."
 
-echo -e "${CYAN}>>> Reboot now to apply all changes? (y/n)${NC}"
+finalize_uninstallation
+
+echo -e "${CYAN}>>> Reboot now to ensure a clean state? (y/n)${NC}"
 read -r -p "> " confirm_reboot
 if [[ "$confirm_reboot" =~ ^[Yy]$ ]]; then
     reboot
