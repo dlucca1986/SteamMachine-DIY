@@ -3,7 +3,7 @@
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
 # VERSION:      1.3.5 - Atomic Restoration
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
-# PHILOSOPHY:   Aggressive VT takeover to prevent black screens and lockups.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/uninstall.sh
 # LICENSE:      MIT
