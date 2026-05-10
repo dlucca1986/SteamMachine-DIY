@@ -4,7 +4,7 @@
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
 # VERSION:      1.3.4 (Wrapper and Native Discovery)
 # DESCRIPTION:  Executes games with per-game overrides and global manifesto.
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid) & Zero-Fork Performance.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/sdy.py
 # LICENSE:      MIT
