@@ -3,6 +3,7 @@
 # PROJECT:      SteamMachine-DIY - Master Installer
 # VERSION:      1.3.4 - Sync-Enabled Production Ready
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # LICENSE:      MIT
 # =============================================================================
