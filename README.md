@@ -65,7 +65,7 @@ Special thanks to the Linux gaming community:
 ## 🚀 Installation
 
 ```bash
-git clone https://github.com/dlucca1986/SteamMachine-DIY.git
+git clone -b testing https://github.com/dlucca1986/SteamMachine-DIY.git
 cd SteamMachine-DIY*
 chmod +x install.sh
 sudo ./install.sh
