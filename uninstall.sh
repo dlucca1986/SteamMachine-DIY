@@ -30,6 +30,22 @@ fi
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
+# --- Cgroup Safety Check ---
+# If this shell is inside steamos_diy.service's cgroup (e.g. running from
+# Konsole in Desktop mode or a terminal in Gaming mode), stopping the service
+# would kill this process before the uninstall completes.
+# Fix: re-exec inside a transient systemd scope outside that cgroup.
+if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
+    warn "Running inside the active DIY session cgroup."
+    info "Re-launching in an isolated scope to survive the session stop..."
+    set +e
+    exec systemd-run --scope --collect --wait --pty bash "$(realpath "$0")" "$@"
+    set -e
+    error "Auto-relocation failed. Please run from TTY2 instead:"
+    warn "  Press Ctrl+Alt+F2, log in, then: sudo $(realpath "$0")"
+    exit 1
+fi
+
 info "Starting uninstallation for user: $REAL_USER"
 
 # --- 1. Service & Getty Restoration (Anti-Lockdown) ---
