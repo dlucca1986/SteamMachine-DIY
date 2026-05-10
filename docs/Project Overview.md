@@ -11,11 +11,12 @@ This page outlines the modular framework for configuring Arch Linux as a dedicat
 ### 📍 System Requirements
 
 * **Distribution**: Arch Linux or Arch-based distributions (e.g., EndeavourOS) using `systemd`.
-* **Graphics Stack**: **100% Open Source Drivers** (Mesa).
-    * **AMD**: RADV - Recommended
+* **Graphics Stack**: Open-source drivers recommended (Mesa). Proprietary NVIDIA also supported.
+    * **AMD**: RADV — Recommended
     * **Intel**: ANV
-    * **NVIDIA**: NVK
-    * **Display Manager**: **None**. The system manages session handovers via a `systemd`service on TTY1.
+    * **NVIDIA (NVK/Nouveau)**: Mesa open-source Vulkan ICD
+    * **NVIDIA (Proprietary)**: `nvidia-utils` deployed automatically if the `nvidia` module is detected
+    * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
     * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 
 > [!IMPORTANT]

@@ -126,7 +126,11 @@ deploy_files() {
     cp -rf usr/local/lib/steamos_diy/* "$LIB_DIR/"
 
     info "Building C-Core from source (steamos_diy_core.c)..."
-    gcc -O2 -fPIC -Wall -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c
+    gcc -O2 -fPIC -Wall -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
+        || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
+    python3 -c "import ctypes; ctypes.CDLL('$LIB_DIR/libcore.so')" 2>/dev/null \
+        || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
+    info "C-Core verified and loadable."
 
     # Set strict permissions: readable utils/libs, executable binaries
     chmod 755 "$LIB_DIR"

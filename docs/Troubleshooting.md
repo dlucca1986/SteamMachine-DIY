@@ -54,8 +54,8 @@ alias sdy-errors='journalctl -u steamos_diy.service --priority=3'
 
 # --- 🚀 SESSION MANAGEMENT ---
 # Switch session (Desktop/Steam)
-alias sdy-mode-desktop='python3 /usr/local/lib/steamos_diy/session_select.py desktop'
-alias sdy-mode-game='python3 /usr/local/lib/steamos_diy/session_select.py steam'
+alias sdy-mode-desktop='steamos-session-select desktop'
+alias sdy-mode-game='steamos-session-select steam'
 
 # --- 🛠️ EMERGENCY & RESET ---
 # Check session status

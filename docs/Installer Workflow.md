@@ -30,6 +30,7 @@ Defines the Single **Source of Truth** (SSoT) strategy:
 
 * **System Master:** Generates `/etc/default/steamos_diy.conf`, using `sed` to inject the real **Home** path (`{{HOME}}`). The **Username** (`{{USER}}`) and **UID** (`{{UID}}`) placeholders are patched into the systemd service file in stage 5.
 * **Binary Hierarchy:** Installs all core logic in `/usr/local/lib/steamos_diy/` with execution permissions.
+* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -fPIC -shared`. After compilation, the library is verified with `ctypes.CDLL()` — if either step fails, installation is aborted with a clear error message.
 * **State Management:** Initializes the session tracker at `/var/lib/steamos_diy/next_session`.
 
 ### 4. SteamOS Compatibility Shim Layer
