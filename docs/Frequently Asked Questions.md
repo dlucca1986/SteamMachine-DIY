@@ -9,10 +9,10 @@ This page outlines common technical inquiries regarding the SteamMachine-DIY arc
 
 ## 🛠️ General Questions
 
-### 1. Why replace SDDM/GDM?
+### 1. Why replace SDDM/plasmalogin?
 Traditional display managers conflict with Gamescope's requirement for exclusive display control. Replacing them with `steamos_diy.service` means:
-* The service starts immediately after TTY auto-login on `graphical.target`.
-* The GPU is released before switching between Steam and Plasma.
+* The service authenticates the session directly via `PAMName=login` (no login prompt, no display manager). `getty@tty1` is masked.
+* The GPU is handed over cleanly before switching between Steam and Plasma.
 * No background display manager processes consuming resources.
 
 ### 2. Is NVIDIA supported?
@@ -25,7 +25,7 @@ Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:
 * Press `Ctrl + Alt + F2` to switch to **TTY2**.
-* Login and use the `sdy-mode-desktop` alias to recover.
+* Login and run: `steamos-session-select desktop`
 
 ---
 
@@ -41,7 +41,9 @@ The system will automatically identify the game (via AppID or executable name) a
 Yes. `sdy` is binary-agnostic. It scans the executable path and looks for a matching YAML profile. You can use it with Heroic, Lutris, or standalone binaries.
 
 ### 6. Steam shows "Update Error" or "BIOS Update Failed".
-This is expected on non-Valve hardware. We provide **Compatibility Shims** that intercept these calls and return a "Success" code to maintain Steam UI stability.
+This is expected on non-Valve hardware. We provide **Compatibility Shims** that intercept these calls and return a safe exit code to maintain Steam UI stability.
+* `steamos-update` exits **7** (RAUC convention: "no update available") — Steam treats this as "up to date".
+* All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, etc.) exit **0** (success).
 ---
 
 ## 💻 Logic & Control Center
@@ -81,10 +83,15 @@ The project uses a **non-destructive** approach. We don't modify core system bin
 See [Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture) for the complete filesystem hierarchy.
 
 ### 12. Where can I find the logs for debugging?
-We use the **System Journal**. Use the following command or check the **Logs** tab in the Control Center:
+We use the **System Journal**. Use the following commands or check the **Logs** tab in the Control Center:
 ```bash
+# Session logs (Gaming/Desktop lifecycle, crash recovery)
 journalctl -u steamos_diy.service -f
-````
+
+# Full log stream including helper shims and backup/restore
+# (helpers run outside the service cgroup, so -u alone misses them)
+journalctl -t CORE -t STEAM -t SYSTEM -f
+```
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.
