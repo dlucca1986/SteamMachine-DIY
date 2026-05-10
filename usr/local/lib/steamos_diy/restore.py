@@ -4,7 +4,7 @@
 # PROJECT:      SteamMachine-DIY - Restore Tool
 # VERSION:      1.3.0
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid) & High Performance
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/restore.py
 # LICENSE:      MIT
