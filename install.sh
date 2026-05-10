@@ -35,7 +35,7 @@ REAL_UID=$(id -u "$REAL_USER")
 # --- 1. Hardware Audit & Driver Selection ---
 check_gpu_and_drivers() {
     info "Auditing Hardware and Graphics Stack..."
-    GPU_INFO=$(lspci | grep -i vga)
+    GPU_INFO=$(lspci | grep -iE "vga|3d controller")
     DRIVER_PKGS=""
 
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
@@ -52,6 +52,8 @@ check_gpu_and_drivers() {
     elif echo "$GPU_INFO" | grep -iq "intel"; then
         info "Intel GPU detected. Preparing ANV and Mesa layers..."
         DRIVER_PKGS="vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
+    else
+        warn "GPU not recognized. Skipping driver-specific packages."
     fi
 }
 
@@ -63,16 +65,11 @@ install_dependencies() {
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     fi
 
-    # 2.2. Explicit Database Synchronization
-    # Ensures pacman finds the correct versions on mirrors
-    info "Synchronizing package databases..."
-    pacman -Sy
-
     # Core system and gaming dependencies
     BASE_PKGS="python python-pyqt6 python-yaml python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools mesa-utils pciutils procps-ng qt6-tools rsync gcc"
 
-    info "Installing core dependencies..."
-    pacman -S --needed --noconfirm $BASE_PKGS $DRIVER_PKGS
+    info "Synchronizing package databases and installing core dependencies..."
+    pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS
 
     info "Configuring system groups for user: $REAL_USER"
     # TTY group is essential for Python notify() to write to /dev/tty1
@@ -98,10 +95,13 @@ deploy_files() {
     local CONFIG_DEST="$USER_HOME/.config/steamos_diy"
     local CONFIG_SRC="etc/skel/.config/steamos_diy"
 
+    # Check for existing user YAML configs BEFORE creating directories
+    local HAS_EXISTING_YAML=false
+    compgen -G "$CONFIG_DEST/*.yaml" > /dev/null 2>&1 && HAS_EXISTING_YAML=true
+
     mkdir -p "$CONFIG_DEST/games.d"
 
-    # Check if source exists and contains yaml files
-    if [ -d "$CONFIG_DEST" ] && compgen -G "$CONFIG_SRC/*.yaml" > /dev/null; then
+    if $HAS_EXISTING_YAML; then
         warn "Existing configuration found in $CONFIG_DEST"
         read -r -p "Do you want to overwrite existing YAML configs? (y/N): " overwrite_configs
         if [[ "$overwrite_configs" =~ ^[Yy]$ ]]; then

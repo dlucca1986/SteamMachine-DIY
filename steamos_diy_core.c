@@ -57,7 +57,13 @@ void c_write_atomic(const char *path, const char *val) {
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) return;
-    write(fd, val, strlen(val));
+    size_t len = strlen(val);
+    ssize_t written = write(fd, val, len);
+    if (written < 0 || (size_t)written != len) {
+        close(fd);
+        unlink(tmp_path);
+        return;
+    }
     fdatasync(fd);
     close(fd);
     rename(tmp_path, path);

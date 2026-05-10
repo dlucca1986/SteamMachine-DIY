@@ -179,8 +179,8 @@ def _get_profile_path(
 def _resolve_games_dir() -> str:
     """Return the directory containing per-game YAML profiles.
 
-    Derives the path from the SSoT user_config location when available,
-    otherwise falls back to _FALLBACK_GAMES_DIR.
+    Reads games_conf_dir directly from the SSoT config. Falls back to
+    _FALLBACK_GAMES_DIR when the SSoT key is absent.
 
     Returns:
         Absolute path to the games.d directory. Existence is NOT checked
@@ -188,9 +188,9 @@ def _resolve_games_dir() -> str:
         directories (this is by design: profile resolution is best-effort
         and a missing directory simply means "no profile found").
     """
-    user_config_path = get_ssot_var("user_config")
-    if user_config_path:
-        return os.path.join(os.path.dirname(user_config_path), "games.d")
+    conf_dir = get_ssot_var("games_conf_dir")
+    if conf_dir:
+        return conf_dir
     return _FALLBACK_GAMES_DIR
 
 

@@ -10,9 +10,10 @@
 
 [Unit]
 Description=SteamMachine-DIY - Session Launcher
-After=systemd-user-sessions.service network.target
+After=systemd-user-sessions.service
 
 [Service]
+Type=notify
 User={{USER}}
 PAMName=login
 Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}

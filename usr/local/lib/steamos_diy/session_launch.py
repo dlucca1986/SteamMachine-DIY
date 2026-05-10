@@ -283,7 +283,7 @@ def run() -> None:
             signum: Signal number (SIGTERM=15, SIGINT=2).
             _frame: Stack frame (unused, required by signal.signal).
         """
-        jlog("SYSTEM", f"SIG_{signum}: Shutting down...")
+        jlog("CORE", f"SIG_{signum}: Shutting down...")
         live_proc = proc_holder[0]
         if live_proc is not None:
             _terminate_gracefully(live_proc)
