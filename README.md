@@ -19,11 +19,11 @@
 
 ## ✨ Key Features
 * **SSOT Architecture**: System lifecycle and identity are governed by a central configuration: `/etc/default/steamos_diy.conf`.
-* **Session Launcher**: Manages transitions between Gamescope and KDE Plasma using atomic state updates and kernel-level process monitoring.
+* **Session Launcher**: Manages transitions between Gamescope and KDE Plasma using atomic state updates and process monitoring via `proc.wait()`.
 * **Compatibility Shims**: Redirects SteamOS-specific system calls (e.g., updates, BIOS) to DIY logic, ensuring UI stability.
 * **Dynamic Parameter Mapping**: Maps YAML configuration flags directly to Gamescope command-line arguments without modifying source code.
 * **Game Wrapper (`sdy`)**: Intercepts game launches to apply per-game YAML profiles, environment variables, and wrappers (MangoHud, GameMode).
-* **Zero-DM Boot**: Eliminates SDDM/PLM overhead by running the session manager as a high-priority systemd service on TTY1.
+* **Zero-DM Boot**: Eliminates SDDM/plasmalogin overhead by running the session manager as a high-priority systemd service on TTY1.
 * **Control Center**: PyQt6 dashboard for system management, log analysis, and profile editing.
 
 ## 🛡️ Design Principles
@@ -35,8 +35,8 @@
 * **AMD**: RADV (Mesa).
 * **Intel**: ANV (Mesa).
 * **NVIDIA**:
-    * **Open Source Drivers (NVK/Nouveau)**: Natively supported via Mesa.
-    * **Proprietary Drivers**: **Supported.** The installer preserves your driver configuration without modification.
+    * **Open Source Drivers (NVK/Nouveau)**: Supported via Mesa. The installer detects the active driver and deploys `mesa` + `lib32-mesa`.
+    * **Proprietary Drivers**: **Supported.** When the `nvidia` kernel module is detected, the installer deploys `nvidia-utils` + `lib32-nvidia-utils`.
 
 > [!IMPORTANT]
 > **NVIDIA Proprietary Drivers & Gamescope**:
@@ -54,7 +54,7 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | **Execution** | `steam`, `gamescope`, `mangohud`, `gamemode`, `xorg-xwayland` |
 | **Python Stack** | `python`, `python-pyqt6`, `python-yaml`, `python-ruamel-yaml` |
 | **System Tools** | `vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng` |
-| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel`, `vulkan-nouveau`, `nvidia-utils` (+ 32-bit counterparts) |
+| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
 
 ## 🤝 Acknowledgments
 Special thanks to the Linux gaming community:

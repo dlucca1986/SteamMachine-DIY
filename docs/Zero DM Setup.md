@@ -1,0 +1,100 @@
+[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
+[![Session](https://img.shields.io/badge/Session-PAM%20Authenticated-blue.svg)](#)
+
+This page outlines the DM-less boot sequence and the direct GPU session handover implementation.
+
+---
+
+## 🔄 1. The Startup Sequence (Boot Flow)
+
+The system bypasses traditional login managers to initialize the graphical environment directly:
+
+1.  **Unit Initialization**: `systemd` triggers `steamos_diy.service` on TTY1 as part of the `graphical.target`.
+2.  **Configuration Sourcing**: The launcher reads global variables from the SSoT file (`/etc/default/steamos_diy.conf`).
+3.  **State Identification**: The engine queries `/var/lib/steamos_diy/next_session` to determine the target environment.
+4.  **Session Execution**:
+    *   **Gaming Mode**: Generates Gamescope parameters ➔ Spawns Steam ➔ Activates Watchdog.
+    *   **Desktop Mode**: Spawns a native KDE Plasma session.
+5.  *   **Session Transition**: `session_select.py` updates the state file and sends a termination signal to the active session. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
+
+---
+
+## 🏗️ 2. Core Implementation
+
+The framework integrates directly into the systemd hierarchy, replacing the display manager with a single service.
+
+### Systemd & TTY Control
+*   **Targeting**: The unit is linked to `graphical.target.wants/`. Standard DMs (SDDM, plasmalogin) are disabled to avoid resource conflicts.
+*   **TTY Exclusive Access**: The service masks `getty@tty1.service` to take direct control of `/dev/tty1`, preventing login prompts from flickering during boot.
+*   **PAM Authentication**: By using `PAMName=login`, the service initializes a full authenticated session, ensuring proper permissions for **Pipewire**, **DRI/GPU acceleration**, and device mounting.
+
+### Environment & Recovery
+*   **Runtime Context**: The service manages `XDG_RUNTIME_DIR` manually to support Wayland/Gamescope outside of a standard desktop environment.
+*   **Fault Tolerance**: A `Restart=always` policy with a `1-second` delay ensures the session recovers automatically from crashes or unexpected terminations.
+
+> [!IMPORTANT]
+> **Plasma 6 & plasmalogin**
+>
+> Modern Plasma 6.x environments may use `plasmalogin.service`.
+>
+> The SteamMachine-DIY installer (v1.2.2+) automatically detects and disables this to ensure framework priority.
+>
+> Please refer to the **[Arch Wiki](https://wiki.archlinux.org/title/Plasma_Login_Manager)** for technical details.
+
+---
+
+## 🖥️ 3. Session Handover Mechanism
+
+A session switch involves three components working in sequence:
+
+1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`).
+2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits cleanly.
+3. `steamos_diy.service` (`Restart=always`, `RestartSec=1.0s`) restarts the launcher, which reads the new target from the state file and spawns the next session.
+
+For the full lifecycle including crash recovery, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch).
+
+---
+
+## 🏎️ 4. Performance Optimization: Removing Plymouth
+To minimize boot latency, removing Plymouth is recommended.
+
+### **Step 1: Initramfs Configuration**
+
+#### **A. Systems using `mkinitcpio` (Standard Arch)**
+1. Edit `/etc/mkinitcpio.conf` and remove `plymouth` from the `HOOKS` array.
+2. Rebuild: `sudo mkinitcpio -P`
+
+#### **B. Systems using `dracut` (EndeavourOS / Modern Defaults)**
+1. Remove package: `sudo pacman -Rs plymouth`.
+2. Rebuild: `sudo dracut-rebuild` (or `sudo reinstall-kernels`).
+
+### **Step 2: Bootloader Parameters**
+Remove the `splash` flag from the kernel command line.
+
+#### **If using GRUB:**
+1. Edit `/etc/default/grub` and remove `splash` from `GRUB_CMDLINE_LINUX_DEFAULT`.
+2. Update config: `sudo grub-mkconfig -o /boot/grub/grub.cfg`.
+
+#### **If using systemd-boot:**
+1. Edit the entry file in `/boot/loader/entries/*.conf` (or `/etc/kernel/cmdline`).
+2. Remove `splash` from the `options` line.
+3. Run `sudo reinstall-kernels`.
+
+---
+
+## 💡 5. Post-Installation Tips
+### Disable Plasma Splash Screen
+To prevent visual artifacts during the handover to the Wayland compositor:
+1. Navigate to **System Settings** > **Colors & Themes** > **Splash Screen**.
+2. Select **None** and click **Apply**.
+
+---
+
+## 🛡️ Security & Remote Access
+* **Isolation**: Autologin is strictly hardware-bound to TTY1 and the local seat.
+* **Remote Access**: SSH and other network services remain fully protected by standard authentication protocols.
+
+---
+**[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

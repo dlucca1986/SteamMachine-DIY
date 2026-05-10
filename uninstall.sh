@@ -36,14 +36,17 @@ info "Starting uninstallation for user: $REAL_USER"
 cleanup_services() {
     info "Disarming DIY services and restoring Getty access..."
 
+    if systemctl is-active steamos_diy.service &>/dev/null; then
+        info "Stopping active DIY session..."
+        systemctl stop steamos_diy.service || true
+    fi
+
     if systemctl is-enabled steamos_diy.service &>/dev/null; then
         systemctl disable steamos_diy.service || true
     fi
 
-    # Remove unit files
     rm -f /etc/systemd/system/steamos_diy.service
-    
-    # CRITICAL: Restore TTY1 Getty immediately
+
     info "Unmasking Getty on TTY1 (Emergency Access)..."
     systemctl unmask getty@tty1.service
     systemctl enable getty@tty1.service || true
@@ -53,7 +56,7 @@ cleanup_services() {
 
 # --- 2. Restore Display Manager & Target ---
 restore_display_manager() {
-    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (/SDDM/PLM)? (y/n)${NC}"
+    echo -e "${YELLOW}>>> Do you want to re-enable a standard Display Manager (SDDM/plasmalogin)? (y/n)${NC}"
     read -r -p "> " confirm_dm
     if [[ "$confirm_dm" =~ ^[Yy]$ ]]; then
         # Check for Plasmalogin (Plasma 6), SDDM, or GDM
@@ -74,14 +77,12 @@ restore_display_manager() {
     fi
 }
 
-# --- 3. Remove Shim Links (Speculated to Installer 1.3.2) ---
+# --- 3. Remove Shim Links ---
 remove_shim_links() {
     info "Removing SteamOS compatibility shim layer..."
 
-    # 1. Polkit Helpers Directory
     rm -rf /usr/bin/steamos-polkit-helpers
 
-    # 2. Global Binaries (Specularity with Installer)
     rm -f /usr/bin/steamos-session-launch
     rm -f /usr/bin/steamos-session-select
     rm -f /usr/bin/steamos-select-branch
@@ -89,7 +90,6 @@ remove_shim_links() {
     rm -f /usr/bin/steamos-update
     rm -f /usr/bin/steamos-set-timezone
 
-    # 3. User CLI Tools (In /usr/local/bin as per standards)
     rm -f /usr/local/bin/sdy
     rm -f /usr/local/bin/sdy-control-center
     rm -f /usr/local/bin/sdy-backup
@@ -123,6 +123,7 @@ remove_files() {
         read -r -p "> " confirm_ml
         if [[ "$confirm_ml" =~ ^[Yy]$ ]]; then
             sed -i '/^\[multilib\]/,/^Include = \/etc\/pacman.d\/mirrorlist$/d' /etc/pacman.conf
+            sed -i '/^$/{N;/^\n$/d}' /etc/pacman.conf
             info "Multilib removed from pacman.conf."
         fi
     fi
@@ -136,14 +137,6 @@ remove_files() {
     fi
 }
 
-# --- 5. Finalize Session ---
-finalize_session() {
-    if systemctl is-active steamos_diy.service &>/dev/null; then
-        warn "Active DIY session detected. Terminating in 3 seconds..."
-        ( sleep 3; systemctl stop steamos_diy.service ) & 
-    fi
-}
-
 # --- Execution Flow ---
 cleanup_services
 restore_display_manager
@@ -152,8 +145,6 @@ remove_files
 
 success "UNINSTALLATION COMPLETED!"
 info "System restored. TTY1 Getty is now active."
-
-finalize_session
 
 echo -e "${CYAN}>>> Reboot now to apply all changes? (y/n)${NC}"
 read -r -p "> " confirm_reboot

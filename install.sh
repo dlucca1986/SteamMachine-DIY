@@ -39,8 +39,13 @@ check_gpu_and_drivers() {
     DRIVER_PKGS=""
 
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
-        info "Nvidia GPU detected. Preparing proprietary driver stack..."
-        DRIVER_PKGS="nvidia-utils lib32-nvidia-utils"
+        if pacman -Qq nvidia &>/dev/null; then
+            info "Nvidia GPU detected. Proprietary driver active — preparing userspace utilities..."
+            DRIVER_PKGS="nvidia-utils lib32-nvidia-utils"
+        else
+            info "Nvidia GPU detected. NVK/Nouveau active — preparing Mesa Vulkan stack..."
+            DRIVER_PKGS="mesa lib32-mesa"
+        fi
     elif echo "$GPU_INFO" | grep -iq "amd"; then
         info "AMD GPU detected. Preparing RADV and Mesa layers..."
         DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon vulkan-mesa-layers lib32-vulkan-mesa-layers libva-mesa-driver lib32-libva-mesa-driver mesa lib32-mesa"
@@ -180,7 +185,7 @@ setup_shim_links() {
     # Administrative & CLI Tools
     ln -sf "$CORE/sdy.py"                    /usr/local/bin/sdy
     ln -sf "$CORE/control_center.py"         /usr/local/bin/sdy-control-center
-    ln -sf "$CORE/backup_tool.py"            /usr/local/bin/sdy-backup
+    ln -sf "$CORE/backup.py"                 /usr/local/bin/sdy-backup
     ln -sf "$CORE/restore.py"                /usr/local/bin/sdy-restore
 
     chmod +x /usr/bin/steamos-polkit-helpers/*
@@ -210,7 +215,7 @@ setup_systemd_lockdown() {
 disable_display_managers() {
     info "Disabling conflicting Display Managers..."
     # Including 'plasmalogin' for Plasma 6 support and other common DMs
-    for dm in sddm gdm plasmalogin; do
+    for dm in sddm plasmalogin; do
         systemctl disable "$dm" 2>/dev/null || true
     done
 }
