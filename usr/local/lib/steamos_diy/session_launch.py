@@ -169,21 +169,9 @@ def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     return target
 
 
-def _post_session_message(
-    target: str, original_target: str, ret_code: int
-) -> str:
-    """Compose the final TTY message shown after the session ends.
-
-    Args:
-        target: Final target (may have been switched to "desktop" by
-            crash recovery).
-        original_target: Target read at startup, used to detect a switch.
-        ret_code: Exit code returned by the spawned session.
-
-    Returns:
-        Human-readable message string.
-    """
-    if target != original_target or target == "desktop":
+def _post_session_message(target: str, ret_code: int) -> str:
+    """Compose the final TTY message shown after the session ends."""
+    if target == "desktop":
         return f"Switching to {target.capitalize()}..."
     return f"Ended (Code: {ret_code})"
 
@@ -265,7 +253,6 @@ def run() -> None:
     """
     next_path = get_ssot_var("next_session", DEFAULT_SESS_PATH)
     target = read_session_target(next_path, default="steam")
-    original_target = target
 
     notify(STATUS_MAP.get(target, "Initializing..."))
 
@@ -302,7 +289,7 @@ def run() -> None:
         lambda p: proc_holder.__setitem__(0, p),
     )
 
-    notify(_post_session_message(target, original_target, ret_code))
+    notify(_post_session_message(target, ret_code))
     time.sleep(float(get_ssot_var("NOTIFY_DELAY", "0.4")))
 
 

@@ -57,8 +57,6 @@ try:
         ctypes.POINTER(ctypes.c_char_p),
     ]
     _LIB.c_spawn_detached.restype = ctypes.c_int
-    _LIB.c_monitor_process.argtypes = [ctypes.c_int, ctypes.c_int]
-    _LIB.c_monitor_process.restype = ctypes.c_int
     _LIB.c_sd_notify_ready.argtypes = []
 
 except OSError as err:
@@ -264,62 +262,27 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
     return default
 
 
-def _read_yaml_file(path: str | Path) -> dict[str, Any]:
-    """Open *path* and parse its YAML content into a dict.
-
-    Args:
-        path: Filesystem path of the YAML file (must exist).
-
-    Returns:
-        Parsed YAML content as dict, or empty dict if the document is
-        empty / null at top level.
-
-    Raises:
-        OSError, ValueError, yaml.YAMLError: propagated to the caller for
-            unified handling.
-    """
-    with open(path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
-
-
-def _yaml_skippable(path: str | Path) -> bool:
-    """Return True if the YAML load should be skipped without error.
-
-    Skip conditions: PyYAML missing, empty/None path, or path not on disk.
-    """
-    if yaml is None:
-        return True
-    if not path:
-        return True
-    return not os.path.exists(path)
-
-
-def load_yaml_safe(path: str | Path) -> dict[str, Any]:
-    """Parse a YAML file and return its contents as a dict.
-
-    Returns an empty dict on any error (missing file, parse error, missing
-    PyYAML module). Never raises exceptions.
-
-    Args:
-        path: Path to the YAML file.
-
-    Returns:
-        Parsed YAML content as dict, or an empty dict on any error.
-
-    Note:
-        This function is bulletproof against the absence of the PyYAML
-        module — both the early guard and the except clause handle it.
-    """
-    if _yaml_skippable(path):
-        return {}
-
+def _parse_yaml(path: str | Path) -> dict[str, Any]:
+    """Open *path* and parse YAML; return {} on any error."""
     try:
-        return _read_yaml_file(path)
+        with open(path, "r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="DEBUG")
     except yaml.YAMLError as err:  # type: ignore[attr-defined]
         jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
     return {}
+
+
+def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
+    """Parse a YAML file and return its contents as a dict.
+
+    Returns an empty dict on any error (missing file, parse error, missing
+    PyYAML module). Never raises exceptions.
+    """
+    if yaml is None or not path or not os.path.exists(path):
+        return {}
+    return _parse_yaml(path)
 
 
 def write_atomic(path: str | Path, val: str) -> None:
@@ -382,47 +345,6 @@ def spawn_native(path: str, args: list[str]) -> int:
         return 0
 
     return _LIB.c_spawn_detached(encoded_path, arg_v)
-
-
-def spawn_process(cmd: list[str]) -> subprocess.Popen[bytes] | None:
-    """Launch *cmd* via Python subprocess in a new session.
-
-    Compatibility wrapper for callers that cannot use spawn_native.
-    Silently returns None on any failure.
-
-    Args:
-        cmd: Command and arguments as a list.
-
-    Returns:
-        Popen object on success, None on failure (OSError).
-    """
-    try:
-        return subprocess.Popen(  # nosec B603
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError as err:
-        jlog("CORE", f"SPAWN_ERROR: {err}", level="DEBUG")
-        return None
-
-
-def monitor_pid(pid: int, timeout: int = 5) -> bool:
-    """Return True if *pid* is still running after *timeout* seconds.
-
-    Delegates to the C-Core for efficient process monitoring without
-    repeated system calls from Python.
-
-    Args:
-        pid: Process ID to monitor.
-        timeout: Maximum seconds to wait. Defaults to 5.
-
-    Returns:
-        True if the process is still running after *timeout*, False if
-        it exited within the window.
-    """
-    return _LIB.c_monitor_process(int(pid), int(timeout)) == 1
 
 
 # ---------------------------------------------------------------------------

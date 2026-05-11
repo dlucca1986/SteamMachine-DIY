@@ -29,7 +29,6 @@ from utils import (
     verify_archive,
 )
 
-
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
@@ -53,13 +52,15 @@ _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
     "steamos-polkit-helpers",
 )
 
-# Path components excluded from the archive (compared as components, not
-# as substrings — so a game called "backups" is not erroneously skipped).
-_EXCLUDE_COMPONENTS: frozenset[str] = frozenset({
-    ".cache",
-    "__pycache__",
-    "backups",
-})
+# Path components excluded from the archive — matched by component, not
+# substring, so "my_backups.yaml" is safe while a dir named "backups" is not.
+_EXCLUDE_COMPONENTS: frozenset[str] = frozenset(
+    {
+        ".cache",
+        "__pycache__",
+        "backups",
+    }
+)
 
 # User-side paths (relative to home)
 _USER_CONFIG_REL: str = ".config/steamos_diy"
@@ -79,6 +80,7 @@ _RESTORE_SCRIPT_MODE: int = 0o755
 # ---------------------------------------------------------------------------
 # Internal helpers — symlink scan
 # ---------------------------------------------------------------------------
+
 
 def _is_relevant_symlink(target: str) -> bool:
     """Return True if *target* points into the core library or polkit helpers.
@@ -175,6 +177,7 @@ def _generate_links_recap() -> bytes:
 # Internal helpers — archive content
 # ---------------------------------------------------------------------------
 
+
 def _backup_sources(home: str) -> list[tuple[str, str]]:
     """Return [(source_path, archive_name), ...] for the backup payload.
 
@@ -189,11 +192,11 @@ def _backup_sources(home: str) -> list[tuple[str, str]]:
     user_config = os.path.join(home, _USER_CONFIG_REL)
 
     return [
-        (next_sess,           "system/next_session"),
-        (_SSOT_CONF_PATH,     "system/steamos_diy.conf"),
-        (_SERVICE_PATH,       "system/service"),
-        (_CORE_LIB_PREFIX,    "source/steamos_diy"),
-        (user_config,         "user/config"),
+        (next_sess, "system/next_session"),
+        (_SSOT_CONF_PATH, "system/steamos_diy.conf"),
+        (_SERVICE_PATH, "system/service"),
+        (_CORE_LIB_PREFIX, "source/steamos_diy"),
+        (user_config, "user/config"),
     ]
 
 
@@ -240,6 +243,7 @@ def _add_payload(tar: tarfile.TarFile, home: str) -> None:
 # ---------------------------------------------------------------------------
 # Internal helpers — archive lifecycle
 # ---------------------------------------------------------------------------
+
 
 def _ensure_backup_dir(home: str, user: str) -> Path:
     """Create the backup directory and chown it only when it didn't exist.
@@ -289,6 +293,7 @@ def _cleanup_tmp(tmp: Path) -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run_backup() -> None:
     """Orchestrate a complete surgical backup.

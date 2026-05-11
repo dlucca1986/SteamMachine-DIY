@@ -221,24 +221,6 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     return full_cmd
 
 
-def _load_profiles(
-    user_config_path: str | None, found_path: str | None
-) -> tuple[dict, dict]:
-    """Load global manifesto and per-game profile.
-
-    Args:
-        user_config_path: SSoT user_config path or None.
-        found_path: Resolved per-game profile path or None.
-
-    Returns:
-        Tuple ``(global_data, profile_data)``. Either may be an empty
-        dict when the corresponding source is missing.
-    """
-    global_data = load_yaml_safe(user_config_path) if user_config_path else {}
-    profile_data = load_yaml_safe(found_path) if found_path else {}
-    return global_data, profile_data
-
-
 def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     """Replace the current process with the resolved game command.
 
@@ -297,7 +279,8 @@ def run() -> None:
 
     # 3. Load profile and global manifesto
     found_path = _get_profile_path(game_conf_dir, steam_id, stem, eff_name)
-    global_data, profile_data = _load_profiles(user_config_path, found_path)
+    global_data = load_yaml_safe(user_config_path)
+    profile_data = load_yaml_safe(found_path)
 
     # 4. Apply environment (SSoT order: global -> profile)
     apply_env_map(global_data.get("env_vars"))

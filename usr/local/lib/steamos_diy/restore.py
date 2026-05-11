@@ -41,12 +41,6 @@ _CORE_LIB_PREFIX: str = "/usr/local/lib/steamos_diy"
 # User-side relative path
 _USER_CONFIG_REL: str = ".config/steamos_diy"
 
-# Restore-script handling — extracted to a private root-only directory
-# (mode 0700) instead of /tmp, eliminating the TOCTOU window between
-# chmod and execution that existed when the file lived in world-writable
-# /tmp.
-_RESTORE_SCRIPT_NAME: str = "restore_links.sh"
-
 # Allow-list of filesystem prefixes the restore is permitted to write to.
 # Each entry is a *real* (symlink-resolved) absolute path; targets are
 # normalised before being checked against this set.
@@ -258,8 +252,12 @@ def _write_member(
     if os.path.exists(target):
         try:
             os.unlink(target)
-        except OSError:
-            pass
+        except OSError as err:
+            jlog(
+                "SYSTEM",
+                f"RESTORE_UNLINK_WARN: {target} - {err}",
+                level="WARN",
+            )
 
     src = tar.extractfile(member)
     if src is None:
@@ -359,14 +357,13 @@ def _extract_payload(
     allowed: tuple[str, ...],
     home_real: str,
     user: str,
-) -> str | None:
-    """Extract every safe member, return path of restore_links.sh if any.
+) -> bool:
+    """Extract every safe member; return True if restore_links.sh is present.
 
-    The restore script is special-cased — it's extracted to a private
-    root-only temp directory (created by the caller) instead of being
-    written into one of the standard prefixes. This eliminates the
-    TOCTOU window that existed when it was written to /tmp and then
-    chmod+exec'd.
+    The restore script is special-cased — it's deferred to a private
+    root-only temp directory after the main payload, instead of being
+    written into one of the standard prefixes. This eliminates the TOCTOU
+    window that existed when the script lived in /tmp.
 
     Args:
         tar: Open tar archive.
@@ -376,21 +373,21 @@ def _extract_payload(
         user: Real username for ownership.
 
     Returns:
-        Filesystem path to the extracted restore_links.sh, or None if
-        the archive doesn't contain one.
+        True if the archive contains restore_links.sh, False otherwise.
     """
-    script_path: str | None = None
+    script_found: bool = False
 
     for member in tar.getmembers():
         if member.name == _RESTORE_SCRIPT_ARCNAME:
-            # Deferred to the post-extraction sandbox runner.
-            script_path = _RESTORE_SCRIPT_ARCNAME
+            script_found = (
+                True  # deferred to the post-extraction sandbox runner
+            )
             continue
         _process_member(
             tar, member, mapping, allowed, home_real=home_real, user=user
         )
 
-    return script_path
+    return script_found
 
 
 def _run_restore_script(tar: tarfile.TarFile) -> None:
@@ -410,7 +407,7 @@ def _run_restore_script(tar: tarfile.TarFile) -> None:
 
     # mkdtemp returns a 0700 dir owned by the calling user (root here)
     sandbox = tempfile.mkdtemp(prefix="sdy_restore_")
-    script_path = os.path.join(sandbox, _RESTORE_SCRIPT_NAME)
+    script_path = os.path.join(sandbox, _RESTORE_SCRIPT_ARCNAME)
 
     try:
         src = tar.extractfile(member)
@@ -450,27 +447,20 @@ def _reload_systemd() -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_restore(archive_path: str) -> None:
-    """Restore the system from *archive_path*.
+def _prepare_restore(
+    archive_path: str,
+) -> tuple[str, str, dict[str, str], tuple[str, ...]]:
+    """Validate preconditions and resolve user context.
 
-    Flow:
-        1. Verify root privileges and load the SSoT config.
-        2. Resolve the real user behind sudo/pkexec.
-        3. Pre-flight: confirm the archive exists and is readable.
-        4. Verify integrity by walking the archive end-to-end before
-           writing anything to disk.
-        5. Extract every safe member to its mapped destination, with
-           path-traversal and symlink protection at every step.
-        6. Run the embedded restore_links.sh in a private 0700 sandbox.
-        7. Reload systemd so service unit changes take effect.
-
-    Exits with status 1 on any pre-flight or extraction failure. The
-    restore is best-effort once started: per-member rejections are
-    logged but do not abort the whole operation, while archive-level
-    failures (corruption, missing file) abort cleanly.
+    Checks root privileges, SSoT availability, archive existence, and
+    archive integrity in order. Exits with 1 on the first failure so that
+    _execute_restore never receives an invalid state.
 
     Args:
-        archive_path: Filesystem path to a *.tar.gz produced by backup.py.
+        archive_path: Filesystem path to the .tar.gz archive.
+
+    Returns:
+        Tuple (user, home_real, mapping, allowed) ready for extraction.
     """
     check_root()
     if not load_ssot():
@@ -491,9 +481,30 @@ def run_restore(archive_path: str) -> None:
     user, home = get_real_user()
     home_str = str(home)
     home_real = str(Path(home).resolve())
-    mapping = _build_mapping(home_str)
-    allowed = _allowed_prefixes(home_str)
+    return (
+        user,
+        home_real,
+        _build_mapping(home_str),
+        _allowed_prefixes(home_str),
+    )
 
+
+def _execute_restore(
+    archive_path: str,
+    user: str,
+    home_real: str,
+    mapping: dict[str, str],
+    allowed: tuple[str, ...],
+) -> None:
+    """Open the archive, extract payload, run the link script, reload systemd.
+
+    Args:
+        archive_path: Filesystem path to the .tar.gz archive.
+        user: Real username for ownership assignment.
+        home_real: Resolved real path of the user's home directory.
+        mapping: Prefix-to-destination map produced by _build_mapping.
+        allowed: Allow-list of safe filesystem prefixes.
+    """
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
             has_script = _extract_payload(
@@ -512,6 +523,21 @@ def run_restore(archive_path: str) -> None:
             level="ERROR",
         )
         sys.exit(1)
+
+
+def run_restore(archive_path: str) -> None:
+    """Restore the system from *archive_path*.
+
+    Delegates pre-flight checks to _prepare_restore and the extraction
+    phase to _execute_restore. Per-member rejections are logged but do
+    not abort the operation; archive-level failures abort cleanly with
+    exit code 1.
+
+    Args:
+        archive_path: Filesystem path to a *.tar.gz produced by backup.py.
+    """
+    user, home_real, mapping, allowed = _prepare_restore(archive_path)
+    _execute_restore(archive_path, user, home_real, mapping, allowed)
 
 
 if __name__ == "__main__":

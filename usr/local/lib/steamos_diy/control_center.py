@@ -521,7 +521,7 @@ class SDYControlCenter(QMainWindow):
                         "/usr/bin/journalctl",
                         "--vacuum-time=1s",
                     ],
-                    check=True
+                    check=True,
                 )
                 self.process_finished.emit(
                     "Logs Cleaned", "Journal wiped.", False
@@ -622,55 +622,30 @@ class SDYControlCenter(QMainWindow):
 
     # ── YAML editor helpers ────────────────────────────────────────────────
 
-    def beautify_yaml(self, editor):
-        """Re-format the YAML in *editor* through the round-trip parser.
-
-        Args:
-            editor: The YAMLEditor instance to operate on.
-        """
-        raw = editor.toPlainText()
-        if not raw.strip():
-            return
-        try:
-            clean = self._format_yaml_text(raw)
-        except (YAMLError, OSError) as err:
-            self._handle_yaml_error(editor, err)
-            return
-        self._apply_beautified(editor, raw, clean)
-
-    def _apply_beautified(self, editor, raw, clean):
-        """Replace editor content with *clean* if it differs from *raw*."""
-        if raw.strip() == clean.strip():
-            return
-        editor.setPlainText(clean)
-        hl = self._highlighter_for(editor)
-        if hl:
-            hl.rehighlight()
-
-    def _format_yaml_text(self, raw):
-        """Run *raw* YAML through the round-trip parser and return the text.
-
-        Args:
-            raw: Source YAML as text. Tabs are converted to two spaces
-                first, since YAML forbids tabs in indentation.
-
-        Returns:
-            Formatted YAML as text.
-        """
-        data = yaml_parser.load(raw.replace("\t", "  "))
-        stream = StringIO()
-        yaml_parser.dump(data, stream)
-        return stream.getvalue()
-
-    def _handle_yaml_error(self, editor, err):
+    def _highlight_yaml_error(self, editor, err: Exception) -> None:
         """Highlight the offending line on a YAML parse error if known."""
         mark = getattr(err, "problem_mark", None)
         if mark:
             self._highlight_error_line(editor, mark.line)
 
-    def _highlighter_for(self, editor):
-        """Return the syntax highlighter associated with *editor*."""
-        return self.global_hl if editor is self.global_editor else self.game_hl
+    def beautify_yaml(self, editor):
+        """Re-format the YAML in *editor* through the round-trip parser."""
+        raw = editor.toPlainText()
+        if not raw.strip():
+            return
+        try:
+            data = yaml_parser.load(raw.replace("\t", "  "))
+            stream = StringIO()
+            yaml_parser.dump(data, stream)
+            clean = stream.getvalue()
+        except (YAMLError, OSError) as err:
+            self._highlight_yaml_error(editor, err)
+            return
+        if raw.strip() == clean.strip():
+            return
+        editor.setPlainText(clean)
+        hl = self.global_hl if editor is self.global_editor else self.game_hl
+        hl.rehighlight()
 
     def toggle_template(self, context):
         """Switch the editor between the active config and its template view.
@@ -941,30 +916,30 @@ class SDYControlCenter(QMainWindow):
             cur = self._update_detection(line, cur, det)
         return det
 
+    @staticmethod
+    def _apply_name_hit(value: str | None, det: dict[str, str]) -> str | None:
+        """Register a game name and return it as the new detection cursor."""
+        if value is not None:
+            det[value] = value
+        return value
+
+    @staticmethod
+    def _apply_id_hit(
+        cur: str | None, value: str | None, det: dict[str, str]
+    ) -> None:
+        """Associate an AppID with the last detected game name."""
+        if cur and value and len(value) >= _MIN_APPID_LEN:
+            det[cur] = value
+
     def _update_detection(
         self, line: str, cur: str | None, det: dict[str, str]
     ) -> str | None:
-        """Process a single line and update *det* in place.
-
-        Args:
-            line: One journal line.
-            cur: Last seen game name, or None if no NAME has been seen yet.
-            det: Detection dict (mutated).
-
-        Returns:
-            The (possibly updated) *cur* value to carry to the next call.
-        """
+        """Process one journal line and update *det* in place."""
         kind, value = extract_game_metadata(line)
-        if kind == "NAME" and value is not None:
-            det[value] = value
-            return value
-        if (
-            kind == "ID"
-            and cur
-            and value is not None
-            and len(value) >= _MIN_APPID_LEN
-        ):
-            det[cur] = value
+        if kind == "NAME":
+            return self._apply_name_hit(value, det) or cur
+        if kind == "ID":
+            self._apply_id_hit(cur, value, det)
         return cur
 
     # ── Journal export parsing for diagnostics ─────────────────────────────
@@ -1103,9 +1078,7 @@ class SDYControlCenter(QMainWindow):
         d_msg = msg if "[gamescope]" in msg else f"[gamescope] {msg}"
         return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
 
-    def _split_gamescope_line(
-        self, line: str
-    ) -> tuple[datetime, str] | None:
+    def _split_gamescope_line(self, line: str) -> tuple[datetime, str] | None:
         """Split a short-iso journal line into (timestamp, message).
 
         Returns:
@@ -1305,7 +1278,7 @@ class SDYControlCenter(QMainWindow):
             try:
                 subprocess.run(  # nosec B603
                     ["/usr/bin/pkexec", "/usr/bin/python3", script, fpath],
-                    check=True
+                    check=True,
                 )
                 self.process_finished.emit(
                     "Restore Complete", "Restored!", False
