@@ -15,13 +15,14 @@ import ctypes
 import os
 import pwd
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
+import tarfile
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 try:
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 except ImportError:
     yaml = None  # type: ignore[assignment]
 
@@ -188,6 +189,14 @@ def load_ssot() -> bool:
         True if the SSOT_CONF path points to an existing regular file.
     """
     return os.path.isfile(_SSOT_CONF)
+
+
+@overload
+def get_ssot_var(var_name: str, default: str) -> str: ...
+
+
+@overload
+def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
 
 
 def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
@@ -388,7 +397,7 @@ def spawn_process(cmd: list[str]) -> subprocess.Popen[bytes] | None:
         Popen object on success, None on failure (OSError).
     """
     try:
-        return subprocess.Popen(
+        return subprocess.Popen(  # nosec B603
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -447,8 +456,8 @@ def _chown_recursive(target: Path, user_name: str) -> None:
         user_name: Target username (also used as group name).
     """
     try:
-        subprocess.run(
-            ["chown", "-R", f"{user_name}:{user_name}", str(target)],
+        subprocess.run(  # nosec B603
+            ["/usr/bin/chown", "-R", f"{user_name}:{user_name}", str(target)],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -492,6 +501,40 @@ def check_root() -> None:
         sys.exit(1)
 
 
+def verify_archive(
+    path: str | Path, fail_tag: str = "ARCHIVE_VERIFY_FAIL"
+) -> bool:
+    """Walk all members of a gzip tar to confirm integrity before extraction.
+
+    Args:
+        path: Path to the .tar.gz archive.
+        fail_tag: Log tag prefix used in the error message on failure.
+
+    Returns:
+        True if the archive opens and iterates cleanly, False on any error.
+    """
+    try:
+        with tarfile.open(str(path), "r:gz") as tar:
+            for _ in tar:
+                pass
+        return True
+    except (tarfile.TarError, OSError, EOFError) as err:
+        jlog("SYSTEM", f"{fail_tag}: {err}", level="ERROR")
+        return False
+
+
+def run_shim(tag: str, message: str, exit_code: int = 0) -> None:
+    """Log an interception and exit — entry point for SteamOS shims.
+
+    Args:
+        tag: Journal tag (e.g. "SYSTEM").
+        message: Human-readable description of the intercepted call.
+        exit_code: Exit code expected by Steam (0 = success, 7 = up-to-date).
+    """
+    jlog(tag, message)
+    sys.exit(exit_code)
+
+
 # ---------------------------------------------------------------------------
 # Journal & metadata (Control Center / UI consumers)
 # ---------------------------------------------------------------------------
@@ -511,7 +554,7 @@ def get_journal_cmd(tag: str) -> list[str]:
         List of command arguments ready for subprocess.run/Popen.
     """
     base_cmd = [
-        "journalctl",
+        "/usr/bin/journalctl",
         "--since",
         "12 hours ago",
         "-n",

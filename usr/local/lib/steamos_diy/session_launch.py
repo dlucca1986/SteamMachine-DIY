@@ -13,7 +13,7 @@
 
 import shlex
 import signal
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from typing import Any
@@ -220,7 +220,7 @@ def _run_session(
     initial_target = target
     ret_code = 0
     try:
-        with subprocess.Popen(
+        with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
             set_proc_ref(proc)

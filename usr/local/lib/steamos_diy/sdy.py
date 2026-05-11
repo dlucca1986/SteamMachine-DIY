@@ -256,7 +256,7 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
         if not executable:
             raise FileNotFoundError(f"Binary not found: {full_cmd[0]}")
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
-        os.execvpe(executable, full_cmd, os.environ)
+        os.execvpe(executable, full_cmd, os.environ)  # nosec B606
     except (OSError, FileNotFoundError, PermissionError) as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
         sys.exit(1)

@@ -26,6 +26,7 @@ from utils import (
     get_ssot_var,
     jlog,
     load_ssot,
+    verify_archive,
 )
 
 
@@ -276,29 +277,6 @@ def _archive_paths(backup_dir: Path) -> tuple[Path, Path]:
     return final, tmp
 
 
-def _verify_archive(path: Path) -> bool:
-    """Read back *path* and walk its members to confirm integrity.
-
-    A successful walk means tarfile decompressed the gzip stream and
-    parsed every header without error — catching truncation and gzip
-    corruption introduced by power loss or full-disk conditions.
-
-    Args:
-        path: Final archive path.
-
-    Returns:
-        True if the archive opens and iterates cleanly, False otherwise.
-    """
-    try:
-        with tarfile.open(path, "r:gz") as tar:
-            for _ in tar:
-                pass
-        return True
-    except (tarfile.TarError, OSError, EOFError) as err:
-        jlog("SYSTEM", f"BACKUP_VERIFY_FAIL: {err}", level="ERROR")
-        return False
-
-
 def _cleanup_tmp(tmp: Path) -> None:
     """Best-effort removal of a partial *.tmp archive after a failure."""
     try:
@@ -333,22 +311,23 @@ def run_backup() -> None:
         sys.exit(1)
 
     user, home = get_real_user()
+    home_str = str(home)
 
-    backup_dir = _ensure_backup_dir(home, user)
+    backup_dir = _ensure_backup_dir(home_str, user)
     final_path, tmp_path = _archive_paths(backup_dir)
 
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")
 
     try:
         with tarfile.open(tmp_path, "w:gz") as tar:
-            _add_payload(tar, home)
+            _add_payload(tar, home_str)
             _add_restore_script(tar)
     except (OSError, tarfile.TarError) as err:
         jlog("SYSTEM", f"BACKUP_FAILED: {err}", level="ERROR")
         _cleanup_tmp(tmp_path)
         sys.exit(1)
 
-    if not _verify_archive(tmp_path):
+    if not verify_archive(tmp_path, "BACKUP_VERIFY_FAIL"):
         _cleanup_tmp(tmp_path)
         sys.exit(1)
 

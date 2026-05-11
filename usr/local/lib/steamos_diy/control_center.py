@@ -15,12 +15,13 @@
 
 import os
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import threading
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import (
@@ -60,7 +61,7 @@ from PyQt6.QtWidgets import (
 
 from ruamel.yaml import YAML, YAMLError
 
-from utils import extract_game_metadata, get_journal_cmd, get_ssot_var
+from utils import extract_game_metadata, get_journal_cmd, get_ssot_var, jlog
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -458,7 +459,7 @@ class SDYControlCenter(QMainWindow):
                 "🎮 Switch to Steam (Game Mode)",
                 lambda: self._safe_spawn(
                     [
-                        "python3",
+                        "/usr/bin/python3",
                         os.path.join(self.lib_path, "session_select.py"),
                         "steam",
                     ]
@@ -470,11 +471,13 @@ class SDYControlCenter(QMainWindow):
             ("🔄 Restore from Archive", self.run_restore),
             (
                 "🖥️ Open Konsole Terminal",
-                lambda: self._safe_spawn(["konsole"]),
+                lambda: self._safe_spawn(["/usr/bin/konsole"]),
             ),
             (
                 "📂 Browse Config Folder",
-                lambda: self._safe_spawn(["xdg-open", str(self.conf_root)]),
+                lambda: self._safe_spawn(
+                    ["/usr/bin/xdg-open", str(self.conf_root)]
+                ),
             ),
         ]
         for text, func in tools:
@@ -495,23 +498,30 @@ class SDYControlCenter(QMainWindow):
 
     def edit_ssot_privileged(self):
         """Open the SSoT config file in Kate (or KWrite as fallback)."""
-        editor = "kate" if os.path.exists("/usr/bin/kate") else "kwrite"
+        kate = "/usr/bin/kate"
+        editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
         try:
             # pylint: disable=consider-using-with
-            subprocess.Popen([editor, _SSOT_PATH])
+            subprocess.Popen([editor, _SSOT_PATH])  # nosec B603
         except OSError as err:
             QMessageBox.critical(self, "Error", f"Failed to launch: {err}")
 
     def cleanup_logs_privileged(self):
         """Vacuum the system journal in a background thread (pkexec)."""
 
-        def worker():
+        def worker() -> None:
             try:
-                subprocess.run(
-                    ["pkexec", "journalctl", "--rotate"], check=True
+                subprocess.run(  # nosec B603
+                    ["/usr/bin/pkexec", "/usr/bin/journalctl", "--rotate"],
+                    check=True,
                 )
-                subprocess.run(
-                    ["pkexec", "journalctl", "--vacuum-time=1s"], check=True
+                subprocess.run(  # nosec B603
+                    [
+                        "/usr/bin/pkexec",
+                        "/usr/bin/journalctl",
+                        "--vacuum-time=1s",
+                    ],
+                    check=True
                 )
                 self.process_finished.emit(
                     "Logs Cleaned", "Journal wiped.", False
@@ -529,12 +539,12 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _safe_spawn(self, cmd):
-        """Launch *cmd* without blocking. Errors are logged to stderr."""
+        """Launch *cmd* without blocking. Errors are logged to the journal."""
         try:
             # pylint: disable=consider-using-with
-            subprocess.Popen(cmd)
+            subprocess.Popen(cmd)  # nosec B603
         except (subprocess.SubprocessError, OSError) as err:
-            sys.stderr.write(f"_safe_spawn failed for {cmd[0]}: {err}\n")
+            jlog("SYSTEM", f"SPAWN_FAILED: {cmd[0]}: {err}", level="WARN")
 
     # ── Global Options tab ─────────────────────────────────────────────────
 
@@ -861,11 +871,11 @@ class SDYControlCenter(QMainWindow):
         self.combo_games.setPlaceholderText("Scanning history...")
         home = os.path.expanduser("~")
 
-        def worker():
+        def worker() -> None:
             try:
-                res = subprocess.run(
+                res = subprocess.run(  # nosec B603
                     [
-                        "journalctl",
+                        "/usr/bin/journalctl",
                         "--since",
                         "24 hours ago",
                         "--no-hostname",
@@ -914,7 +924,7 @@ class SDYControlCenter(QMainWindow):
             for n, a in sorted(detected.items())
         ]
 
-    def _parse_game_logs(self, res):
+    def _parse_game_logs(self, res: str) -> dict[str, str]:
         """Extract {name: appid_or_name} pairs from filtered log text.
 
         Args:
@@ -931,7 +941,9 @@ class SDYControlCenter(QMainWindow):
             cur = self._update_detection(line, cur, det)
         return det
 
-    def _update_detection(self, line, cur, det):
+    def _update_detection(
+        self, line: str, cur: str | None, det: dict[str, str]
+    ) -> str | None:
         """Process a single line and update *det* in place.
 
         Args:
@@ -943,16 +955,23 @@ class SDYControlCenter(QMainWindow):
             The (possibly updated) *cur* value to carry to the next call.
         """
         kind, value = extract_game_metadata(line)
-        if kind == "NAME":
+        if kind == "NAME" and value is not None:
             det[value] = value
             return value
-        if kind == "ID" and cur and len(value) >= _MIN_APPID_LEN:
+        if (
+            kind == "ID"
+            and cur
+            and value is not None
+            and len(value) >= _MIN_APPID_LEN
+        ):
             det[cur] = value
         return cur
 
     # ── Journal export parsing for diagnostics ─────────────────────────────
 
-    def _parse_export_format(self, stdout, launches):
+    def _parse_export_format(
+        self, stdout: str, launches: set[str]
+    ) -> list[tuple[datetime, str]]:
         """Parse ``journalctl -o export`` output into (timestamp, line) tuples.
 
         Args:
@@ -963,7 +982,8 @@ class SDYControlCenter(QMainWindow):
         Returns:
             List of (datetime, formatted_line) tuples in arrival order.
         """
-        ents, cur = [], {}
+        ents: list[tuple[datetime, str]] = []
+        cur: dict[str, Any] = {}
         for line in stdout.splitlines():
             entry = self._consume_export_line(line, cur, launches)
             if entry is not None:
@@ -971,7 +991,12 @@ class SDYControlCenter(QMainWindow):
                 cur = {}
         return ents
 
-    def _consume_export_line(self, line, cur, launches):
+    def _consume_export_line(
+        self,
+        line: str,
+        cur: dict[str, Any],
+        launches: set[str],
+    ) -> tuple[datetime, str] | None:
         """Update *cur* in place, return finished entry on MESSAGE= line.
 
         Args:
@@ -996,7 +1021,9 @@ class SDYControlCenter(QMainWindow):
         return None
 
     @staticmethod
-    def _finalize_export_entry(line, cur, launches):
+    def _finalize_export_entry(
+        line: str, cur: dict[str, Any], launches: set[str]
+    ) -> tuple[datetime, str]:
         """Build a formatted entry from a MESSAGE= line and the accumulator."""
         msg = line.split("=", 1)[1]
         ident = cur.get("id", "SYSTEM")
@@ -1005,7 +1032,9 @@ class SDYControlCenter(QMainWindow):
             launches.add(msg.split("LAUNCH_ARGS:", 1)[-1].strip())
         return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")
 
-    def _fetch_gamescope_logs(self, launches):
+    def _fetch_gamescope_logs(
+        self, launches: set[str]
+    ) -> list[tuple[datetime, str]]:
         """Pull gamescope-tagged journal lines and skip echoes of *launches*.
 
         Args:
@@ -1028,16 +1057,16 @@ class SDYControlCenter(QMainWindow):
                 ents.append(entry)
         return ents
 
-    def _run_journalctl_iso(self):
+    def _run_journalctl_iso(self) -> str:
         """Run ``journalctl`` over the last hour in short-iso format.
 
         Returns:
             Captured stdout as string, or empty string on any failure.
         """
         try:
-            res = subprocess.run(
+            res = subprocess.run(  # nosec B603
                 [
-                    "journalctl",
+                    "/usr/bin/journalctl",
                     "--since",
                     "1 hour ago",
                     "-o",
@@ -1052,7 +1081,9 @@ class SDYControlCenter(QMainWindow):
         except OSError:
             return ""
 
-    def _parse_gamescope_line(self, line, launches):
+    def _parse_gamescope_line(
+        self, line: str, launches: set[str]
+    ) -> tuple[datetime, str] | None:
         """Parse a single gamescope journal line into (ts, formatted).
 
         Args:
@@ -1072,7 +1103,9 @@ class SDYControlCenter(QMainWindow):
         d_msg = msg if "[gamescope]" in msg else f"[gamescope] {msg}"
         return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
 
-    def _split_gamescope_line(self, line):
+    def _split_gamescope_line(
+        self, line: str
+    ) -> tuple[datetime, str] | None:
         """Split a short-iso journal line into (timestamp, message).
 
         Returns:
@@ -1093,7 +1126,7 @@ class SDYControlCenter(QMainWindow):
             return None
 
     @staticmethod
-    def _is_duplicate_launch(msg, launches):
+    def _is_duplicate_launch(msg: str, launches: set[str]) -> bool:
         """Return True if *msg* is a LAUNCH_ARGS already in *launches*."""
         if "LAUNCH_ARGS" not in msg:
             return False
@@ -1111,10 +1144,10 @@ class SDYControlCenter(QMainWindow):
         self.log_display.setPlainText("Loading logs...")
         self.tag_filter.setEnabled(False)
 
-        def worker():
+        def worker() -> None:
             launches: set[str] = set()
             try:
-                res = subprocess.run(
+                res = subprocess.run(  # nosec B603
                     get_journal_cmd(tag),
                     capture_output=True,
                     text=True,
@@ -1242,9 +1275,12 @@ class SDYControlCenter(QMainWindow):
         script = os.path.join(self.lib_path, "backup.py")
         QMessageBox.information(self, "Backup", "Backup process started...")
 
-        def worker():
+        def worker() -> None:
             try:
-                subprocess.run(["pkexec", "python3", script], check=True)
+                subprocess.run(  # nosec B603
+                    ["/usr/bin/pkexec", "/usr/bin/python3", script],
+                    check=True,
+                )
                 self.process_finished.emit("Success", "Backup done!", False)
             except subprocess.CalledProcessError:
                 self.process_finished.emit("Error", "Backup failed.", True)
@@ -1265,10 +1301,11 @@ class SDYControlCenter(QMainWindow):
         script = os.path.join(self.lib_path, "restore.py")
         QMessageBox.information(self, "Restore", "Restore process started.")
 
-        def worker():
+        def worker() -> None:
             try:
-                subprocess.run(
-                    ["pkexec", "python3", script, fpath], check=True
+                subprocess.run(  # nosec B603
+                    ["/usr/bin/pkexec", "/usr/bin/python3", script, fpath],
+                    check=True
                 )
                 self.process_finished.emit(
                     "Restore Complete", "Restored!", False

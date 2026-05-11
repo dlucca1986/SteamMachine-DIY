@@ -12,7 +12,7 @@
 """
 
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tarfile
 import tempfile
@@ -25,6 +25,7 @@ from utils import (
     get_ssot_var,
     jlog,
     load_ssot,
+    verify_archive,
 )
 
 # ---------------------------------------------------------------------------
@@ -311,30 +312,6 @@ def _extract_member(
 # ---------------------------------------------------------------------------
 
 
-def _verify_archive(path: str) -> bool:
-    """Read back *path* end-to-end before any extraction is attempted.
-
-    A successful walk means tarfile decompressed the gzip stream and
-    parsed every header without error — catching truncation and gzip
-    corruption that would otherwise leave the system in a half-restored
-    state.
-
-    Args:
-        path: Archive path to verify.
-
-    Returns:
-        True if the archive opens and iterates cleanly, False otherwise.
-    """
-    try:
-        with tarfile.open(path, "r:gz") as tar:
-            for _ in tar:
-                pass
-        return True
-    except (tarfile.TarError, OSError, EOFError) as err:
-        jlog("SYSTEM", f"RESTORE_VERIFY_FAIL: {err}", level="ERROR")
-        return False
-
-
 # pylint: disable=too-many-arguments
 def _process_member(
     tar: tarfile.TarFile,
@@ -442,7 +419,7 @@ def _run_restore_script(tar: tarfile.TarFile) -> None:
         with src, open(script_path, "wb") as dest:
             dest.write(src.read())
         os.chmod(script_path, 0o700)
-        subprocess.run([script_path], check=True)
+        subprocess.run([script_path], check=True)  # nosec B603
     finally:
         try:
             if os.path.exists(script_path):
@@ -459,8 +436,8 @@ def _run_restore_script(tar: tarfile.TarFile) -> None:
 def _reload_systemd() -> None:
     """Tell systemd to re-read unit files; surface failures explicitly."""
     try:
-        subprocess.run(
-            ["systemctl", "daemon-reload"],
+        subprocess.run(  # nosec B603
+            ["/usr/bin/systemctl", "daemon-reload"],
             check=True,
             capture_output=True,
         )
@@ -508,13 +485,14 @@ def run_restore(archive_path: str) -> None:
         )
         sys.exit(1)
 
-    if not _verify_archive(archive_path):
+    if not verify_archive(archive_path, "RESTORE_VERIFY_FAIL"):
         sys.exit(1)
 
     user, home = get_real_user()
+    home_str = str(home)
     home_real = str(Path(home).resolve())
-    mapping = _build_mapping(home)
-    allowed = _allowed_prefixes(home)
+    mapping = _build_mapping(home_str)
+    allowed = _allowed_prefixes(home_str)
 
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
