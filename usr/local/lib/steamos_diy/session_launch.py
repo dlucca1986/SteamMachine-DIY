@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from utils import (
+    NEXT_SESSION_PATH,
     apply_env_map,
     get_ssot_var,
     jlog,
@@ -36,7 +37,6 @@ from utils import (
 DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
 DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
-DEFAULT_SESS_PATH: str = "/var/lib/steamos_diy/next_session"
 
 STATUS_MAP: dict[str, str] = {
     "steam": "Starting Game Mode...",
@@ -185,7 +185,7 @@ def _run_session(
 
 def run() -> None:
     """Session lifecycle entry point: launch, monitor, recover, exit."""
-    next_path = get_ssot_var("next_session", DEFAULT_SESS_PATH)
+    next_path = get_ssot_var("next_session", NEXT_SESSION_PATH)
     target = read_session_target(next_path, default="steam")
 
     notify(STATUS_MAP.get(target, "Initializing..."))

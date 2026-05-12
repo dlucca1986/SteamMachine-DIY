@@ -20,6 +20,10 @@ from datetime import datetime
 from pathlib import Path
 
 from utils import (
+    CORE_LIB_DIR,
+    NEXT_SESSION_PATH,
+    SERVICE_PATH,
+    SSOT_CONF_PATH,
     check_root,
     fix_ownership,
     get_real_user,
@@ -33,12 +37,6 @@ from utils import (
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-# Filesystem layout
-_CORE_LIB_PREFIX: str = "/usr/local/lib/steamos_diy"
-_SSOT_CONF_PATH: str = "/etc/default/steamos_diy.conf"
-_SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
-_DEFAULT_NEXT_SESSION: str = "/var/lib/steamos_diy/next_session"
-
 # Folders scanned for symlinks pointing into the core library
 _SYMLINK_SEARCH_PATHS: tuple[str, ...] = (
     "/usr/bin",
@@ -48,7 +46,7 @@ _SYMLINK_SEARCH_PATHS: tuple[str, ...] = (
 
 # Markers in symlink targets that qualify them for inclusion in the recap
 _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
-    _CORE_LIB_PREFIX,
+    CORE_LIB_DIR,
     "steamos-polkit-helpers",
 )
 
@@ -145,14 +143,14 @@ def _generate_links_recap() -> bytes:
 
 
 def _backup_sources(home: str) -> list[tuple[str, str]]:
-    next_sess = get_ssot_var("next_session", _DEFAULT_NEXT_SESSION)
+    next_sess = get_ssot_var("next_session", NEXT_SESSION_PATH)
     user_config = os.path.join(home, _USER_CONFIG_REL)
 
     return [
         (next_sess, "system/next_session"),
-        (_SSOT_CONF_PATH, "system/steamos_diy.conf"),
-        (_SERVICE_PATH, "system/service"),
-        (_CORE_LIB_PREFIX, "source/steamos_diy"),
+        (SSOT_CONF_PATH, "system/steamos_diy.conf"),
+        (SERVICE_PATH, "system/service"),
+        (CORE_LIB_DIR, "source/steamos_diy"),
         (user_config, "user/config"),
     ]
 

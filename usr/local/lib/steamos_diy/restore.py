@@ -19,6 +19,10 @@ import tempfile
 from pathlib import Path
 
 from utils import (
+    CORE_LIB_DIR,
+    NEXT_SESSION_PATH,
+    SERVICE_PATH,
+    SSOT_CONF_PATH,
     check_root,
     fix_ownership,
     get_real_user,
@@ -31,12 +35,6 @@ from utils import (
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
-
-# System-side destinations
-_DEFAULT_NEXT_SESSION: str = "/var/lib/steamos_diy/next_session"
-_SSOT_CONF_PATH: str = "/etc/default/steamos_diy.conf"
-_SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
-_CORE_LIB_PREFIX: str = "/usr/local/lib/steamos_diy"
 
 # User-side relative path
 _USER_CONFIG_REL: str = ".config/steamos_diy"
@@ -62,11 +60,11 @@ _RESTORE_SCRIPT_ARCNAME: str = "restore_links.sh"
 def _build_mapping(home: str) -> dict[str, str]:
     return {
         "system/next_session": get_ssot_var(
-            "next_session", _DEFAULT_NEXT_SESSION
+            "next_session", NEXT_SESSION_PATH
         ),
-        "system/steamos_diy.conf": _SSOT_CONF_PATH,
-        "system/service": _SERVICE_PATH,
-        "source/steamos_diy": _CORE_LIB_PREFIX,
+        "system/steamos_diy.conf": SSOT_CONF_PATH,
+        "system/service": SERVICE_PATH,
+        "source/steamos_diy": CORE_LIB_DIR,
         "user/config": os.path.join(home, _USER_CONFIG_REL),
     }
 

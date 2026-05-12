@@ -68,8 +68,19 @@ except OSError as err:
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-# SSoT config path — read once, never changes at runtime.
-_SSOT_CONF: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
+# ---------------------------------------------------------------------------
+# Project-wide path constants — single source of truth for all modules.
+# ---------------------------------------------------------------------------
+
+SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
+NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
+CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
+SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
+
+# ---------------------------------------------------------------------------
+
+# Internal alias — used by jlog/get_ssot_var before the public name was added.
+_SSOT_CONF: str = SSOT_CONF_PATH
 
 # In-process cache for SSoT values — avoids repeated C-Core disk reads.
 _SSOT_CACHE: dict[str, str] = {}

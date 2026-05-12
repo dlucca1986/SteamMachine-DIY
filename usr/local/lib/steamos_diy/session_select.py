@@ -13,13 +13,19 @@
 
 import sys
 
-from utils import get_ssot_var, jlog, notify, spawn_native, write_atomic
+from utils import (
+    NEXT_SESSION_PATH,
+    get_ssot_var,
+    jlog,
+    notify,
+    spawn_native,
+    write_atomic,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-DEFAULT_SESS_PATH: str = "/var/lib/steamos_diy/next_session"
 BIN_STEAM_DEFAULT: str = "/usr/bin/steam"
 BIN_DBUS_DEFAULT: str = "/usr/bin/qdbus6"
 
@@ -84,7 +90,7 @@ def select() -> None:
 
     target = _resolve_target(sys.argv[1])
 
-    next_session_path = get_ssot_var("next_session", DEFAULT_SESS_PATH)
+    next_session_path = get_ssot_var("next_session", NEXT_SESSION_PATH)
     write_atomic(next_session_path, target)
     jlog("CORE", f"SWITCH_REQUEST: {target}")
     notify(f"Switching to {target.capitalize()}...")

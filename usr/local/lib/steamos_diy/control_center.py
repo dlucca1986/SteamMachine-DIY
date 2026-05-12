@@ -61,15 +61,20 @@ from PyQt6.QtWidgets import (
 
 from ruamel.yaml import YAML, YAMLError
 
-from utils import extract_game_metadata, get_journal_cmd, get_ssot_var, jlog
+from utils import (
+    CORE_LIB_DIR,
+    SSOT_CONF_PATH,
+    extract_game_metadata,
+    get_journal_cmd,
+    get_ssot_var,
+    jlog,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-# Filesystem paths
-_LIB_PATH: str = "/usr/local/lib/steamos_diy"
-_SSOT_PATH: str = "/etc/default/steamos_diy.conf"
+# UI / network constants
 _WIKI_URL: str = "https://github.com/dlucca1986/SteamMachine-DIY/wiki"
 
 # UI dimensions
@@ -140,13 +145,13 @@ class LineNumberArea(QWidget):
         super().__init__(editor)
         self.editor = editor
 
+    # pylint: disable=missing-function-docstring
     def sizeHint(self):  # pylint: disable=invalid-name
-        """Qt override: report preferred width from the editor."""
         return QSize(self.editor.line_number_area_width(), 0)
 
     def paintEvent(self, event):  # pylint: disable=invalid-name
-        """Qt override: delegate painting to the editor."""
         self.editor.line_number_area_paint_event(event)
+    # pylint: enable=missing-function-docstring
 
 
 class YAMLEditor(QPlainTextEdit):
@@ -314,7 +319,7 @@ class SDYControlCenter(QMainWindow):
         super().__init__()
         self.setWindowTitle("SteamMachine-DIY Control Center")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
-        self.lib_path = _LIB_PATH
+        self.lib_path = CORE_LIB_DIR
         self.conf_root = Path(os.path.expanduser("~/.config/steamos_diy"))
 
         # Style maps — emoji + colour per log category
@@ -491,7 +496,7 @@ class SDYControlCenter(QMainWindow):
         editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
         try:
             # pylint: disable=consider-using-with
-            subprocess.Popen([editor, _SSOT_PATH])  # nosec B603
+            subprocess.Popen([editor, SSOT_CONF_PATH])  # nosec B603
         except OSError as err:
             QMessageBox.critical(self, "Error", f"Failed to launch: {err}")
 
