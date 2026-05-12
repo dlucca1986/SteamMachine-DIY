@@ -22,7 +22,7 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 ### 2. Dependency & Privilege Management
 Configures system access and installs the software stack:
 
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-yaml`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `qt6-tools`, `rsync`, `gcc`.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `qt6-tools`, `rsync`, `gcc`.
 * **Hardware Groups:** Automatically manages user membership to ensure hardware access and system administration rights. Adds user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`. The `tty` group is required for `notify()` to write to `/dev/tty1`.
 
 ### 3. SSOT Deployment & Filesystem Policy

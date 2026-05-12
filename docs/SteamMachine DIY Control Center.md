@@ -10,7 +10,7 @@ PyQt6 dashboard for system management, YAML configuration editing, and log analy
 ## 📂 UI Navigation & Tab Logic
 
 ### 1. Diagnostics (Tab Index 0)
-Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab (`on_tab_changed(index=0)`).
+Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab. `on_tab_changed` detects the diagnostics tab dynamically via `self.tabs.indexOf(self.diag_tab)` — no magic index.
 
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
 * **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl --since "1 hour ago" -o short-iso`) fetches gamescope-tagged lines and merges them into the display, deduplicated against already-seen `LAUNCH_ARGS` strings.
@@ -45,7 +45,7 @@ Text editor for YAML configuration files with real-time validation.
 ### 4. Game Overrides (Tab Index 3)
 Per-game YAML profile editor backed by journal-based game discovery.
 
-* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `_filter_game_journal_lines()` then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` parses each line into a `{name: appid}` dict.
+* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` (from `utils.py`) parses each line into a `{name: appid}` dict.
 * **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
 * **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
@@ -72,6 +72,8 @@ Per-game YAML profile editor backed by journal-based game discovery.
 ---
 
 ## 🖊️ Editor Widgets
+
+> Defined in `editors.py` — zero dependency on project modules, purely self-contained Qt widgets.
 
 ### YAMLEditor (`QPlainTextEdit` subclass)
 Custom editor used in both the Global Options and Game Overrides tabs.

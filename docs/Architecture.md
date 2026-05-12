@@ -35,8 +35,8 @@ A module within the launcher that parses `config.yaml`. It dynamically generates
 ### 5. SDY Discovery Engine (`sdy.py`)
 A wrapper that identifies games via `SteamAppId` or executable name and applies per-game YAML overrides from `games.d/`.
 
-### 6. Control Center (`control_center.py`)
-The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting.
+### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`)
+The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
 
 ---
 

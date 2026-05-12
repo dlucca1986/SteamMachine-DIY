@@ -24,7 +24,7 @@ The target file is never left in a partial state, even after a sudden power loss
 `load_ssot()` returns `True` if the SSoT file exists and is readable.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
-`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error, missing PyYAML module). Never raises.
+`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error). Never raises.
 
 `apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are silently ignored.
 
@@ -51,14 +51,12 @@ The target file is never left in a partial state, even after a sudden power loss
 | `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current effective UID. |
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Forks via C-Core (`fork` → `setsid` → `execv`), redirects child stdout/stderr to `/dev/null`. Returns the child PID, or `0` on failure. |
-| `spawn_process(cmd)` | `subprocess.Popen` wrapper with `start_new_session=True` and both streams devnull'd. Returns the `Popen` object or `None` on `OSError`. |
-| `monitor_pid(pid, timeout)` | Polls `/proc/<pid>` every 200 ms for up to `timeout` seconds. Returns `True` if the process is still alive at the end of the window. Avoids `waitpid` conflicts with Python's `subprocess`. |
 
 ---
 
 ## 📖 Journal Utilities
 
-Used by `control_center.py` for log display and game discovery.
+Used by `control_center.py` (via `journal.py`) for log display and game discovery.
 
 | Function | Description |
 | :--- | :--- |
@@ -76,7 +74,8 @@ Used by `control_center.py` for log display and game discovery.
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
 | `backup.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
 | `restore.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
-| `control_center.py` | `get_ssot_var`, `get_journal_cmd`, `extract_game_metadata` |
+| `control_center.py` | `get_ssot_var` |
+| `journal.py` | `get_journal_cmd`, `extract_game_metadata` |
 | Compatibility shims | `jlog` |
 
 ---

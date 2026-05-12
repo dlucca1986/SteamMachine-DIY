@@ -41,9 +41,8 @@ full_cmd.extend(raw_args)
 if extra:
     full_cmd.extend(shlex.split(str(extra)))
 
-# Resolve the real executable path, then replace this process
-executable = shutil.which(full_cmd[0])
-os.execvpe(executable, full_cmd, os.environ)
+# Replace this process with the game
+os.execvpe(full_cmd[0], full_cmd, os.environ)
 ```
 
 **YAML Resilience**: If a profile YAML is missing or unparseable, `load_yaml_safe` returns `{}` silently. The game still launches using only the global `config.yaml` values — no error is raised and no message is logged.
