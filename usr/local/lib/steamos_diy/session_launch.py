@@ -54,14 +54,7 @@ _TERM_TIMEOUT: int = 5
 
 
 def _build_gamescope_args() -> list[str]:
-    """Return the full gamescope + steam command-line as a list.
-
-    Constructs gamescope command with base flags and optional user config.
-    Loads environment variables and flags from user_config YAML if present.
-
-    Returns:
-        List of command arguments ready for subprocess.Popen
-    """
+    """Build gamescope+steam argv, applying user_config env_vars and flags."""
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
     gs_args = [gs_bin, "-e", "-f"]
 
@@ -86,20 +79,10 @@ def _monitor_process(
     next_sess_path: str,
     target: str,
 ) -> bool:
-    """Monitor process stability during validation window.
-
-    Waits up to *timeout* seconds for the process to exit. If process
-    remains running through timeout window, marks it as stable and persists.
-
-    Args:
-        proc: Subprocess Popen object to monitor
-        timeout: Maximum seconds to wait before considering stable
-        next_sess_path: Path to next_session persistence file
-        target: Current session target (steam/desktop)
+    """Wait up to *timeout* for proc to exit; treat survival as stable.
 
     Returns:
-        True if process remained stable (survived timeout)
-        False if process exited early (crash detected)
+        True if proc survived the window (stable), False on early exit (crash).
     """
     try:
         proc.wait(timeout=timeout)
@@ -113,18 +96,7 @@ def _monitor_process(
 
 
 def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
-    """Send SIGTERM and wait; escalate to SIGKILL if needed.
-
-    Gracefully terminates a process with timeout. If process ignores SIGTERM,
-    escalates to SIGKILL to ensure cleanup (e.g. during crash recovery).
-
-    Args:
-        proc: Subprocess Popen object to terminate
-
-    Note:
-        Prevents proc.wait() from blocking indefinitely when gamescope
-        or Plasma ignores SIGTERM during crash recovery.
-    """
+    """SIGTERM → wait → SIGKILL if ignored within _TERM_TIMEOUT."""
     proc.terminate()
     try:
         proc.wait(timeout=_TERM_TIMEOUT)
@@ -135,31 +107,17 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
 
 
 def _build_command_for(target: str) -> list[str]:
-    """Return the argv to spawn for *target*.
-
-    Args:
-        target: Either ``"steam"`` (gamescope + Steam Big Picture) or
-            anything else (treated as desktop, spawning Plasma).
-
-    Returns:
-        Argv list ready for ``subprocess.Popen``.
-    """
+    """Resolve argv: "steam" → gamescope+Steam, else → Plasma."""
     if target == "steam":
         return _build_gamescope_args()
     return [get_ssot_var("bin_plasma", DEFAULT_PLASMA_BIN)]
 
 
 def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
-    """Force-recover to desktop after a crash detected during validation.
-
-    Args:
-        proc: The crashed process (already exited).
-        next_path: Path to the next_session persistence file.
+    """Recover to desktop after crash: persist target, notify user, kill proc.
 
     Returns:
-        New target value ("desktop") for downstream feedback. The
-        persisted file is updated and the user is notified before this
-        helper returns.
+        Always ``"desktop"`` — drives caller's next-target logic.
     """
     jlog("CORE", "CRASH_DETECTED: RECOVERY", level="ERROR")
     target = "desktop"
@@ -183,27 +141,12 @@ def _run_session(
     v_timeout: float,
     set_proc_ref,
 ) -> tuple[str, int]:
-    """Spawn *cmd*, monitor stability, recover on crash, return outcome.
+    """Spawn cmd, validate stability, recover on crash; return (target, code).
 
-    Wraps the entire ``subprocess.Popen`` lifecycle including monitoring
-    and recovery. The signal handler installed by *run* needs visibility
-    on the live ``Popen`` instance, which is why the caller passes a
-    *set_proc_ref* setter so the closure can be updated in place.
-
-    Args:
-        cmd: Argv list produced by _build_command_for.
-        next_path: Path to the next_session persistence file.
-        target: Initial target (may be replaced by recovery).
-        v_timeout: Seconds in the validation window.
-        set_proc_ref: Callable that stores the Popen for the signal
-            handler. Called once with the live process and once with
-            None on exit, so the handler never operates on a closed
-            Popen.
-
-    Returns:
-        Tuple ``(final_target, return_code)``. On any spawn failure the
-        target is reset to *target* as received (unchanged), preserving
-        the original "stick to caller's intent on failure" semantics.
+    set_proc_ref is injected by run() so its SIGTERM handler can reach the live
+    Popen without a nonlocal binding. Called with None on exit to prevent the
+    handler from operating on a closed process. On spawn failure, target is
+    returned unchanged to preserve the caller's original intent.
     """
     initial_target = target
     ret_code = 0
@@ -241,16 +184,7 @@ def _run_session(
 
 
 def run() -> None:
-    """Main session lifecycle — launch, monitor, recover, exit.
-
-    Orchestrates the complete session lifecycle:
-    1. Reads target session (steam/desktop) from persistence file
-    2. Launches appropriate session manager (gamescope or Plasma)
-    3. Monitors for crashes during validation window
-    4. Performs emergency recovery to Desktop on crash
-    5. Handles graceful shutdown via signals
-    6. Provides user feedback via TTY and logging
-    """
+    """Session lifecycle entry point: launch, monitor, recover, exit."""
     next_path = get_ssot_var("next_session", DEFAULT_SESS_PATH)
     target = read_session_target(next_path, default="steam")
 
@@ -264,12 +198,7 @@ def run() -> None:
     proc_holder: list[subprocess.Popen[Any] | None] = [None]
 
     def _handle_term(signum: int, _frame: Any) -> None:
-        """Clean shutdown on SIGTERM / SIGINT.
-
-        Args:
-            signum: Signal number (SIGTERM=15, SIGINT=2).
-            _frame: Stack frame (unused, required by signal.signal).
-        """
+        """Drain the live process and exit cleanly on SIGTERM/SIGINT."""
         jlog("CORE", f"SIG_{signum}: Shutting down...")
         live_proc = proc_holder[0]
         if live_proc is not None:

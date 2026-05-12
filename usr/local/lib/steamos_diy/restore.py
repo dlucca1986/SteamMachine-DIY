@@ -60,15 +60,6 @@ _RESTORE_SCRIPT_ARCNAME: str = "restore_links.sh"
 
 
 def _build_mapping(home: str) -> dict[str, str]:
-    """Return the mapping {archive_prefix: filesystem_destination}.
-
-    Args:
-        home: Real user's home directory (resolved by get_real_user).
-
-    Returns:
-        Dict mapping each archive prefix produced by backup.py to the
-        absolute destination path on disk.
-    """
     return {
         "system/next_session": get_ssot_var(
             "next_session", _DEFAULT_NEXT_SESSION
@@ -81,11 +72,7 @@ def _build_mapping(home: str) -> dict[str, str]:
 
 
 def _allowed_prefixes(home: str) -> tuple[str, ...]:
-    """Return the full allow-list including the dynamic per-user home.
-
-    The home prefix is appended with a trailing slash so a user named
-    e.g. ``alice`` cannot match a directory named ``alicebob``.
-    """
+    # Trailing slash prevents "alice" from matching "alicebob".
     home_prefix = str(Path(home).resolve()) + "/"
     return _ALLOWED_PREFIXES_FIXED + (home_prefix,)
 
@@ -96,23 +83,14 @@ def _allowed_prefixes(home: str) -> tuple[str, ...]:
 
 
 def _is_path_safe(target: str, allowed: tuple[str, ...]) -> bool:
-    """Return True if *target* resolves into one of the allowed prefixes.
+    """Guard against symlink-redirect attacks via realpath allow-list check.
 
-    Uses ``os.path.realpath`` to follow any pre-existing symlinks at the
-    parent directory level — this defeats symlink redirection attacks
-    where an earlier malicious archive planted a symlink pointing
-    outside the legitimate destination.
-
-    Args:
-        target: Candidate absolute path to validate.
-        allowed: Allow-listed prefixes (each ending with "/").
-
-    Returns:
-        True if the resolved target is strictly inside any allow-listed
-        prefix, False otherwise.
+    os.path.realpath follows symlinks already on disk at the parent level,
+    so a malicious archive cannot plant a link that re-aims a later write
+    outside the allow-list.
     """
     real = os.path.realpath(target)
-    # Append "/" before comparison so "/etcfoo" cannot match "/etc"
+    # Append "/" so "/etcfoo" cannot match "/etc"
     real_check = real if real.endswith("/") else real + "/"
     return any(real_check.startswith(prefix) for prefix in allowed)
 
@@ -120,12 +98,10 @@ def _is_path_safe(target: str, allowed: tuple[str, ...]) -> bool:
 def _match_mapping_prefix(
     member_name: str, mapping: dict[str, str]
 ) -> str | None:
-    """Return the longest mapping key that matches *member_name*, or None.
+    """Return the longest path-component prefix of member_name in mapping.
 
-    Uses path-component matching (exact match or prefix + "/") so that
-    a mapping key ``user/config`` does not erroneously match an archive
-    entry ``user/config_backup/``. Selects the longest match to avoid
-    ambiguity when keys share a common root.
+    Path-component matching (exact or prefix + "/") prevents "user/config"
+    from matching "user/config_backup/". Longest match wins on shared roots.
     """
     matches = [
         k
@@ -140,23 +116,20 @@ def _match_mapping_prefix(
 def _resolve_target(
     member_name: str, mapping: dict[str, str], allowed: tuple[str, ...]
 ) -> str | None:
-    """Resolve an archive member to a safe filesystem destination.
+    """Map an archive member to a validated filesystem path.
 
-    Path-traversal protection: the joined path is resolved with
-    ``os.path.realpath`` so that ``..`` segments are normalised BEFORE
-    the allow-list check. This was previously broken because the original
-    check used ``abspath``, which collapses ``..`` but the result was
-    only matched against ``startswith("/etc")`` — letting an archive
-    member like ``system/next_session/../../etc/passwd`` slip through.
+    Uses os.path.realpath (not abspath) before the allow-list check.
+    abspath collapses ".." without following existing symlinks, so
+    "system/next_session/../../etc/passwd" would slip through; realpath
+    catches it.
 
     Args:
         member_name: Archive-relative path of the tar member.
-        mapping: Prefix-to-destination map produced by _build_mapping.
-        allowed: Allow-list of safe filesystem prefixes.
+        mapping: Prefix-to-destination map from _build_mapping.
+        allowed: Real-path-resolved allow-list from _allowed_prefixes.
 
     Returns:
-        Validated absolute target path, or None if the member doesn't
-        match any mapping prefix or escapes the allow-list.
+        Validated absolute path, or None if unmapped or outside allow-list.
     """
     match = _match_mapping_prefix(member_name, mapping)
     if match is None:
@@ -181,18 +154,7 @@ def _resolve_target(
 
 
 def _is_member_safe(member: tarfile.TarInfo) -> bool:
-    """Reject hardlink/symlink/device/fifo entries inside the archive.
-
-    A trusted backup contains only regular files and directories under
-    the documented prefixes. Anything else is suspicious and could be
-    used to overwrite arbitrary files via link redirection.
-
-    Args:
-        member: Tar member metadata.
-
-    Returns:
-        True for regular files and directories only, False otherwise.
-    """
+    """Reject hardlinks, symlinks, devices, fifos — only files/dirs trusted."""
     if member.islnk() or member.issym():
         jlog(
             "SYSTEM",
@@ -216,12 +178,10 @@ def _is_member_safe(member: tarfile.TarInfo) -> bool:
 
 
 def _ensure_safe_target(target: str) -> bool:
-    """Refuse to overwrite *target* if it's currently a symlink.
+    """Refuse to overwrite a pre-existing symlink at target.
 
-    Without this guard, an attacker who can plant a symlink in a
-    legitimate destination directory could redirect the next restore
-    write to an arbitrary file. Returns False on refusal so the caller
-    skips the extraction without aborting the whole restore.
+    A symlink planted by a previous malicious archive could redirect
+    the write to an arbitrary path; bail out rather than follow it.
     """
     if os.path.islink(target):
         jlog(
@@ -236,13 +196,7 @@ def _ensure_safe_target(target: str) -> bool:
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
 ) -> None:
-    """Write a member, unlinking existing files to bypass ETXTBSY.
-
-    Args:
-        tar: Open tar archive.
-        member: Member to extract.
-        target: Pre-validated filesystem destination.
-    """
+    """Write member to target; unlink first to avoid ETXTBSY."""
     if member.isdir():
         os.makedirs(target, exist_ok=True)
         return
@@ -270,7 +224,6 @@ def _write_member(
 def _apply_metadata(
     target: str, member: tarfile.TarInfo, home_real: str, user: str
 ) -> None:
-    """Set mode and ownership on *target* after extraction."""
     os.chmod(target, member.mode)
     if os.path.realpath(target).startswith(home_real + "/"):
         fix_ownership(target, user)
@@ -284,19 +237,12 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract *member* to *target*, applying mode and ownership.
+    """Extract member to target and apply mode/ownership.
 
-    Args:
-        tar: Open tar archive.
-        member: Member to extract.
-        target: Pre-validated filesystem destination.
-        home_real: Resolved real path of the user's home (for chown
-            decision — substring match was unsafe in the original).
-        user: Real username for ownership.
+    home_real must be realpath-resolved; a raw startswith on the home
+    string allows path-component collisions with sibling directories.
 
-    Returns:
-        True on success, False if the destination was a symlink and
-        the write was refused for safety.
+    Returns False if target is a symlink and the write was refused.
     """
     if not _ensure_safe_target(target):
         return False
@@ -320,21 +266,7 @@ def _process_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Validate, resolve and extract a single archive member.
-
-    Args:
-        tar: Open tar archive.
-        member: Member to process.
-        mapping: Prefix-to-destination map.
-        allowed: Allow-list of safe filesystem prefixes.
-        home_real: Resolved real path of the user's home.
-        user: Real username for ownership.
-
-    Returns:
-        True if the member was extracted, False if it was rejected for
-        any reason (unsafe link, no mapping, path escape, symlink at
-        destination).
-    """
+    """Validate and extract one archive member; False on any rejection."""
     if not _is_member_safe(member):
         return False
 
@@ -358,22 +290,9 @@ def _extract_payload(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract every safe member; return True if restore_links.sh is present.
+    """Extract safe members; defer restore_links.sh to avoid TOCTOU in /tmp.
 
-    The restore script is special-cased — it's deferred to a private
-    root-only temp directory after the main payload, instead of being
-    written into one of the standard prefixes. This eliminates the TOCTOU
-    window that existed when the script lived in /tmp.
-
-    Args:
-        tar: Open tar archive.
-        mapping: Prefix-to-destination map.
-        allowed: Allow-list of safe filesystem prefixes.
-        home_real: Resolved real path of the user's home.
-        user: Real username for ownership.
-
-    Returns:
-        True if the archive contains restore_links.sh, False otherwise.
+    Returns True if the archive contains restore_links.sh.
     """
     script_found: bool = False
 
@@ -391,14 +310,10 @@ def _extract_payload(
 
 
 def _run_restore_script(tar: tarfile.TarFile) -> None:
-    """Extract restore_links.sh to a private root-only dir and run it.
+    """Run restore_links.sh from a root-owned 0700 mkdtemp sandbox.
 
-    The script is extracted into a fresh ``mkdtemp`` directory created
-    with mode 0700, owned by root. This is immune to the TOCTOU
-    pre-image attack possible when the script was written to /tmp.
-
-    Args:
-        tar: Open tar archive containing restore_links.sh.
+    Writing to /tmp allowed a race between extraction and exec; mkdtemp
+    with mode 0700 (owned by root) closes that TOCTOU window.
     """
     try:
         member = tar.getmember(_RESTORE_SCRIPT_ARCNAME)
@@ -431,7 +346,6 @@ def _run_restore_script(tar: tarfile.TarFile) -> None:
 
 
 def _reload_systemd() -> None:
-    """Tell systemd to re-read unit files; surface failures explicitly."""
     try:
         subprocess.run(  # nosec B603
             ["/usr/bin/systemctl", "daemon-reload"],
@@ -450,17 +364,10 @@ def _reload_systemd() -> None:
 def _prepare_restore(
     archive_path: str,
 ) -> tuple[str, str, dict[str, str], tuple[str, ...]]:
-    """Validate preconditions and resolve user context.
-
-    Checks root privileges, SSoT availability, archive existence, and
-    archive integrity in order. Exits with 1 on the first failure so that
-    _execute_restore never receives an invalid state.
-
-    Args:
-        archive_path: Filesystem path to the .tar.gz archive.
+    """Validate preconditions; exit(1) on first failure to keep callers clean.
 
     Returns:
-        Tuple (user, home_real, mapping, allowed) ready for extraction.
+        (user, home_real, mapping, allowed) ready for _execute_restore.
     """
     check_root()
     if not load_ssot():
@@ -496,15 +403,6 @@ def _execute_restore(
     mapping: dict[str, str],
     allowed: tuple[str, ...],
 ) -> None:
-    """Open the archive, extract payload, run the link script, reload systemd.
-
-    Args:
-        archive_path: Filesystem path to the .tar.gz archive.
-        user: Real username for ownership assignment.
-        home_real: Resolved real path of the user's home directory.
-        mapping: Prefix-to-destination map produced by _build_mapping.
-        allowed: Allow-list of safe filesystem prefixes.
-    """
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
             has_script = _extract_payload(
@@ -526,15 +424,10 @@ def _execute_restore(
 
 
 def run_restore(archive_path: str) -> None:
-    """Restore the system from *archive_path*.
+    """Restore from archive_path.
 
-    Delegates pre-flight checks to _prepare_restore and the extraction
-    phase to _execute_restore. Per-member rejections are logged but do
-    not abort the operation; archive-level failures abort cleanly with
-    exit code 1.
-
-    Args:
-        archive_path: Filesystem path to a *.tar.gz produced by backup.py.
+    Per-member rejections are logged but non-fatal; archive-level errors
+    abort with exit code 1.
     """
     user, home_real, mapping, allowed = _prepare_restore(archive_path)
     _execute_restore(archive_path, user, home_real, mapping, allowed)

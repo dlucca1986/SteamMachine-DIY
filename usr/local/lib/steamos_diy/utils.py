@@ -107,21 +107,11 @@ _JLOG_REENTRY: list[bool] = [False]
 
 
 def jlog(tag: str, message: str, level: str = "INFO") -> None:
-    """Send a structured log entry to the kernel journal via C-Core.
+    """Route a log entry to the kernel journal, gated by SSoT LOG_LEVEL.
 
-    Respects the LOG_LEVEL set in the SSoT config — messages below the
-    configured threshold are silently discarded before any C call.
-
-    Args:
-        tag: Log tag/module identifier (colons stripped).
-        message: Log message content.
-        level: Log level (DEBUG, INFO, WARN, ERROR). Defaults to "INFO".
-
-    Note:
-        Filtering is done in Python before C-Core invocation to avoid
-        unnecessary system calls for suppressed log levels. A re-entry
-        guard prevents infinite recursion if the SSoT lookup itself
-        triggers a log call (e.g. on a decode error reading LOG_LEVEL).
+    Filters in Python before any C call to skip suppressed levels cheaply.
+    _JLOG_REENTRY prevents infinite recursion when get_ssot_var itself
+    triggers a log call (e.g. a decode error while reading LOG_LEVEL).
     """
     if _JLOG_REENTRY[0]:
         # Already inside jlog: skip threshold lookup and emit directly
@@ -155,23 +145,12 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
 
 
 def notify(status: str, clear_after: bool = False) -> None:
-    """Write a status message to /dev/tty1 via C-Core (zero Python overhead).
-
-    Provides instant TTY feedback with optional screen clear. Bypasses
-    Python buffering for immediate visibility during boot.
-
-    Args:
-        status: Status message to display.
-        clear_after: Clear screen if True. Defaults to False.
-    """
+    """Write *status* to /dev/tty1 via C-Core, bypassing Python buffering."""
     _LIB.c_notify(status.encode("utf-8"), 1 if clear_after else 0)
 
 
 def sd_notify_ready() -> None:
-    """Signal systemd that the service is fully operational (READY=1).
-
-    Called after successful process validation to indicate service readiness.
-    """
+    """Send READY=1 to systemd via C-Core."""
     _LIB.c_sd_notify_ready()
 
 
@@ -181,11 +160,7 @@ def sd_notify_ready() -> None:
 
 
 def load_ssot() -> bool:
-    """Return True if the SSoT config file exists and is readable.
-
-    Returns:
-        True if the SSOT_CONF path points to an existing regular file.
-    """
+    """Return True if the SSoT config file exists."""
     return os.path.isfile(_SSOT_CONF)
 
 
@@ -198,22 +173,10 @@ def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
 
 
 def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
-    """Return a SSoT config value, using an in-process cache.
+    """Read a SSoT config value via C-Core, caching it in-process.
 
-    On cache miss, delegates to the C-Core for a direct disk read and
-    populates both the cache and os.environ for downstream consumers.
-
-    Args:
-        var_name: Configuration variable name.
-        default: Default value if the variable is not found. Defaults to None.
-
-    Returns:
-        Configuration value as string, or *default* if the variable is
-        missing or cannot be decoded.
-
-    Note:
-        Cache is module-level and persists for the lifetime of the process.
-        The variable is also set in os.environ for subprocess access.
+    Also sets os.environ[var_name] so spawned subprocesses inherit it
+    without re-reading the config.
     """
     if var_name in _SSOT_CACHE:
         return _SSOT_CACHE[var_name]
@@ -239,17 +202,7 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
 
 
 def read_session_target(path: str | Path, default: str = "steam") -> str:
-    """Read the session target file via C-Core and return its content.
-
-    Falls back to *default* if the file is missing or unreadable.
-
-    Args:
-        path: Path to the session target file.
-        default: Fallback if file is unreadable. Defaults to "steam".
-
-    Returns:
-        Session target as string ("steam", "desktop", etc.).
-    """
+    """Read next_session via C-Core; fall back to *default* on failure."""
     res_buf = ctypes.create_string_buffer(_SESSION_BUF_SIZE)
     if _LIB.c_read_file_simple(
         str(path).encode("utf-8"), res_buf, _SESSION_BUF_SIZE
@@ -275,26 +228,14 @@ def _parse_yaml(path: str | Path) -> dict[str, Any]:
 
 
 def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
-    """Parse a YAML file and return its contents as a dict.
-
-    Returns an empty dict on any error (missing file, parse error, missing
-    PyYAML module). Never raises exceptions.
-    """
+    """Parse *path* as YAML; return {} on any error or absent PyYAML."""
     if yaml is None or not path or not os.path.exists(path):
         return {}
     return _parse_yaml(path)
 
 
 def write_atomic(path: str | Path, val: str) -> None:
-    """Write *val* to *path* atomically with fdatasync via C-Core.
-
-    Uses the atomic write pattern (temp file + rename) with filesystem
-    sync to ensure durability on SSD.
-
-    Args:
-        path: Target file path.
-        val: Content to write (will be stripped).
-    """
+    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable)."""
     _LIB.c_write_atomic(
         str(path).encode("utf-8"), str(val).strip().encode("utf-8")
     )
@@ -306,13 +247,7 @@ def write_atomic(path: str | Path, val: str) -> None:
 
 
 def apply_env_map(data_dict: dict[str, Any] | None) -> None:
-    """Inject all key/value pairs in *data_dict* into os.environ.
-
-    Non-dict arguments and None values are silently ignored.
-
-    Args:
-        data_dict: Dictionary of environment variables to inject.
-    """
+    """Inject *data_dict* into os.environ; skips None values."""
     if not isinstance(data_dict, dict):
         return
     for key, val in data_dict.items():
@@ -321,19 +256,7 @@ def apply_env_map(data_dict: dict[str, Any] | None) -> None:
 
 
 def spawn_native(path: str, args: list[str]) -> int:
-    """Launch a detached process via C fork/exec (zero Python overhead).
-
-    Uses native C fork/exec for maximum efficiency. The process runs
-    detached from the parent session.
-
-    Args:
-        path: Full path to the executable.
-        args: Full argv passed to execv, including argv[0] (the program name).
-
-    Returns:
-        Child process PID on success, 0 on failure (including encoding
-        errors on path/args).
-    """
+    """Fork/exec *path* detached via C-Core; returns PID or 0 on failure."""
     try:
         encoded_path = path.encode("utf-8")
         arg_v = (ctypes.c_char_p * (len(args) + 1))()
@@ -353,14 +276,7 @@ def spawn_native(path: str, args: list[str]) -> int:
 
 
 def get_real_user() -> tuple[str, Path]:
-    """Return (username, home_path) of the real user behind sudo/pkexec.
-
-    Falls back to the current effective user if no escalation is detected.
-    On any lookup failure, returns ("root", Path("/root")).
-
-    Returns:
-        Tuple of (username, home_path) — string and Path object.
-    """
+    """Resolve real user behind sudo/pkexec; falls back to ("root", /root)."""
     uid = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
     try:
         u_info = pwd.getpwuid(int(uid)) if uid else pwd.getpwuid(os.getuid())
@@ -371,12 +287,7 @@ def get_real_user() -> tuple[str, Path]:
 
 
 def _chown_recursive(target: Path, user_name: str) -> None:
-    """Run native ``chown -R user:user target`` with all output silenced.
-
-    Args:
-        target: Directory to chown recursively.
-        user_name: Target username (also used as group name).
-    """
+    """Run ``chown -R user:user target`` with all output suppressed."""
     try:
         subprocess.run(  # nosec B603
             ["/usr/bin/chown", "-R", f"{user_name}:{user_name}", str(target)],
@@ -389,15 +300,10 @@ def _chown_recursive(target: Path, user_name: str) -> None:
 
 
 def fix_ownership(target_path: str | Path, user_name: str) -> None:
-    """Recursively set ownership of *target_path* to *user_name*.
+    """Set ownership of *target_path* to *user_name*; no-op for root/empty.
 
-    No-op for root or empty user name. Silently ignores permission errors.
-    For directories, uses native ``chown -R`` (more efficient than a
-    Python recursion). For single files, uses os.chown directly.
-
-    Args:
-        target_path: File or directory to chown.
-        user_name: Target username.
+    Directories use ``chown -R`` (avoids Python recursion overhead);
+    single files use os.chown directly.
     """
     if not user_name or user_name == "root":
         return
@@ -414,11 +320,7 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
 
 
 def check_root() -> None:
-    """Exit with code 1 if the process is not running as root.
-
-    Raises:
-        SystemExit: With code 1 if UID != 0.
-    """
+    """Exit with code 1 unless UID == 0."""
     if os.getuid() != 0:
         sys.exit(1)
 
@@ -426,15 +328,7 @@ def check_root() -> None:
 def verify_archive(
     path: str | Path, fail_tag: str = "ARCHIVE_VERIFY_FAIL"
 ) -> bool:
-    """Walk all members of a gzip tar to confirm integrity before extraction.
-
-    Args:
-        path: Path to the .tar.gz archive.
-        fail_tag: Log tag prefix used in the error message on failure.
-
-    Returns:
-        True if the archive opens and iterates cleanly, False on any error.
-    """
+    """Walk all tar members end-to-end to verify gzip integrity."""
     try:
         with tarfile.open(str(path), "r:gz") as tar:
             for _ in tar:
@@ -446,13 +340,7 @@ def verify_archive(
 
 
 def run_shim(tag: str, message: str, exit_code: int = 0) -> None:
-    """Log an interception and exit — entry point for SteamOS shims.
-
-    Args:
-        tag: Journal tag (e.g. "SYSTEM").
-        message: Human-readable description of the intercepted call.
-        exit_code: Exit code expected by Steam (0 = success, 7 = up-to-date).
-    """
+    """Log the intercepted SteamOS call and exit with the expected code."""
     jlog(tag, message)
     sys.exit(exit_code)
 
@@ -463,18 +351,7 @@ def run_shim(tag: str, message: str, exit_code: int = 0) -> None:
 
 
 def get_journal_cmd(tag: str) -> list[str]:
-    """Return the journalctl command list for the requested *tag* filter.
-
-    Constructs a complete journalctl command with standard filters.
-    Supports aggregated tags (ALL) and individual tags (CORE, STEAM,
-    SYSTEM, etc.).
-
-    Args:
-        tag: Journal tag filter (ALL, CORE, STEAM, SYSTEM, or custom).
-
-    Returns:
-        List of command arguments ready for subprocess.run/Popen.
-    """
+    """Build journalctl argv for *tag*; ALL expands to all known SDY tags."""
     base_cmd = [
         "/usr/bin/journalctl",
         "--since",
@@ -496,21 +373,12 @@ def get_journal_cmd(tag: str) -> list[str]:
 
 
 def _normalize_appid(value: str) -> str:
-    """Normalize an AppID extracted from journal logs to its 32-bit form.
+    """Collapse Non-Steam shortcut AppIDs to their 32-bit real form.
 
-    Steam logs Non-Steam shortcut AppIDs as 64-bit values where the
-    high 32 bits are the *real* AppID (matching ``$SteamAppId``) and
-    the low 32 bits are an internal flag mask. The shorter 32-bit
-    form is what every other tool (Protontricks, the Steam URL bar,
-    compatdata folders) uses, so we collapse anything wider than
-    32 bits to its high half before returning.
-
-    Args:
-        value: Raw decimal AppID string captured by the regex.
-
-    Returns:
-        A decimal AppID string fitting in 32 bits, or *value* unchanged
-        when it already fits or is not a parseable integer.
+    Steam logs Non-Steam AppIDs as 64-bit integers: high 32 bits = real
+    AppID (matches $SteamAppId), low 32 bits = internal flag mask.
+    Protontricks, compatdata paths, and the Steam URL bar all use the
+    32-bit form, so shift down anything wider.
     """
     try:
         n = int(value)
@@ -522,19 +390,11 @@ def _normalize_appid(value: str) -> str:
 
 
 def extract_game_metadata(line: str) -> tuple[str | None, str | None]:
-    """Extract a game name or AppID from a raw journal log line.
+    """Extract ("NAME", name) or ("ID", appid) from a raw journal export line.
 
-    Searches for chdir patterns (game directory changes) or AppID/gameID
-    patterns in the log line. Returns the first match found (NAME preferred).
-    AppIDs that exceed 32 bits (Non-Steam shortcut representations) are
-    normalised to their 32-bit "real" form via _normalize_appid.
-
-    Args:
-        line: Raw journal export line.
-
-    Returns:
-        Tuple of (kind, value) where *kind* is "NAME", "ID", or None
-        when no metadata is found. *value* is the extracted string.
+    NAME is derived from chdir entries; ID from gameID/AppID patterns.
+    AppIDs wider than 32 bits are normalised via _normalize_appid.
+    Returns (None, None) when no metadata is found.
     """
     if 'chdir "' in line:
         match = re.search(r'chdir\s+"([^"]+)"', line)

@@ -34,19 +34,11 @@ _DESKTOP_KEYWORDS: frozenset[str] = frozenset({"plasma", "desktop", "kde"})
 
 
 def _resolve_target(arg: str) -> str:
-    """Map a raw argv string to a normalised session target.
+    """Normalise a raw argv string to "desktop" or "steam".
 
-    Performs case-insensitive matching with whitespace stripped, so values
-    coming from systemd unit files, shell aliases or xargs-style triggers
-    are tolerated transparently (e.g. "Desktop ", "  KDE\\n").
-
-    Args:
-        arg: Raw user-supplied argument from argv.
-
-    Returns:
-        Either "desktop" or "steam". Defaults to "steam" for empty or
-        unknown values, preserving the original "fail-safe to Game Mode"
-        behaviour.
+    Strips whitespace and lowercases before matching, tolerating values
+    from systemd units, shell aliases, or xargs. Defaults to "steam" on
+    empty or unknown input (fail-safe to Game Mode).
     """
     if not arg:
         return "steam"
@@ -54,22 +46,13 @@ def _resolve_target(arg: str) -> str:
 
 
 def _dispatch_switch(target: str) -> bool:
-    """Spawn the native helper that triggers the actual session switch.
+    """Spawn the native helper that triggers the session transition.
 
     Hand-off matrix:
-        - target == "desktop": invoke ``steam -shutdown`` to gracefully
-          close the Steam session, allowing the systemd unit to fall
-          through to Plasma.
-        - target == "steam":   invoke ``qdbus6 org.kde.Shutdown
-          /Shutdown logout`` to log out of the current Plasma session,
-          allowing systemd to start the Gamescope/Steam unit.
+        desktop → ``steam -shutdown``          (Steam exits → Plasma)
+        steam   → ``qdbus6 org.kde.Shutdown /Shutdown logout`` (→ Gamescope)
 
-    Args:
-        target: Resolved target ("desktop" or "steam").
-
-    Returns:
-        True if the helper process was spawned successfully (PID > 0),
-        False if spawn_native reported a failure (PID == 0).
+    Returns True if the helper process was spawned (PID > 0).
     """
     if target == "desktop":
         steam_bin = get_ssot_var("bin_steam", BIN_STEAM_DEFAULT)
@@ -92,20 +75,9 @@ def _dispatch_switch(target: str) -> bool:
 def select() -> None:
     """Parse argv and dispatch a session switch request.
 
-    Flow:
-        1. Read argv[1] and normalise it via _resolve_target.
-        2. Persist the chosen target to the next_session file (atomic).
-        3. Log the request and notify the user via TTY.
-        4. Spawn the native helper to trigger the actual switch.
-        5. Log a warning if the helper could not be spawned — the
-           persisted state is still valid, so the next boot will respect
-           it, but the immediate switch will not happen.
-
-    Note:
-        Silently returns when no argument is provided. The persisted state
-        is updated *before* spawning the helper: this is intentional, so
-        that if the helper crashes after persisting we still come up in
-        the requested target on the next session.
+    State is persisted to next_session *before* spawning the helper so a
+    helper crash still leaves the system in a consistent state for the next
+    boot. No-arg invocations are silently ignored.
     """
     if len(sys.argv) < 2:
         return

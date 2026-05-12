@@ -134,27 +134,25 @@ yaml_parser.width = _YAML_WIDTH
 
 
 class LineNumberArea(QWidget):
-    """Side area widget that renders line numbers for YAMLEditor."""
+    """Sidebar widget that renders line numbers for YAMLEditor."""
 
     def __init__(self, editor):
-        """Initialize the line number area attached to *editor*."""
         super().__init__(editor)
         self.editor = editor
 
     def sizeHint(self):  # pylint: disable=invalid-name
-        """Return the size hint for the area (Qt convention)."""
+        """Qt override: report preferred width from the editor."""
         return QSize(self.editor.line_number_area_width(), 0)
 
     def paintEvent(self, event):  # pylint: disable=invalid-name
-        """Forward the paint event to the editor's drawer."""
+        """Qt override: delegate painting to the editor."""
         self.editor.line_number_area_paint_event(event)
 
 
 class YAMLEditor(QPlainTextEdit):
-    """Plain-text editor with line numbers and Enter-key auto-indent."""
+    """Plain-text editor with line-number gutter and Enter-key auto-indent."""
 
     def __init__(self, parent=None):
-        """Initialize the YAML editor and wire signals to the gutter."""
         super().__init__(parent)
         self.line_number_area = LineNumberArea(self)
         self.blockCountChanged.connect(self.update_line_number_area_width)
@@ -163,7 +161,7 @@ class YAMLEditor(QPlainTextEdit):
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
     def line_number_area_width(self):
-        """Return the gutter width in pixels, scaling with line count."""
+        """Compute sidebar pixel width to fit the highest line number."""
         digits = 1
         max_val = max(1, self.blockCount())
         while max_val >= 10:
@@ -172,11 +170,11 @@ class YAMLEditor(QPlainTextEdit):
         return 10 + self.fontMetrics().horizontalAdvance("9") * digits
 
     def update_line_number_area_width(self, _):
-        """Update viewport margins to make room for the gutter."""
+        """Resize left viewport margin to match the current sidebar width."""
         self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
 
     def update_line_number_area(self, rect, dy):
-        """Repaint or scroll the gutter to follow the editor view."""
+        """Scroll or repaint the line number area on scroll/content change."""
         if dy:
             self.line_number_area.scroll(0, dy)
         else:
@@ -187,7 +185,7 @@ class YAMLEditor(QPlainTextEdit):
             self.update_line_number_area_width(0)
 
     def resizeEvent(self, event):  # pylint: disable=invalid-name
-        """Reposition the gutter on widget resize."""
+        """Qt override: refit the sidebar geometry on editor resize."""
         super().resizeEvent(event)
         cr = self.contentsRect()
         self.line_number_area.setGeometry(
@@ -197,7 +195,7 @@ class YAMLEditor(QPlainTextEdit):
         )
 
     def line_number_area_paint_event(self, event):
-        """Draw line numbers in the gutter using a contrasting palette."""
+        """Paint line numbers in the sidebar for the visible block range."""
         painter = QPainter(self.line_number_area)
         painter.fillRect(event.rect(), QColor("#2c3e50"))
         block = self.firstVisibleBlock()
@@ -225,7 +223,7 @@ class YAMLEditor(QPlainTextEdit):
             )
 
     def keyPressEvent(self, event):  # pylint: disable=invalid-name
-        """Auto-indent on Enter — keep previous line's leading whitespace."""
+        """Auto-indent on Enter — preserve leading whitespace."""
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             cursor = self.textCursor()
             indent = re.match(r"^\s*", cursor.block().text()).group(0)
@@ -237,16 +235,14 @@ class YAMLEditor(QPlainTextEdit):
 
 # pylint: disable=too-few-public-methods
 class YAMLSyntaxHighlighter(QSyntaxHighlighter):
-    """Rule-based syntax highlighter for YAML documents."""
+    """Regex-based syntax highlighter for YAML content in QPlainTextEdit."""
 
     def __init__(self, document):
-        """Initialize the highlighter and pre-build the rule set."""
         super().__init__(document)
         self.rules = []
         self._setup_rules()
 
     def _setup_rules(self):
-        """Define highlighting rules for keys, values, lists and comments."""
         styles = [
             (r"#.*", "#7f8c8d", False),
             (r"^\s*[\w.-]+(?=:)", "#3498db", True),
@@ -264,7 +260,7 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
             self.rules.append((QRegularExpression(pat), fmt))
 
     def highlightBlock(self, text):  # pylint: disable=invalid-name
-        """Apply all rules to *text* (called by Qt for each visible block)."""
+        """Called by Qt per visible block."""
         for expression, fmt in self.rules:
             it = expression.globalMatch(text)
             while it.hasNext():
@@ -278,20 +274,15 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
 
 
 def _is_game_log_line(line: str, chdir_marker: str) -> bool:
-    """Return True if *line* looks like a game launch trace."""
     return chdir_marker in line or "gameID " in line or "AppID = " in line
 
 
 def _filter_game_journal_lines(stdout: str, home: str) -> list[str]:
-    """Filter raw journal lines to those that look like game launches.
-
-    Replaces the previous shell pipeline (``grep | grep -v | tail``) with a
-    pure-Python implementation. This avoids ``shell=True`` and any risk of
-    interpolation issues if *home* contains shell metacharacters.
+    """Filter journalctl output; return last _GAME_LOG_TAIL game-launch lines.
 
     Args:
         stdout: Full ``journalctl --no-hostname`` output.
-        home: User home path used as a prefix anchor for chdir lines.
+        home: User home path used as chdir prefix anchor.
 
     Returns:
         At most _GAME_LOG_TAIL most-recent matching lines, preserving order.
@@ -313,14 +304,13 @@ def _filter_game_journal_lines(stdout: str, home: str) -> list[str]:
 
 # pylint: disable=too-many-instance-attributes
 class SDYControlCenter(QMainWindow):
-    """Main application window for the Control Center."""
+    """Main application window: diagnostics, maintenance, YAML editors."""
 
     process_finished = pyqtSignal(str, str, bool)  # (title, message, is_error)
     logs_ready = pyqtSignal(list, str)  # (entries, tag)
     games_detected = pyqtSignal(dict)  # {name: appid_or_name}
 
     def __init__(self):
-        """Initialize main window, state and tabs."""
         super().__init__()
         self.setWindowTitle("SteamMachine-DIY Control Center")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
@@ -393,12 +383,11 @@ class SDYControlCenter(QMainWindow):
     # ── Setup ──────────────────────────────────────────────────────────────
 
     def _load_ssot_to_env(self):
-        """Pre-load known SSoT keys into os.environ via cache side-effect."""
+        """Pre-load SSoT keys into os.environ; get_ssot_var caches on miss."""
         for key in _SSOT_KEYS:
             get_ssot_var(key)
 
     def _setup_ui(self):
-        """Build the main tabbed interface."""
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.setCentralWidget(self.tabs)
@@ -412,14 +401,14 @@ class SDYControlCenter(QMainWindow):
         self.tabs.addTab(self.games_tab, "Game Overrides")
 
     def on_tab_changed(self, index):
-        """Refresh diagnostics logs when the user enters that tab."""
+        """Reload logs when the user switches to the diagnostics tab."""
         if index == 0:
             self.load_logs()
 
     # ── Diagnostics tab ────────────────────────────────────────────────────
 
     def init_diag_tab(self):
-        """Build the Diagnostics tab — log viewer with tag filter."""
+        """Build the Diagnostics tab layout and wire up signals."""
         self.diag_tab = QWidget()
         layout = QVBoxLayout()
         header = QHBoxLayout()
@@ -448,7 +437,7 @@ class SDYControlCenter(QMainWindow):
     # ── Maintenance tab ────────────────────────────────────────────────────
 
     def init_maint_tab(self):
-        """Build the Maintenance tab — system and config buttons."""
+        """Build the Maintenance tab layout and wire up signals."""
         self.maint_tab = QWidget()
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -497,7 +486,7 @@ class SDYControlCenter(QMainWindow):
         self.maint_tab.setLayout(layout)
 
     def edit_ssot_privileged(self):
-        """Open the SSoT config file in Kate (or KWrite as fallback)."""
+        """Open SSoT in Kate, falling back to KWrite."""
         kate = "/usr/bin/kate"
         editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
         try:
@@ -507,7 +496,7 @@ class SDYControlCenter(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to launch: {err}")
 
     def cleanup_logs_privileged(self):
-        """Vacuum the system journal in a background thread (pkexec)."""
+        """Vacuum journal via pkexec; emits process_finished."""
 
         def worker() -> None:
             try:
@@ -539,7 +528,7 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _safe_spawn(self, cmd):
-        """Launch *cmd* without blocking. Errors are logged to the journal."""
+        """Non-blocking Popen; logs errors to journal rather than raising."""
         try:
             # pylint: disable=consider-using-with
             subprocess.Popen(cmd)  # nosec B603
@@ -549,7 +538,7 @@ class SDYControlCenter(QMainWindow):
     # ── Global Options tab ─────────────────────────────────────────────────
 
     def init_global_tab(self):
-        """Build the Global Options YAML editor tab."""
+        """Build the Global Config tab layout and wire up signals."""
         self.global_tab = QWidget()
         layout = QVBoxLayout()
         header = QHBoxLayout()
@@ -587,7 +576,7 @@ class SDYControlCenter(QMainWindow):
     # ── Game Overrides tab ─────────────────────────────────────────────────
 
     def init_games_tab(self):
-        """Build the Game Overrides YAML editor tab."""
+        """Build the Game Profiles tab layout and wire up signals."""
         self.games_tab = QWidget()
         layout = QVBoxLayout()
         header = QHBoxLayout()
@@ -623,7 +612,6 @@ class SDYControlCenter(QMainWindow):
     # ── YAML editor helpers ────────────────────────────────────────────────
 
     def _highlight_yaml_error(self, editor, err: Exception) -> None:
-        """Highlight the offending line on a YAML parse error if known."""
         mark = getattr(err, "problem_mark", None)
         if mark:
             self._highlight_error_line(editor, mark.line)
@@ -648,11 +636,10 @@ class SDYControlCenter(QMainWindow):
         hl.rehighlight()
 
     def toggle_template(self, context):
-        """Switch the editor between the active config and its template view.
+        """Toggle between live config and read-only template view.
 
         Args:
-            context: Either "global" or "games" — selects which editor pair
-                (editor, save button, toggle, highlighter) to operate on.
+            context: "global" or "games" — selects the editor pair.
         """
         state = self.view_states[context]
         widgets = self._template_widgets_for(context)
@@ -663,7 +650,6 @@ class SDYControlCenter(QMainWindow):
             self._enter_template_mode(context, state, widgets)
 
     def _template_widgets_for(self, context):
-        """Return (editor, save_btn, tmp_btn, highlighter) for *context*."""
         if context == "global":
             return (
                 self.global_editor,
@@ -679,7 +665,7 @@ class SDYControlCenter(QMainWindow):
         )
 
     def _template_path_for(self, context):
-        """Return the template Path for *context* (may not exist)."""
+        """Derive template path for *context*; file may not exist."""
         if context == "global":
             current = self.combo_global_files.currentText()
         else:
@@ -692,7 +678,6 @@ class SDYControlCenter(QMainWindow):
         return self.conf_root / fname
 
     def _enter_template_mode(self, context, state, widgets):
-        """Load the template into the editor and disable saving."""
         editor, save_btn, tmp_btn, hl = widgets
         t_path = self._template_path_for(context)
         if not t_path.exists():
@@ -705,7 +690,6 @@ class SDYControlCenter(QMainWindow):
         hl.rehighlight()
 
     def _exit_template_mode(self, state, widgets):
-        """Restore the editor's previous content and re-enable saving."""
         editor, save_btn, tmp_btn, hl = widgets
         editor.setPlainText(state["cache"])
         tmp_btn.setText("📄 View Template")
@@ -714,16 +698,14 @@ class SDYControlCenter(QMainWindow):
         hl.rehighlight()
 
     def _atomic_save(self, path, content, editor):
-        """Validate *content* as YAML and save to *path* atomically.
+        """Validate YAML and write atomically via tmp+fsync+rename.
 
-        Uses the temp-file + rename pattern with explicit fsync on the temp
-        file before rename — this guarantees durability across abrupt power
-        loss on btrfs and ext4.
+        Guarantees durability on btrfs/ext4 across abrupt power loss.
 
         Args:
             path: Destination path.
-            content: New file content (YAML text).
-            editor: Editor used to surface error highlights on parse failure.
+            content: YAML text to write.
+            editor: Editor widget for error highlight on parse failure.
         """
         editor.setExtraSelections([])
         try:
@@ -749,7 +731,6 @@ class SDYControlCenter(QMainWindow):
             QMessageBox.critical(self, "Save Error", str(exc))
 
     def _highlight_error_line(self, editor, idx):
-        """Mark a problematic line and the previous one in *editor*."""
         sels = []
         for hex_col, off in [("#e74c3c", 0), ("#f39c12", -1)]:
             if idx + off < 0:
@@ -771,7 +752,7 @@ class SDYControlCenter(QMainWindow):
         editor.setExtraSelections(sels)
 
     def load_global_file(self):
-        """Load the YAML file currently selected in the global combo."""
+        """Load the selected global YAML file into the editor."""
         path = self.conf_root / self.combo_global_files.currentText()
         if path.exists():
             self.global_editor.setPlainText(path.read_text(encoding="utf-8"))
@@ -779,17 +760,17 @@ class SDYControlCenter(QMainWindow):
                 self.global_hl.rehighlight()
 
     def save_global_config(self):
-        """Persist the global editor content via _atomic_save."""
+        """Atomically save the global YAML editor content to disk."""
         dest = self.conf_root / self.combo_global_files.currentText()
         self._atomic_save(
             str(dest), self.global_editor.toPlainText(), self.global_editor
         )
 
     def load_game_file(self, raw):
-        """Load (or scaffold) the YAML profile for the selected game.
+        """Load or scaffold YAML profile for the selected game.
 
         Args:
-            raw: Combo display string in the form "Name (AppID)" or "Name".
+            raw: Combo display string — "Name (AppID)" or bare name.
         """
         if not raw or "/" in raw:
             return
@@ -804,15 +785,10 @@ class SDYControlCenter(QMainWindow):
             self.game_hl.rehighlight()
 
     def _scaffold_game_profile(self, raw, name):
-        """Build a default YAML profile body for a newly-detected game.
+        """Build default YAML profile; includes SDY_ID header if AppID present.
 
-        Args:
-            raw: Original combo string, possibly containing "(AppID)".
-            name: Cleaned game name (no parenthesised AppID).
-
-        Returns:
-            YAML text including the SDY_ID/STEAM_APPID header when an
-            AppID was present in *raw*, plus empty wrapper/extra fields.
+        Returns YAML with STEAM_APPID header when AppID is found in *raw*,
+        else a bare scaffold.
         """
         m = _APPID_FROM_DISPLAY.search(raw)
         aid = m.group(1) if m else ""
@@ -823,7 +799,7 @@ class SDYControlCenter(QMainWindow):
         )
 
     def save_game_profile(self):
-        """Persist the game editor content under games.d/<Name>.yaml."""
+        """Atomically save the current game profile YAML to disk."""
         raw = self.combo_games.currentText().strip()
         if not raw:
             return
@@ -836,12 +812,10 @@ class SDYControlCenter(QMainWindow):
     # ── Game discovery (background thread) ─────────────────────────────────
 
     def refresh_detected_games(self):
-        """Scan the system journal for game launches in a background thread.
+        """Scan journal for game launches; emits games_detected when done.
 
-        Note:
-            Uses ``journalctl`` directly with no shell — filtering is done
-            in pure Python via _filter_game_journal_lines, eliminating the
-            previous shell-injection surface and preventing UI freezes.
+        Runs journalctl directly (no shell) — pure-Python filtering avoids
+        shell-injection risk when home contains metacharacters.
         """
         self.combo_games.setPlaceholderText("Scanning history...")
         home = os.path.expanduser("~")
@@ -869,12 +843,10 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _update_game_combo_ui(self, detected):
-        """Update the game combo box with detected and on-disk profiles.
+        """Repopulate combo from detected games + on-disk profiles.
 
         Args:
-            detected: Mapping {game_name: appid_str_or_name}. Empty dict
-                means "no detection or scan failed" — falls back to
-                placeholder.
+            detected: {name: appid_or_name}; empty dict triggers placeholder.
         """
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
@@ -885,7 +857,6 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.setPlaceholderText("Journal unavailable.")
 
     def _merge_on_disk_profiles(self, detected):
-        """Add games.d/*.yaml entries to *detected* if missing."""
         gdir = self.conf_root / "games.d"
         if not gdir.exists():
             return
@@ -893,23 +864,13 @@ class SDYControlCenter(QMainWindow):
             detected.setdefault(p.stem, p.stem)
 
     def _format_combo_items(self, detected):
-        """Format {name: appid} into combo display strings."""
         return [
             f"{n} ({a})" if a.isdigit() and a != n else n
             for n, a in sorted(detected.items())
         ]
 
     def _parse_game_logs(self, res: str) -> dict[str, str]:
-        """Extract {name: appid_or_name} pairs from filtered log text.
-
-        Args:
-            res: Raw text containing one journal line per row.
-
-        Returns:
-            Dict mapping game name to AppID (string of digits) or back to
-            the same name when no AppID was associated. Names without a
-            numeric AppID still appear so the UI can offer profile creation.
-        """
+        """Extract {name: appid_or_name} pairs from filtered journal text."""
         det: dict[str, str] = {}
         cur: str | None = None
         for line in res.splitlines():
@@ -918,7 +879,6 @@ class SDYControlCenter(QMainWindow):
 
     @staticmethod
     def _apply_name_hit(value: str | None, det: dict[str, str]) -> str | None:
-        """Register a game name and return it as the new detection cursor."""
         if value is not None:
             det[value] = value
         return value
@@ -927,14 +887,12 @@ class SDYControlCenter(QMainWindow):
     def _apply_id_hit(
         cur: str | None, value: str | None, det: dict[str, str]
     ) -> None:
-        """Associate an AppID with the last detected game name."""
         if cur and value and len(value) >= _MIN_APPID_LEN:
             det[cur] = value
 
     def _update_detection(
         self, line: str, cur: str | None, det: dict[str, str]
     ) -> str | None:
-        """Process one journal line and update *det* in place."""
         kind, value = extract_game_metadata(line)
         if kind == "NAME":
             return self._apply_name_hit(value, det) or cur
@@ -947,15 +905,14 @@ class SDYControlCenter(QMainWindow):
     def _parse_export_format(
         self, stdout: str, launches: set[str]
     ) -> list[tuple[datetime, str]]:
-        """Parse ``journalctl -o export`` output into (timestamp, line) tuples.
+        """Parse ``journalctl -o export`` into (timestamp, line) tuples.
 
         Args:
-            stdout: Raw export-format output from journalctl.
-            launches: Mutable set; LAUNCH_ARGS values are added so that
-                duplicate gamescope echo lines can be deduplicated later.
+            stdout: Raw export-format journalctl output.
+            launches: Mutated in place — LAUNCH_ARGS appended for dedup.
 
         Returns:
-            List of (datetime, formatted_line) tuples in arrival order.
+            (datetime, formatted_line) list in arrival order.
         """
         ents: list[tuple[datetime, str]] = []
         cur: dict[str, Any] = {}
@@ -972,16 +929,15 @@ class SDYControlCenter(QMainWindow):
         cur: dict[str, Any],
         launches: set[str],
     ) -> tuple[datetime, str] | None:
-        """Update *cur* in place, return finished entry on MESSAGE= line.
+        """Accumulate one export-format field; return entry on MESSAGE=.
 
         Args:
             line: Single export-format line.
-            cur: Accumulator dict for the current record (mutated).
-            launches: Set updated with LAUNCH_ARGS strings as a side effect.
+            cur: Accumulator dict for the current record (mutated in place).
+            launches: Mutated — LAUNCH_ARGS strings appended as side effect.
 
         Returns:
-            Tuple (datetime, formatted_line) when *line* is a MESSAGE=
-            terminator, else None (the accumulator is updated in place).
+            (datetime, formatted_line) on MESSAGE= terminator, else None.
         """
         if line.startswith("__REALTIME_TIMESTAMP="):
             cur["ts"] = datetime.fromtimestamp(
@@ -999,7 +955,6 @@ class SDYControlCenter(QMainWindow):
     def _finalize_export_entry(
         line: str, cur: dict[str, Any], launches: set[str]
     ) -> tuple[datetime, str]:
-        """Build a formatted entry from a MESSAGE= line and the accumulator."""
         msg = line.split("=", 1)[1]
         ident = cur.get("id", "SYSTEM")
         ts = cur.get("ts", datetime.now())
@@ -1010,14 +965,13 @@ class SDYControlCenter(QMainWindow):
     def _fetch_gamescope_logs(
         self, launches: set[str]
     ) -> list[tuple[datetime, str]]:
-        """Pull gamescope-tagged journal lines and skip echoes of *launches*.
+        """Pull gamescope journal lines, skipping echoes of known *launches*.
 
         Args:
-            launches: Set of LAUNCH_ARGS strings already seen — prevents
-                duplicate display of the same launch line.
+            launches: LAUNCH_ARGS already emitted — prevents duplicate display.
 
         Returns:
-            List of (datetime, formatted_line) tuples ready for sorting.
+            (datetime, formatted_line) list ready for merge-sort.
         """
         stdout = self._run_journalctl_iso()
         if not stdout:
@@ -1033,11 +987,6 @@ class SDYControlCenter(QMainWindow):
         return ents
 
     def _run_journalctl_iso(self) -> str:
-        """Run ``journalctl`` over the last hour in short-iso format.
-
-        Returns:
-            Captured stdout as string, or empty string on any failure.
-        """
         try:
             res = subprocess.run(  # nosec B603
                 [
@@ -1059,16 +1008,7 @@ class SDYControlCenter(QMainWindow):
     def _parse_gamescope_line(
         self, line: str, launches: set[str]
     ) -> tuple[datetime, str] | None:
-        """Parse a single gamescope journal line into (ts, formatted).
-
-        Args:
-            line: Raw short-iso journal line.
-            launches: Set of LAUNCH_ARGS already emitted, for deduplication.
-
-        Returns:
-            (datetime, formatted_line) tuple, or None if the line is
-            unparseable or is a duplicate of a known LAUNCH_ARGS.
-        """
+        """Parse one gamescope line; return None if duplicate or malformed."""
         parsed = self._split_gamescope_line(line)
         if parsed is None:
             return None
@@ -1079,11 +1019,6 @@ class SDYControlCenter(QMainWindow):
         return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
 
     def _split_gamescope_line(self, line: str) -> tuple[datetime, str] | None:
-        """Split a short-iso journal line into (timestamp, message).
-
-        Returns:
-            (datetime, str) on success, None if the line cannot be parsed.
-        """
         try:
             ps = line.split(" ", 2)
             if len(ps) < 3:
@@ -1100,7 +1035,6 @@ class SDYControlCenter(QMainWindow):
 
     @staticmethod
     def _is_duplicate_launch(msg: str, launches: set[str]) -> bool:
-        """Return True if *msg* is a LAUNCH_ARGS already in *launches*."""
         if "LAUNCH_ARGS" not in msg:
             return False
         arg = msg.split("LAUNCH_ARGS:", 1)[-1].strip()
@@ -1109,7 +1043,7 @@ class SDYControlCenter(QMainWindow):
     # ── Logs UI flow ───────────────────────────────────────────────────────
 
     def load_logs(self):
-        """Load logs in a background thread to keep the UI responsive."""
+        """Reload logs in a daemon thread; emits logs_ready when done."""
         tag = re.sub(
             r"[^\x00-\x7F]+", "", self.tag_filter.currentText()
         ).strip()
@@ -1138,7 +1072,6 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_logs_ready(self, ents, tag):
-        """Receive log results from the worker thread and render them."""
         self.tag_filter.setEnabled(True)
 
         if tag.startswith("ERROR:"):
@@ -1151,7 +1084,6 @@ class SDYControlCenter(QMainWindow):
             self.log_display.setPlainText(f"No {tag} activity.")
 
     def _apply_log_style(self, line):
-        """Wrap *line* tokens (CORE:, [gamescope], ...) in HTML colour."""
         for tag, (ico, col) in self.log_styles.items():
             if tag in line:
                 return line.replace(
@@ -1162,7 +1094,6 @@ class SDYControlCenter(QMainWindow):
         return line
 
     def _style_gamescope_line(self, line):
-        """Apply gamescope-specific colouring to a journal line."""
         line = line.replace(
             "[gamescope]", "<b style='color:#1abc9c;'>[gamescope]</b>"
         )
@@ -1180,7 +1111,6 @@ class SDYControlCenter(QMainWindow):
         return line
 
     def _display_colored_logs(self, logs):
-        """Append styled log lines to the display, collapsing repeats."""
         self.log_display.clear()
         lines, last, count = logs.strip().split("\n"), None, 1
 
@@ -1203,7 +1133,7 @@ class SDYControlCenter(QMainWindow):
         flush(count)
 
     def copy_logs(self):
-        """Copy the current log display to the X11/Wayland clipboard."""
+        """Copy the log display content to the system clipboard."""
         txt = self.log_display.toPlainText()
         if txt:
             QApplication.clipboard().setText(txt)
@@ -1214,7 +1144,7 @@ class SDYControlCenter(QMainWindow):
             )
 
     def export_support_log(self):
-        """Save the current log display content to a user-chosen file."""
+        """Export the gamescope support log to a user-chosen file."""
         dest, _ = QFileDialog.getSaveFileName(
             self, "Save Log", "sdy_support.log"
         )
@@ -1229,13 +1159,6 @@ class SDYControlCenter(QMainWindow):
     # ── Async result handlers ─────────────────────────────────────────────
 
     def _show_completion_message(self, title, message, is_error):
-        """Show a result dialog for a finished async operation.
-
-        Args:
-            title: Dialog title.
-            message: Body text.
-            is_error: True for warning icon, False for information.
-        """
         if is_error:
             QMessageBox.warning(self, title, message)
         else:
@@ -1244,7 +1167,7 @@ class SDYControlCenter(QMainWindow):
     # ── Privileged operations ─────────────────────────────────────────────
 
     def run_backup(self):
-        """Launch the backup script under pkexec in a worker thread."""
+        """Run backup via pkexec in a daemon thread; emits process_finished."""
         script = os.path.join(self.lib_path, "backup.py")
         QMessageBox.information(self, "Backup", "Backup process started...")
 
@@ -1265,7 +1188,7 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def run_restore(self):
-        """Restore from a user-selected archive under pkexec."""
+        """Restore from archive under pkexec; emits process_finished."""
         fpath, _ = QFileDialog.getOpenFileName(
             self, "Select Backup", "", "*.tar.gz"
         )

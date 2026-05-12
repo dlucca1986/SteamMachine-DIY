@@ -51,16 +51,7 @@ _HEADER_READ_BYTES: int = 1024
 
 
 def _file_header_matches(path: str, search_terms: tuple[str, ...]) -> bool:
-    """Return True if the first _HEADER_READ_BYTES of *path* contain any term.
-
-    Args:
-        path: File to inspect.
-        search_terms: Terms to look for as substrings in the header.
-
-    Returns:
-        True if the file is readable and at least one term appears in
-        its head; False on read errors or no match.
-    """
+    """Check first _HEADER_READ_BYTES of *path* for any of *search_terms*."""
     try:
         with open(path, "r", encoding="utf-8") as fh:
             header = fh.read(_HEADER_READ_BYTES)
@@ -70,10 +61,7 @@ def _file_header_matches(path: str, search_terms: tuple[str, ...]) -> bool:
 
 
 def _iter_yaml_files(directory: str):
-    """Yield ``os.DirEntry`` for every *.yaml file in *directory*.
-
-    Yields nothing on scandir failures (logged at DEBUG level).
-    """
+    """Yield DirEntry for every *.yaml in *directory*; silent on error."""
     try:
         for entry in os.scandir(directory):
             if entry.is_file() and entry.name.endswith(".yaml"):
@@ -83,18 +71,10 @@ def _iter_yaml_files(directory: str):
 
 
 def _find_profile_by_id(directory: str, appid: str) -> str | None:
-    """Scan YAML headers in *directory* for a STEAM_APPID or SDY_ID match.
+    """Scan YAML headers for STEAM_APPID/SDY_ID match without full parsing.
 
-    Reads only the first _HEADER_READ_BYTES of each file to avoid full YAML
-    parsing — profile headers are always at the top of the file by convention.
-
-    Args:
-        directory: Absolute path to the directory containing *.yaml profiles.
-        appid: Steam AppID or SDY_ID to look for, as a string.
-
-    Returns:
-        Absolute path of the first matching profile file, or None if no
-        match is found or the directory cannot be read.
+    Reads only _HEADER_READ_BYTES per file — IDs live at the top by convention,
+    full parsing would be pure waste.
     """
     if not appid or not os.path.isdir(directory):
         return None
@@ -109,22 +89,10 @@ def _find_profile_by_id(directory: str, appid: str) -> str | None:
 
 
 def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
-    """Derive (stem, effective_name) from the target executable in *raw_args*.
+    """Derive (stem, effective_name) from the rightmost absolute path in argv.
 
-    Walks *raw_args* from the end looking for the first argument that is an
-    existing absolute path (e.g. the actual game binary, not a wrapper flag).
-    Falls back to the first argument resolved as absolute when no match is
-    found.
-
-    If the executable stem is in _GENERIC_STEMS (e.g. "start", "launcher")
-    the parent directory name is used as effective_name instead — this is
-    much more useful for profile lookup than a generic word.
-
-    Args:
-        raw_args: Original argv received by sdy (without sys.argv[0]).
-
-    Returns:
-        A (stem, effective_name) tuple of strings. Both are non-empty.
+    When the stem is generic (start, launcher, run…), substitutes the parent
+    directory name — /opt/MyGame/start.sh resolves to "MyGame", not "start".
     """
     target_path = next(
         (
@@ -145,23 +113,12 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
 def _get_profile_path(
     game_conf_dir: str, steam_appid: str | None, stem: str, eff_name: str
 ) -> str | None:
-    """Hierarchical profile lookup: AppID first, then by-name fallbacks.
+    """Resolve profile with AppID > effective_name > stem precedence.
 
-    Resolution order (first hit wins):
-        1. YAML file whose header declares STEAM_APPID/SDY_ID == *steam_appid*
+    First hit wins:
+        1. Header-matched STEAM_APPID/SDY_ID in *game_conf_dir*
         2. <game_conf_dir>/<eff_name>.yaml
         3. <game_conf_dir>/<stem>.yaml
-
-    Args:
-        game_conf_dir: Directory containing per-game *.yaml profiles.
-        steam_appid: Steam AppID set by Steam in the env, or None for non-Steam
-            launches.
-        stem: Raw executable stem (e.g. "start" from "start.sh").
-        eff_name: Effective name after _resolve_effective_name normalisation.
-
-    Returns:
-        Absolute path to the matching profile file, or None when no profile
-        is found at any tier.
     """
     if steam_appid:
         found = _find_profile_by_id(game_conf_dir, steam_appid)
@@ -177,17 +134,7 @@ def _get_profile_path(
 
 
 def _resolve_games_dir() -> str:
-    """Return the directory containing per-game YAML profiles.
-
-    Reads games_conf_dir directly from the SSoT config. Falls back to
-    _FALLBACK_GAMES_DIR when the SSoT key is absent.
-
-    Returns:
-        Absolute path to the games.d directory. Existence is NOT checked
-        here — the caller is responsible for graceful handling of missing
-        directories (this is by design: profile resolution is best-effort
-        and a missing directory simply means "no profile found").
-    """
+    """Return games.d path from SSoT, falling back to _FALLBACK_GAMES_DIR."""
     conf_dir = get_ssot_var("games_conf_dir")
     if conf_dir:
         return conf_dir
@@ -195,18 +142,9 @@ def _resolve_games_dir() -> str:
 
 
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
-    """Compose the final command line: wrapper + raw_args + extra_args.
+    """Compose wrapper + raw_args + extra_args for execvpe.
 
-    Reads GAME_WRAPPER and GAME_EXTRA_ARGS from the profile first, then from
-    the environment. Profile values take precedence — this matches the SSoT
-    layering used in the rest of the project.
-
-    Args:
-        raw_args: Original argv received from Steam (binary + steam args).
-        profile_data: Parsed YAML profile (may be empty dict).
-
-    Returns:
-        Final argv list ready for os.execvpe.
+    Profile values override env vars — mirrors SSoT layering semantics.
     """
     wrapper = profile_data.get("GAME_WRAPPER") or os.getenv("GAME_WRAPPER", "")
     extra = profile_data.get("GAME_EXTRA_ARGS") or os.getenv(
@@ -222,16 +160,9 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
 
 
 def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
-    """Replace the current process with the resolved game command.
+    """execvpe the game, replacing this process. Never returns on success.
 
-    Logs the launch and never returns on success — ``os.execvpe`` swaps
-    the running process image with *full_cmd*. On failure (binary not
-    found, permission denied, etc.) logs the error and exits with 1.
-
-    Args:
-        full_cmd: Full argv list for the game (wrapper + game + extra).
-        stem: Executable stem, used in the launch log.
-        steam_id: Steam AppID for the launch log; "N/A" when missing.
+    Exits with 1 on binary-not-found, permission denied, or OS failure.
     """
     try:
         executable = shutil.which(full_cmd[0])
@@ -250,19 +181,10 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
 
 
 def run() -> None:
-    """Resolve profile, apply environment and exec the game (zero-fork).
+    """Resolve profile and exec the game zero-fork.
 
-    Discovery flow:
-        1. Resolve the games.d directory from the SSoT.
-        2. Derive stem / effective name from raw argv.
-        3. Look up a profile by AppID -> effective name -> stem.
-        4. Apply environment in SSoT order: global manifesto, then profile.
-        5. Build the final command (wrapper + game + extra args).
-        6. os.execvpe the result so the game replaces this Python process,
-           leaving Steam parented directly to the game (zero-fork).
-
-    Exits with status 1 on launch failure; never returns on success because
-    the process image is replaced by the game.
+    Flow: SSoT → argv → AppID/name lookup → env layering → execvpe.
+    Exits with 1 on failure; never returns on success.
     """
     if len(sys.argv) < 2:
         return

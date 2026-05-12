@@ -83,28 +83,10 @@ _RESTORE_SCRIPT_MODE: int = 0o755
 
 
 def _is_relevant_symlink(target: str) -> bool:
-    """Return True if *target* points into the core library or polkit helpers.
-
-    Args:
-        target: Resolved (absolute) symlink target.
-
-    Returns:
-        True if any of _SYMLINK_TARGET_MARKERS is a substring of *target*.
-    """
     return any(marker in target for marker in _SYMLINK_TARGET_MARKERS)
 
 
 def _resolve_symlink(entry) -> str | None:
-    """Return realpath of *entry* if it's a relevant symlink, else None.
-
-    Args:
-        entry: os.DirEntry produced by os.scandir.
-
-    Returns:
-        Resolved absolute target if *entry* is a symlink whose target
-        passes _is_relevant_symlink. None for non-symlinks, broken
-        symlinks, or targets outside the markers of interest.
-    """
     if not entry.is_symlink():
         return None
     try:
@@ -115,16 +97,7 @@ def _resolve_symlink(entry) -> str | None:
 
 
 def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
-    """Return [(link_path, resolved_target), ...] for relevant symlinks.
-
-    Args:
-        search_path: Directory to scan (non-recursive).
-
-    Returns:
-        List of (link_path, target) tuples. Empty list if *search_path*
-        is missing or unreadable. Targets are resolved with realpath so
-        that downstream substring checks work on absolute paths.
-    """
+    """Non-recursive scandir; returns [] on missing/unreadable dir."""
     if not os.path.isdir(search_path):
         return []
     try:
@@ -141,17 +114,10 @@ def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
 
 
 def _generate_links_recap() -> bytes:
-    """Build the symlink-restore shell script as UTF-8 bytes.
+    """Build restore_links.sh as UTF-8 bytes.
 
-    Output is a self-contained bash script that recreates every relevant
-    symlink under the well-known shim folders. All paths are passed
-    through ``shlex.quote`` so that names containing spaces, dollars or
-    quotes are restored verbatim and cannot be mis-interpreted by the
-    shell.
-
-    Returns:
-        Bytes ready to be appended to the tar archive as
-        ``restore_links.sh``.
+    All paths go through shlex.quote — names with spaces or shell
+    metacharacters are restored verbatim, not interpreted.
     """
     recap = [
         "#!/bin/bash",
@@ -179,15 +145,6 @@ def _generate_links_recap() -> bytes:
 
 
 def _backup_sources(home: str) -> list[tuple[str, str]]:
-    """Return [(source_path, archive_name), ...] for the backup payload.
-
-    Args:
-        home: Real user's home directory (resolved by get_real_user).
-
-    Returns:
-        Ordered list of (source, archive_name) pairs. Sources may not
-        exist on disk — callers must check before adding.
-    """
     next_sess = get_ssot_var("next_session", _DEFAULT_NEXT_SESSION)
     user_config = os.path.join(home, _USER_CONFIG_REL)
 
@@ -201,18 +158,7 @@ def _backup_sources(home: str) -> list[tuple[str, str]]:
 
 
 def _path_is_excluded(name: str) -> bool:
-    """Return True if any component of *name* is in _EXCLUDE_COMPONENTS.
-
-    Compares **path components** rather than substrings so that legitimate
-    names like ``backups_2024.yaml`` or ``my.cache.notes`` are NOT
-    excluded by accident.
-
-    Args:
-        name: Archive-relative path (POSIX separators).
-
-    Returns:
-        True iff a component-level match exists.
-    """
+    """Match by path component, not substring — 'backups_2024.yaml' is safe."""
     return any(part in _EXCLUDE_COMPONENTS for part in name.split("/"))
 
 
@@ -246,24 +192,14 @@ def _add_payload(tar: tarfile.TarFile, home: str) -> None:
 
 
 def _ensure_backup_dir(home: str, user: str) -> Path:
-    """Create the backup directory and chown it only when it didn't exist.
+    """Chown only on first creation — not on every run.
 
-    Avoids the previous behaviour where the whole backups/ tree was
-    chowned recursively on every run — which was wasteful when the tree
-    contained gigabytes of historical archives.
-
-    Args:
-        home: Real user's home directory.
-        user: Real username.
-
-    Returns:
-        Path object pointing to the backups directory.
+    Avoids recursive chown over potentially gigabytes of historical archives.
     """
     backup_dir = Path(home) / _USER_BACKUPS_REL
     pre_existing = backup_dir.is_dir()
     backup_dir.mkdir(parents=True, exist_ok=True)
     if not pre_existing:
-        # Only chown on first creation, not every run.
         fix_ownership(backup_dir, user)
     return backup_dir
 
@@ -271,9 +207,7 @@ def _ensure_backup_dir(home: str, user: str) -> Path:
 def _archive_paths(backup_dir: Path) -> tuple[Path, Path]:
     """Return (final_path, tmp_path) for the new archive.
 
-    Tmp is in the same directory so the final ``os.replace`` is atomic
-    (same filesystem). Names share a timestamp so partial leftovers are
-    immediately distinguishable from completed archives.
+    tmp lives in the same directory so os.replace is atomic (same fs).
     """
     timestamp = datetime.now().strftime(_ARCHIVE_TS_FORMAT)
     final = backup_dir / f"{_ARCHIVE_PREFIX}{timestamp}{_ARCHIVE_SUFFIX}"
@@ -296,19 +230,10 @@ def _cleanup_tmp(tmp: Path) -> None:
 
 
 def run_backup() -> None:
-    """Orchestrate a complete surgical backup.
+    """Execute a complete surgical backup.
 
-    Flow:
-        1. Verify root privileges and load the SSoT config.
-        2. Resolve the real user behind sudo/pkexec.
-        3. Ensure the per-user backups directory exists.
-        4. Compose the tar archive on a *.tmp path.
-        5. Verify the archive by reading it back end-to-end.
-        6. Atomically rename *.tmp -> *.tar.gz only on success.
-        7. Chown the final archive to the real user.
-
-    On any failure, the partial *.tmp file is removed and exit code 1
-    is returned. The previous archive (if any) is never touched.
+    Writes to a *.tmp path, verifies end-to-end, then atomically renames
+    to *.tar.gz. The previous archive is never touched on failure.
     """
     check_root()
     if not load_ssot():
