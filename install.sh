@@ -67,7 +67,7 @@ install_dependencies() {
     fi
 
     # Core system and gaming dependencies
-    BASE_PKGS="python python-pyqt6 python-yaml python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools mesa-utils pciutils procps-ng qt6-tools rsync gcc"
+    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools mesa-utils pciutils procps-ng qt6-tools rsync gcc"
 
     info "Synchronizing package databases and installing core dependencies..."
     pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS

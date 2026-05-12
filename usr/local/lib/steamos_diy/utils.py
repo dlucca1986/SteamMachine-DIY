@@ -21,10 +21,9 @@ import tarfile
 from pathlib import Path
 from typing import Any, overload
 
-try:
-    import yaml  # type: ignore[import-untyped]
-except ImportError:
-    yaml = None  # type: ignore[assignment]
+from ruamel.yaml import YAML as _YAML, YAMLError
+
+_yaml_reader = _YAML(typ="safe")
 
 
 # ---------------------------------------------------------------------------
@@ -230,17 +229,17 @@ def _parse_yaml(path: str | Path) -> dict[str, Any]:
     """Open *path* and parse YAML; return {} on any error."""
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
+            return _yaml_reader.load(fh) or {}
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="DEBUG")
-    except yaml.YAMLError as err:  # type: ignore[attr-defined]
+    except YAMLError as err:
         jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
     return {}
 
 
 def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
-    """Parse *path* as YAML; return {} on any error or absent PyYAML."""
-    if yaml is None or not path or not os.path.exists(path):
+    """Parse *path* as YAML; return {} on any error."""
+    if not path or not os.path.exists(path):
         return {}
     return _parse_yaml(path)
 

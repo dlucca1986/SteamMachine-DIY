@@ -12,10 +12,11 @@
 # =============================================================================
 """
 
+import os
 import sys
 
 # Helpers live in a subdir; expose the project library before any import.
-sys.path.insert(0, "/usr/local/lib/steamos_diy")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from utils import run_shim

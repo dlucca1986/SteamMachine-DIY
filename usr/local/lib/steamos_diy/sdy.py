@@ -102,8 +102,9 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
         os.path.abspath(raw_args[0]),
     )
 
-    stem = Path(target_path).stem
-    parent = Path(target_path).parent.name
+    p = Path(target_path)
+    stem = p.stem
+    parent = p.parent.name
 
     eff_name = parent if stem.lower() in _GENERIC_STEMS else stem
     return stem, eff_name
