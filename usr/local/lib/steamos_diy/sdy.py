@@ -13,7 +13,6 @@
 
 import os
 import shlex
-import shutil
 import sys
 from pathlib import Path
 
@@ -165,11 +164,8 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     Exits with 1 on binary-not-found, permission denied, or OS failure.
     """
     try:
-        executable = shutil.which(full_cmd[0])
-        if not executable:
-            raise FileNotFoundError(f"Binary not found: {full_cmd[0]}")
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
-        os.execvpe(executable, full_cmd, os.environ)  # nosec B606
+        os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
     except (OSError, FileNotFoundError, PermissionError) as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
         sys.exit(1)
