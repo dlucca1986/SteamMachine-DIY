@@ -78,9 +78,6 @@ SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
 # ---------------------------------------------------------------------------
 
-# Internal alias — used by jlog/get_ssot_var before the public name was added.
-_SSOT_CONF: str = SSOT_CONF_PATH
-
 # In-process cache for SSoT values — avoids repeated C-Core disk reads.
 _SSOT_CACHE: dict[str, str] = {}
 
@@ -171,7 +168,7 @@ def sd_notify_ready() -> None:
 
 def load_ssot() -> bool:
     """Return True if the SSoT config file exists."""
-    return os.path.isfile(_SSOT_CONF)
+    return os.path.isfile(SSOT_CONF_PATH)
 
 
 @overload
@@ -193,7 +190,7 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
 
     res_buf = ctypes.create_string_buffer(_SSOT_BUF_SIZE)
     if _LIB.c_get_conf_val(
-        _SSOT_CONF.encode("utf-8"),
+        SSOT_CONF_PATH.encode("utf-8"),
         var_name.encode("utf-8"),
         res_buf,
         _SSOT_BUF_SIZE,

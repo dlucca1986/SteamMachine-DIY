@@ -136,7 +136,6 @@ class SDYControlCenter(QMainWindow):
         super().__init__()
         self.setWindowTitle("SteamMachine-DIY Control Center")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
-        self.lib_path = CORE_LIB_DIR
         self.conf_root = Path(os.path.expanduser("~/.config/steamos_diy"))
 
         # Style maps — emoji + colour per log category
@@ -271,7 +270,7 @@ class SDYControlCenter(QMainWindow):
                 lambda: self._safe_spawn(
                     [
                         "/usr/bin/python3",
-                        os.path.join(self.lib_path, "session_select.py"),
+                        os.path.join(CORE_LIB_DIR, "session_select.py"),
                         "steam",
                     ]
                 ),
@@ -815,26 +814,39 @@ class SDYControlCenter(QMainWindow):
 
     # ── Privileged operations ─────────────────────────────────────────────
 
-    def run_backup(self):
-        """Run backup via pkexec in a daemon thread; emits process_finished."""
-        script = os.path.join(self.lib_path, "backup.py")
-        QMessageBox.information(self, "Backup", "Backup process started...")
+    def _run_privileged_script(
+        self,
+        script_name: str,
+        args: tuple = (),
+        ok_title: str = "Success",
+        ok_msg: str = "Done!",
+        err_title: str = "Error",
+    ) -> None:
+        """Run a project script under pkexec in a daemon thread; emits process_finished."""
+        script = os.path.join(CORE_LIB_DIR, script_name)
 
         def worker() -> None:
             try:
                 subprocess.run(  # nosec B603
-                    ["/usr/bin/pkexec", "/usr/bin/python3", script],
+                    ["/usr/bin/pkexec", "/usr/bin/python3", script, *args],
                     check=True,
                 )
-                self.process_finished.emit("Success", "Backup done!", False)
+                self.process_finished.emit(ok_title, ok_msg, False)
             except subprocess.CalledProcessError:
-                self.process_finished.emit("Error", "Backup failed.", True)
+                self.process_finished.emit(err_title, f"{script_name} failed.", True)
             except OSError as err:
                 self.process_finished.emit(
-                    "Error", f"Cannot launch pkexec: {err}", True
+                    err_title, f"Cannot launch pkexec: {err}", True
                 )
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def run_backup(self):
+        """Run backup via pkexec in a daemon thread; emits process_finished."""
+        QMessageBox.information(self, "Backup", "Backup process started...")
+        self._run_privileged_script(
+            "backup.py", ok_title="Success", ok_msg="Backup done!"
+        )
 
     def run_restore(self):
         """Restore from archive under pkexec; emits process_finished."""
@@ -843,26 +855,14 @@ class SDYControlCenter(QMainWindow):
         )
         if not fpath:
             return
-        script = os.path.join(self.lib_path, "restore.py")
         QMessageBox.information(self, "Restore", "Restore process started.")
-
-        def worker() -> None:
-            try:
-                subprocess.run(  # nosec B603
-                    ["/usr/bin/pkexec", "/usr/bin/python3", script, fpath],
-                    check=True,
-                )
-                self.process_finished.emit(
-                    "Restore Complete", "Restored!", False
-                )
-            except subprocess.CalledProcessError:
-                self.process_finished.emit("Restore Error", "Failed.", True)
-            except OSError as err:
-                self.process_finished.emit(
-                    "Restore Error", f"Cannot launch pkexec: {err}", True
-                )
-
-        threading.Thread(target=worker, daemon=True).start()
+        self._run_privileged_script(
+            "restore.py",
+            args=(fpath,),
+            ok_title="Restore Complete",
+            ok_msg="Restored!",
+            err_title="Restore Error",
+        )
 
 
 # ---------------------------------------------------------------------------

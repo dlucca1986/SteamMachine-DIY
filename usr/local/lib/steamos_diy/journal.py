@@ -24,7 +24,7 @@ from utils import extract_game_metadata
 # ---------------------------------------------------------------------------
 
 _GAME_LOG_TAIL: int = 2000
-_MIN_APPID_LEN: int = 3  # was 5 — caught >100000 only; now catches >=100
+_MIN_APPID_LEN: int = 3  # exclude single/double-digit noise values
 _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
