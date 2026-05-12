@@ -11,23 +11,16 @@
 # =============================================================================
 """
 
-# pylint: disable=too-many-lines
-
 import os
 import re
 import subprocess  # nosec B404
 import sys
 import threading
-from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from typing import Any
 
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import (
-    QRect,
-    QRegularExpression,
-    QSize,
     Qt,
     QTimer,
     QUrl,
@@ -37,8 +30,6 @@ from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
-    QPainter,
-    QSyntaxHighlighter,
     QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
@@ -49,7 +40,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QTabWidget,
     QTextEdit,
@@ -64,10 +54,16 @@ from ruamel.yaml import YAML, YAMLError
 from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
-    extract_game_metadata,
     get_journal_cmd,
     get_ssot_var,
     jlog,
+)
+from editors import YAMLEditor, YAMLSyntaxHighlighter
+from journal import (
+    fetch_gamescope_logs,
+    filter_game_journal_lines,
+    parse_export_format,
+    parse_game_logs,
 )
 
 # ---------------------------------------------------------------------------
@@ -83,11 +79,6 @@ _WINDOW_HEIGHT: int = 700
 _BUTTON_STYLE: str = "height: 40px; text-align: left; padding-left: 15px;"
 _EDITOR_FONT_SIZE: int = 10
 _BUTTON_RESET_MS: int = 2000
-
-# Log scanning
-_GAME_LOG_TAIL: int = 2000
-_MIN_APPID_LEN: int = 3  # was 5 — caught >100000 only; now catches >=100
-_MICROSECONDS_PER_SECOND: int = 1_000_000
 
 # YAML formatter
 _YAML_WIDTH: int = 4096
@@ -113,11 +104,6 @@ _SSOT_KEYS: tuple[str, ...] = (
 # embedded years like "Half-Life 2 (2004) (220)" resolve to 220.
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 
-# Patterns for native (no-shell) journal scanning of game launches
-_GAME_DIR_PATTERN = re.compile(r'chdir\s+"([^"]+)"')
-_GAME_ID_PATTERN = re.compile(r"(?:gameID|AppID\s*=\s*)\s*(\d+)")
-_GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
-
 
 # ---------------------------------------------------------------------------
 # YAML parser — Round-Trip preserves comments and quoting on save.
@@ -131,175 +117,6 @@ yaml_parser.indent(
     offset=_YAML_INDENT_OFFSET,
 )
 yaml_parser.width = _YAML_WIDTH
-
-
-# ---------------------------------------------------------------------------
-# Editor widgets — line numbers + syntax highlighting
-# ---------------------------------------------------------------------------
-
-
-class LineNumberArea(QWidget):
-    """Sidebar widget that renders line numbers for YAMLEditor."""
-
-    def __init__(self, editor):
-        super().__init__(editor)
-        self.editor = editor
-
-    # pylint: disable=missing-function-docstring
-    def sizeHint(self):  # pylint: disable=invalid-name
-        return QSize(self.editor.line_number_area_width(), 0)
-
-    def paintEvent(self, event):  # pylint: disable=invalid-name
-        self.editor.line_number_area_paint_event(event)
-    # pylint: enable=missing-function-docstring
-
-
-class YAMLEditor(QPlainTextEdit):
-    """Plain-text editor with line-number gutter and Enter-key auto-indent."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.line_number_area = LineNumberArea(self)
-        self.blockCountChanged.connect(self.update_line_number_area_width)
-        self.updateRequest.connect(self.update_line_number_area)
-        self.update_line_number_area_width(0)
-        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-
-    def line_number_area_width(self):
-        """Compute sidebar pixel width to fit the highest line number."""
-        digits = 1
-        max_val = max(1, self.blockCount())
-        while max_val >= 10:
-            max_val /= 10
-            digits += 1
-        return 10 + self.fontMetrics().horizontalAdvance("9") * digits
-
-    def update_line_number_area_width(self, _):
-        """Resize left viewport margin to match the current sidebar width."""
-        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
-
-    def update_line_number_area(self, rect, dy):
-        """Scroll or repaint the line number area on scroll/content change."""
-        if dy:
-            self.line_number_area.scroll(0, dy)
-        else:
-            self.line_number_area.update(
-                0, rect.y(), self.line_number_area.width(), rect.height()
-            )
-        if rect.contains(self.viewport().rect()):
-            self.update_line_number_area_width(0)
-
-    def resizeEvent(self, event):  # pylint: disable=invalid-name
-        """Qt override: refit the sidebar geometry on editor resize."""
-        super().resizeEvent(event)
-        cr = self.contentsRect()
-        self.line_number_area.setGeometry(
-            QRect(
-                cr.left(), cr.top(), self.line_number_area_width(), cr.height()
-            )
-        )
-
-    def line_number_area_paint_event(self, event):
-        """Paint line numbers in the sidebar for the visible block range."""
-        painter = QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QColor("#2c3e50"))
-        block = self.firstVisibleBlock()
-        num = block.blockNumber()
-        top = round(
-            self.blockBoundingGeometry(block)
-            .translated(self.contentOffset())
-            .top()
-        )
-        bottom = top + round(self.blockBoundingRect(block).height())
-        while block.isValid() and top <= event.rect().bottom():
-            if block.isVisible() and bottom >= event.rect().top():
-                painter.setPen(QColor("#95a5a6"))
-                painter.drawText(
-                    0,
-                    top,
-                    self.line_number_area.width() - 5,
-                    self.fontMetrics().height(),
-                    Qt.AlignmentFlag.AlignRight,
-                    str(num + 1),
-                )
-            block, num = block.next(), num + 1
-            top, bottom = bottom, bottom + round(
-                self.blockBoundingRect(block).height()
-            )
-
-    def keyPressEvent(self, event):  # pylint: disable=invalid-name
-        """Auto-indent on Enter — preserve leading whitespace."""
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            cursor = self.textCursor()
-            indent = re.match(r"^\s*", cursor.block().text()).group(0)
-            super().keyPressEvent(event)
-            self.insertPlainText(indent)
-        else:
-            super().keyPressEvent(event)
-
-
-# pylint: disable=too-few-public-methods
-class YAMLSyntaxHighlighter(QSyntaxHighlighter):
-    """Regex-based syntax highlighter for YAML content in QPlainTextEdit."""
-
-    def __init__(self, document):
-        super().__init__(document)
-        self.rules = []
-        self._setup_rules()
-
-    def _setup_rules(self):
-        styles = [
-            (r"#.*", "#7f8c8d", False),
-            (r"^\s*[\w.-]+(?=:)", "#3498db", True),
-            (r'"[^"]*"', "#f1c40f", False),
-            (r"'[^']*'", "#f1c40f", False),
-            (r"^\s*-\s.*", "#27ae60", False),
-            (r"\b\d+\b", "#e67e22", False),
-            (r"[:\-]", "#e74c3c", True),
-        ]
-        for pat, col, bold in styles:
-            fmt = QTextCharFormat()
-            fmt.setForeground(QColor(col))
-            if bold:
-                fmt.setFontWeight(QFont.Weight.Bold)
-            self.rules.append((QRegularExpression(pat), fmt))
-
-    def highlightBlock(self, text):  # pylint: disable=invalid-name
-        """Called by Qt per visible block."""
-        for expression, fmt in self.rules:
-            it = expression.globalMatch(text)
-            while it.hasNext():
-                m = it.next()
-                self.setFormat(m.capturedStart(), m.capturedLength(), fmt)
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers — log filtering & journal parsing
-# ---------------------------------------------------------------------------
-
-
-def _is_game_log_line(line: str, chdir_marker: str) -> bool:
-    return chdir_marker in line or "gameID " in line or "AppID = " in line
-
-
-def _filter_game_journal_lines(stdout: str, home: str) -> list[str]:
-    """Filter journalctl output; return last _GAME_LOG_TAIL game-launch lines.
-
-    Args:
-        stdout: Full ``journalctl --no-hostname`` output.
-        home: User home path used as chdir prefix anchor.
-
-    Returns:
-        At most _GAME_LOG_TAIL most-recent matching lines, preserving order.
-    """
-    chdir_marker = f'chdir "{home}'
-    matched = [
-        line
-        for line in stdout.splitlines()
-        if _is_game_log_line(line, chdir_marker)
-        and not _GAME_LOG_NOISE.search(line)
-    ]
-    return matched[-_GAME_LOG_TAIL:]
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +224,7 @@ class SDYControlCenter(QMainWindow):
 
     def on_tab_changed(self, index):
         """Reload logs when the user switches to the diagnostics tab."""
-        if index == 0:
+        if index == self.tabs.indexOf(self.diag_tab):
             self.load_logs()
 
     # ── Diagnostics tab ────────────────────────────────────────────────────
@@ -525,7 +342,6 @@ class SDYControlCenter(QMainWindow):
                     "Error", "Authentication or vacuum failed.", True
                 )
             except OSError as err:
-                # pkexec missing or other execve error
                 self.process_finished.emit(
                     "Error", f"Cannot launch pkexec: {err}", True
                 )
@@ -839,8 +655,8 @@ class SDYControlCenter(QMainWindow):
                     text=True,
                     check=True,
                 )
-                lines = _filter_game_journal_lines(res.stdout, home)
-                detected = self._parse_game_logs("\n".join(lines))
+                lines = filter_game_journal_lines(res.stdout, home)
+                detected = parse_game_logs("\n".join(lines))
                 self.games_detected.emit(detected)
             except (subprocess.SubprocessError, OSError):
                 self.games_detected.emit({})
@@ -868,190 +684,18 @@ class SDYControlCenter(QMainWindow):
         for p in gdir.glob("*.yaml"):
             detected.setdefault(p.stem, p.stem)
 
-    def _format_combo_items(self, detected):
+    @staticmethod
+    def _format_combo_items(detected):
         return [
             f"{n} ({a})" if a.isdigit() and a != n else n
             for n, a in sorted(detected.items())
         ]
 
-    def _parse_game_logs(self, res: str) -> dict[str, str]:
-        """Extract {name: appid_or_name} pairs from filtered journal text."""
-        det: dict[str, str] = {}
-        cur: str | None = None
-        for line in res.splitlines():
-            cur = self._update_detection(line, cur, det)
-        return det
-
-    @staticmethod
-    def _apply_name_hit(value: str | None, det: dict[str, str]) -> str | None:
-        if value is not None:
-            det[value] = value
-        return value
-
-    @staticmethod
-    def _apply_id_hit(
-        cur: str | None, value: str | None, det: dict[str, str]
-    ) -> None:
-        if cur and value and len(value) >= _MIN_APPID_LEN:
-            det[cur] = value
-
-    def _update_detection(
-        self, line: str, cur: str | None, det: dict[str, str]
-    ) -> str | None:
-        kind, value = extract_game_metadata(line)
-        if kind == "NAME":
-            return self._apply_name_hit(value, det) or cur
-        if kind == "ID":
-            self._apply_id_hit(cur, value, det)
-        return cur
-
-    # ── Journal export parsing for diagnostics ─────────────────────────────
-
-    def _parse_export_format(
-        self, stdout: str, launches: set[str]
-    ) -> list[tuple[datetime, str]]:
-        """Parse ``journalctl -o export`` into (timestamp, line) tuples.
-
-        Args:
-            stdout: Raw export-format journalctl output.
-            launches: Mutated in place — LAUNCH_ARGS appended for dedup.
-
-        Returns:
-            (datetime, formatted_line) list in arrival order.
-        """
-        ents: list[tuple[datetime, str]] = []
-        cur: dict[str, Any] = {}
-        for line in stdout.splitlines():
-            entry = self._consume_export_line(line, cur, launches)
-            if entry is not None:
-                ents.append(entry)
-                cur = {}
-        return ents
-
-    def _consume_export_line(
-        self,
-        line: str,
-        cur: dict[str, Any],
-        launches: set[str],
-    ) -> tuple[datetime, str] | None:
-        """Accumulate one export-format field; return entry on MESSAGE=.
-
-        Args:
-            line: Single export-format line.
-            cur: Accumulator dict for the current record (mutated in place).
-            launches: Mutated — LAUNCH_ARGS strings appended as side effect.
-
-        Returns:
-            (datetime, formatted_line) on MESSAGE= terminator, else None.
-        """
-        if line.startswith("__REALTIME_TIMESTAMP="):
-            cur["ts"] = datetime.fromtimestamp(
-                int(line.split("=")[1]) / _MICROSECONDS_PER_SECOND
-            )
-            return None
-        if line.startswith("SYSLOG_IDENTIFIER="):
-            cur["id"] = line.split("=")[1]
-            return None
-        if line.startswith("MESSAGE="):
-            return self._finalize_export_entry(line, cur, launches)
-        return None
-
-    @staticmethod
-    def _finalize_export_entry(
-        line: str, cur: dict[str, Any], launches: set[str]
-    ) -> tuple[datetime, str]:
-        msg = line.split("=", 1)[1]
-        ident = cur.get("id", "SYSTEM")
-        ts = cur.get("ts", datetime.now())
-        if ident == "STEAM" and "LAUNCH_ARGS" in msg:
-            launches.add(msg.split("LAUNCH_ARGS:", 1)[-1].strip())
-        return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")
-
-    def _fetch_gamescope_logs(
-        self, launches: set[str]
-    ) -> list[tuple[datetime, str]]:
-        """Pull gamescope journal lines, skipping echoes of known *launches*.
-
-        Args:
-            launches: LAUNCH_ARGS already emitted — prevents duplicate display.
-
-        Returns:
-            (datetime, formatted_line) list ready for merge-sort.
-        """
-        stdout = self._run_journalctl_iso()
-        if not stdout:
-            return []
-
-        ents = []
-        for line in stdout.splitlines():
-            if "gamescope" not in line.lower():
-                continue
-            entry = self._parse_gamescope_line(line, launches)
-            if entry is not None:
-                ents.append(entry)
-        return ents
-
-    def _run_journalctl_iso(self) -> str:
-        try:
-            res = subprocess.run(  # nosec B603
-                [
-                    "/usr/bin/journalctl",
-                    "--since",
-                    "1 hour ago",
-                    "-o",
-                    "short-iso",
-                    "--no-pager",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            return res.stdout or ""
-        except OSError:
-            return ""
-
-    def _parse_gamescope_line(
-        self, line: str, launches: set[str]
-    ) -> tuple[datetime, str] | None:
-        """Parse one gamescope line; return None if duplicate or malformed."""
-        parsed = self._split_gamescope_line(line)
-        if parsed is None:
-            return None
-        ts, msg = parsed
-        if self._is_duplicate_launch(msg, launches):
-            return None
-        d_msg = msg if "[gamescope]" in msg else f"[gamescope] {msg}"
-        return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
-
-    def _split_gamescope_line(self, line: str) -> tuple[datetime, str] | None:
-        try:
-            ps = line.split(" ", 2)
-            if len(ps) < 3:
-                return None
-            ts = datetime.fromisoformat(ps[0]).replace(tzinfo=None)
-            msg = (
-                ps[2].split(": ", 1)[1].strip()
-                if ": " in ps[2]
-                else ps[2].strip()
-            )
-            return ts, msg
-        except (IndexError, ValueError):
-            return None
-
-    @staticmethod
-    def _is_duplicate_launch(msg: str, launches: set[str]) -> bool:
-        if "LAUNCH_ARGS" not in msg:
-            return False
-        arg = msg.split("LAUNCH_ARGS:", 1)[-1].strip()
-        return arg in launches
-
     # ── Logs UI flow ───────────────────────────────────────────────────────
 
     def load_logs(self):
         """Reload logs in a daemon thread; emits logs_ready when done."""
-        tag = re.sub(
-            r"[^\x00-\x7F]+", "", self.tag_filter.currentText()
-        ).strip()
+        tag = self.tag_filter.currentText().strip()
 
         self.log_display.setPlainText("Loading logs...")
         self.tag_filter.setEnabled(False)
@@ -1065,9 +709,9 @@ class SDYControlCenter(QMainWindow):
                     text=True,
                     check=True,
                 )
-                ents = self._parse_export_format(res.stdout, launches)
+                ents = parse_export_format(res.stdout, launches)
                 if tag in ("ALL", "STEAM"):
-                    ents.extend(self._fetch_gamescope_logs(launches))
+                    ents.extend(fetch_gamescope_logs(launches))
                 if ents:
                     ents.sort(key=lambda x: x[0])
                 self.logs_ready.emit(ents, tag)

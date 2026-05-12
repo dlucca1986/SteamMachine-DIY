@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""
+# =============================================================================
+# PROJECT:      SteamMachine-DIY - Journal/Log Backend
+# VERSION:      1.0.0
+# DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
+#               No Qt dependency — fully testable in isolation.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
+# REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
+# PATH:         /usr/local/lib/steamos_diy/journal.py
+# LICENSE:      MIT
+# =============================================================================
+"""
+
+import re
+import subprocess  # nosec B404
+from datetime import datetime
+from typing import Any
+
+from utils import extract_game_metadata
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_GAME_LOG_TAIL: int = 2000
+_MIN_APPID_LEN: int = 3  # was 5 — caught >100000 only; now catches >=100
+_MICROSECONDS_PER_SECOND: int = 1_000_000
+
+_GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
+
+
+# ---------------------------------------------------------------------------
+# Game launch detection
+# ---------------------------------------------------------------------------
+
+
+def _is_game_log_line(line: str, chdir_marker: str) -> bool:
+    return chdir_marker in line or "gameID " in line or "AppID = " in line
+
+
+def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
+    """Filter journalctl output; return last _GAME_LOG_TAIL game-launch lines.
+
+    Args:
+        stdout: Full ``journalctl --no-hostname`` output.
+        home: User home path used as chdir prefix anchor.
+
+    Returns:
+        At most _GAME_LOG_TAIL most-recent matching lines, preserving order.
+    """
+    chdir_marker = f'chdir "{home}'
+    matched = [
+        line
+        for line in stdout.splitlines()
+        if _is_game_log_line(line, chdir_marker)
+        and not _GAME_LOG_NOISE.search(line)
+    ]
+    return matched[-_GAME_LOG_TAIL:]
+
+
+def parse_game_logs(res: str) -> dict[str, str]:
+    """Extract {name: appid_or_name} pairs from filtered journal text."""
+    det: dict[str, str] = {}
+    cur: str | None = None
+    for line in res.splitlines():
+        kind, value = extract_game_metadata(line)
+        if kind == "NAME" and value:
+            det[value] = value
+            cur = value
+        elif kind == "ID" and cur and value and len(value) >= _MIN_APPID_LEN:
+            det[cur] = value
+    return det
+
+
+# ---------------------------------------------------------------------------
+# SDY/Steam export-format journal parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_export_format(
+    stdout: str, launches: set[str]
+) -> list[tuple[datetime, str]]:
+    """Parse ``journalctl -o export`` into (timestamp, line) tuples.
+
+    Args:
+        stdout: Raw export-format journalctl output.
+        launches: Mutated in place — LAUNCH_ARGS appended for dedup.
+
+    Returns:
+        (datetime, formatted_line) list in arrival order.
+    """
+    ents: list[tuple[datetime, str]] = []
+    cur: dict[str, Any] = {}
+    for line in stdout.splitlines():
+        entry = _consume_export_line(line, cur, launches)
+        if entry is not None:
+            ents.append(entry)
+            cur = {}
+    return ents
+
+
+def _consume_export_line(
+    line: str,
+    cur: dict[str, Any],
+    launches: set[str],
+) -> tuple[datetime, str] | None:
+    """Accumulate one export-format field; return entry on MESSAGE=.
+
+    Args:
+        line: Single export-format line.
+        cur: Accumulator dict for the current record (mutated in place).
+        launches: Mutated — LAUNCH_ARGS strings appended as side effect.
+
+    Returns:
+        (datetime, formatted_line) on MESSAGE= terminator, else None.
+    """
+    if line.startswith("__REALTIME_TIMESTAMP="):
+        cur["ts"] = datetime.fromtimestamp(
+            int(line.split("=")[1]) / _MICROSECONDS_PER_SECOND
+        )
+        return None
+    if line.startswith("SYSLOG_IDENTIFIER="):
+        cur["id"] = line.split("=")[1]
+        return None
+    if line.startswith("MESSAGE="):
+        return _finalize_export_entry(line, cur, launches)
+    return None
+
+
+def _finalize_export_entry(
+    line: str, cur: dict[str, Any], launches: set[str]
+) -> tuple[datetime, str]:
+    msg = line.split("=", 1)[1]
+    ident = cur.get("id", "SYSTEM")
+    ts = cur.get("ts", datetime.now())
+    if ident == "STEAM" and "LAUNCH_ARGS" in msg:
+        launches.add(msg.split("LAUNCH_ARGS:", 1)[-1].strip())
+    return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")
+
+
+# ---------------------------------------------------------------------------
+# Gamescope log parsing
+# ---------------------------------------------------------------------------
+
+
+def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
+    """Pull gamescope journal lines, skipping echoes of known *launches*.
+
+    Args:
+        launches: LAUNCH_ARGS already emitted — prevents duplicate display.
+
+    Returns:
+        (datetime, formatted_line) list ready for merge-sort.
+    """
+    stdout = _run_journalctl_iso()
+    if not stdout:
+        return []
+
+    ents = []
+    for line in stdout.splitlines():
+        if "gamescope" not in line.lower():
+            continue
+        entry = _parse_gamescope_line(line, launches)
+        if entry is not None:
+            ents.append(entry)
+    return ents
+
+
+def _run_journalctl_iso() -> str:
+    try:
+        res = subprocess.run(  # nosec B603
+            [
+                "/usr/bin/journalctl",
+                "--since",
+                "1 hour ago",
+                "-o",
+                "short-iso",
+                "--no-pager",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return res.stdout or ""
+    except OSError:
+        return ""
+
+
+def _parse_gamescope_line(
+    line: str, launches: set[str]
+) -> tuple[datetime, str] | None:
+    """Parse one gamescope line; return None if duplicate or malformed."""
+    parsed = _split_gamescope_line(line)
+    if parsed is None:
+        return None
+    ts, msg = parsed
+    if _is_duplicate_launch(msg, launches):
+        return None
+    d_msg = msg if "[gamescope]" in msg else f"[gamescope] {msg}"
+    return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
+
+
+def _split_gamescope_line(line: str) -> tuple[datetime, str] | None:
+    try:
+        ps = line.split(" ", 2)
+        if len(ps) < 3:
+            return None
+        ts = datetime.fromisoformat(ps[0]).replace(tzinfo=None)
+        msg = (
+            ps[2].split(": ", 1)[1].strip() if ": " in ps[2] else ps[2].strip()
+        )
+        return ts, msg
+    except (IndexError, ValueError):
+        return None
+
+
+def _is_duplicate_launch(msg: str, launches: set[str]) -> bool:
+    if "LAUNCH_ARGS" not in msg:
+        return False
+    arg = msg.split("LAUNCH_ARGS:", 1)[-1].strip()
+    return arg in launches

@@ -59,9 +59,7 @@ _RESTORE_SCRIPT_ARCNAME: str = "restore_links.sh"
 
 def _build_mapping(home: str) -> dict[str, str]:
     return {
-        "system/next_session": get_ssot_var(
-            "next_session", NEXT_SESSION_PATH
-        ),
+        "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,
         "system/service": SERVICE_PATH,
         "source/steamos_diy": CORE_LIB_DIR,
