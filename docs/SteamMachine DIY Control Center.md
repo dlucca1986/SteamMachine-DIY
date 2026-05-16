@@ -26,7 +26,7 @@ Buttons in order:
 | :--- | :--- |
 | **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `_safe_spawn`. |
 | **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
-| **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate` then `pkexec journalctl --vacuum-time=1s`. |
+| **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
@@ -60,7 +60,7 @@ Per-game YAML profile editor backed by journal-based game discovery.
 | :--- | :--- | :--- | :--- |
 | **0** | Load Logs | `load_logs()` | `get_journal_cmd(tag)` → `journalctl -t` (12h, 300 entries); `ALL`/`STEAM` also merge gamescope logs (last 1h, `short-iso`) |
 | **0** | Export Log | `export_support_log()` | `QFileDialog` + `Path.write_text` |
-| **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate` → `pkexec journalctl --vacuum-time=1s` |
+| **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
 | **1** | Backup | `run_backup()` | `pkexec python3 backup.py` in `threading.Thread` |
 | **1** | Restore | `run_restore()` | `QFileDialog` + `pkexec python3 restore.py <path>` in `threading.Thread` |
 | **2** | Save Config | `_atomic_save()` | YAML validation → `os.fsync()` → `os.replace()` |

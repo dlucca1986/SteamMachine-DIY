@@ -53,7 +53,7 @@ A write pattern (tmp file → `fdatasync()` → `rename()`) that ensures files l
 
 ### 8. How do I switch to Desktop Mode?
 1. **From Steam**: Use the "Switch to Desktop" button in the Steam Power menu.
-2. **From the Dashboard**: Use the "Switch to Desktop" button in the Control Center.
+2. **From the terminal**: Run `steamos-session-select desktop`.
 The logic handles the termination signals and ensures a clean transition to KDE Plasma.
 
 ---

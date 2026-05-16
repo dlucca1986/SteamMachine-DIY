@@ -57,7 +57,7 @@ The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` lib
 
 The framework implements a redirection layer using symbolic links to satisfy Steam's expectations for specific SteamOS paths and to provide CLI access.
 
-* **SteamOS UI Shims**: These links prevent UI errors in Game Mode by redirecting SteamOS-specific system requests to the framework logic. For `steamos-update`, `jupiter-biosupdate`, and `steamos-set-timezone`, the `/usr/bin/` alias is itself a symlink to the polkit helper, forming a two-hop chain: `.py` → `/usr/bin/steamos-polkit-helpers/<name>` → `/usr/bin/<name>`.
+* **SteamOS UI Shims**: These links prevent UI errors in Game Mode by redirecting SteamOS-specific system requests to the framework logic. For `steamos-update`, `jupiter-biosupdate`, and `steamos-set-timezone`, the `/usr/bin/` alias is itself a symlink to the polkit helper, forming a two-hop chain: `/usr/bin/<name>` → `/usr/bin/steamos-polkit-helpers/<name>` → `.py`.
 
 | Target (Logic in `/usr/local/lib/steamos_diy/`) | Shim Paths (Steam & System) | Purpose |
 | :--- | :--- | :--- |

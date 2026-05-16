@@ -33,7 +33,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 
 ### Environment & Recovery
 *   **Runtime Context**: The service manages `XDG_RUNTIME_DIR` manually to support Wayland/Gamescope outside of a standard desktop environment.
-*   **Fault Tolerance**: A `Restart=always` policy with a `1-second` delay ensures the session recovers automatically from crashes or unexpected terminations.
+*   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay ensures the session recovers automatically from crashes. A clean exit (code 0, e.g. on `systemctl stop`) does **not** trigger a restart.
 
 > [!IMPORTANT]
 > **Plasma 6 & plasmalogin**
@@ -52,7 +52,7 @@ A session switch involves three components working in sequence:
 
 1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`).
 2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits cleanly.
-3. `steamos_diy.service` (`Restart=always`, `RestartSec=1.0s`) restarts the launcher, which reads the new target from the state file and spawns the next session.
+3. `steamos_diy.service` (`Restart=on-failure`, `RestartSec=1.0s`) restarts the launcher, which reads the new target from the state file and spawns the next session.
 
 For the full lifecycle including crash recovery, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch).
 

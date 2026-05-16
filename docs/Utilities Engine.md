@@ -51,6 +51,8 @@ The target file is never left in a partial state, even after a sudden power loss
 | `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current effective UID. |
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Forks via C-Core (`fork` → `setsid` → `execv`), redirects child stdout/stderr to `/dev/null`. Returns the child PID, or `0` on failure. |
+| `verify_archive(path, tag)` | Gzip-tar integrity check via `tarfile.open` + member iteration. Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
+| `run_shim(name, exit_code)` | Logs the shim intercept via `jlog` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
 
 ---
 
@@ -72,11 +74,11 @@ Used by `control_center.py` (via `journal.py`) for log display and game discover
 | `session_launch.py` | `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `get_ssot_var` |
 | `session_select.py` | `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
-| `backup.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
-| `restore.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
-| `control_center.py` | `get_ssot_var` |
+| `backup.py` | `CORE_LIB_DIR`, `NEXT_SESSION_PATH`, `SERVICE_PATH`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot`, `verify_archive` |
+| `restore.py` | `CORE_LIB_DIR`, `NEXT_SESSION_PATH`, `SERVICE_PATH`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot`, `verify_archive` |
+| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `get_journal_cmd`, `get_ssot_var`, `jlog` |
 | `journal.py` | `get_journal_cmd`, `extract_game_metadata` |
-| Compatibility shims | `jlog` |
+| Compatibility shims | `jlog`, `run_shim` |
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

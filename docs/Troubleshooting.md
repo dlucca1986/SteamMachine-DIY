@@ -33,7 +33,7 @@ The framework uses a unified tagging system. Use `journalctl` to filter logs and
 | `cat /sys/class/drm/*/modes` | List all resolutions natively detected by the Kernel (DRM). |
 | `vulkaninfo --summary` | Verify that the Vulkan stack (Mesa/NVK) is operational. |
 | `python3 -m py_compile script.py` | Check for syntax errors in the core logic after a manual edit. |
-| `pkexec journalctl --rotate && pkexec journalctl --vacuum-time=1s` | Rotate and purge system logs (mirrors the Control Center cleanup action). |
+| `pkexec journalctl --rotate --vacuum-time=1s` | Rotate and purge system logs in a single invocation (mirrors the Control Center cleanup action). |
 
 ---
 

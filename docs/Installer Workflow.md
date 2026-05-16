@@ -30,7 +30,7 @@ Defines the Single **Source of Truth** (SSoT) strategy:
 
 * **System Master:** Generates `/etc/default/steamos_diy.conf`, using `sed` to inject the real **Home** path (`{{HOME}}`). The **Username** (`{{USER}}`) and **UID** (`{{UID}}`) placeholders are patched into the systemd service file in stage 5.
 * **Binary Hierarchy:** Installs all core logic in `/usr/local/lib/steamos_diy/` with execution permissions.
-* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -fPIC -shared`. After compilation, the library is verified with `ctypes.CDLL()` — if either step fails, installation is aborted with a clear error message.
+* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -fPIC -Wall -shared`. After compilation, the library is verified with `ctypes.CDLL()` — if either step fails, installation is aborted with a clear error message.
 * **State Management:** Initializes the session tracker at `/var/lib/steamos_diy/next_session`.
 
 ### 4. SteamOS Compatibility Shim Layer
@@ -46,7 +46,7 @@ Replaces traditional Display Managers with a custom systemd service:
 * **Getty Masking:** The installer **masks** `getty@tty1.service` to prevent terminal conflicts and ensures exclusive control of TTY1.
 * **PAM Initialization:** Uses `PAMName=login` to grant the session full access to hardware resources (Pipewire, GPU) without a manual login.
 * **Readiness Notification:** `Type=notify` is set so systemd only marks the service as active after `READY=1` is received — which happens only after the session passes the validation window.
-* **Watchdog Protection:** Configured with `Restart=always` for automatic session recovery.
+* **Watchdog Protection:** Configured with `Restart=on-failure` for automatic session recovery.
 * **Default Target:** Sets `graphical.target` as the systemd default via `systemctl set-default graphical.target`.
 
 ### 6. Security Policy & ALPM Hooks

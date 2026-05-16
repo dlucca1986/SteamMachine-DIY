@@ -54,7 +54,7 @@ The utility targets specific paths to maintain a minimal backup footprint:
 > [!IMPORTANT]
 > **Link Reconstruction**
 >
-> During backup, `restore_links.sh` is generated and embedded in the archive. During restore, it is extracted into a private root-only temp directory (mode `0700`, not `/tmp`) and executed from there. This eliminates the TOCTOU window that would exist if the script were written to a world-writable location before being executed.
+> During backup, `restore_links.sh` is generated and embedded in the archive. During restore, it is extracted into a private root-only temp directory (`mkdtemp`, mode `0700`, owned by root) and executed from there. This eliminates the TOCTOU window that would exist if the script were written to a world-writable location before being executed.
 
 ---
 
