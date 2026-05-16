@@ -322,13 +322,10 @@ class SDYControlCenter(QMainWindow):
         def worker() -> None:
             try:
                 subprocess.run(  # nosec B603
-                    ["/usr/bin/pkexec", "/usr/bin/journalctl", "--rotate"],
-                    check=True,
-                )
-                subprocess.run(  # nosec B603
                     [
                         "/usr/bin/pkexec",
                         "/usr/bin/journalctl",
+                        "--rotate",
                         "--vacuum-time=1s",
                     ],
                     check=True,

@@ -127,6 +127,19 @@ def _resolve_target(
     Returns:
         Validated absolute path, or None if unmapped or outside allow-list.
     """
+    # Reject any member whose path contains traversal components before
+    # resolution. A crafted archive can exploit realpath's lexical
+    # collapsing of "file/.." to escape the allow-list (e.g.
+    # "system/steamos_diy.conf/../../shadow" resolves to "/etc/shadow"
+    # which legitimately starts with "/etc/").
+    if any(part == ".." for part in Path(member_name).parts):
+        jlog(
+            "SYSTEM",
+            f"RESTORE_REJECTED_TRAVERSAL: {member_name}",
+            level="WARN",
+        )
+        return None
+
     match = _match_mapping_prefix(member_name, mapping)
     if match is None:
         return None

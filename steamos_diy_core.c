@@ -66,7 +66,10 @@ void c_write_atomic(const char *path, const char *val) {
     }
     fdatasync(fd);
     close(fd);
-    rename(tmp_path, path);
+    if (rename(tmp_path, path) != 0) {
+        syslog(LOG_ERR, "c_write_atomic: rename %s -> %s: %m", tmp_path, path);
+        unlink(tmp_path);
+    }
 }
 
 // 4. SSoT CONFIG READER (key=value parser)

@@ -97,7 +97,8 @@ def _monitor_process(
 
 def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
     """SIGTERM → wait → SIGKILL if ignored within _TERM_TIMEOUT."""
-    proc.terminate()
+    if proc.returncode is None:
+        proc.terminate()
     try:
         proc.wait(timeout=_TERM_TIMEOUT)
     except subprocess.TimeoutExpired:

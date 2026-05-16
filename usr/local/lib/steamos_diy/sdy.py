@@ -145,11 +145,14 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     """Compose wrapper + raw_args + extra_args for execvpe.
 
     Profile values override env vars — mirrors SSoT layering semantics.
+    None means "key absent" (fall back to env); "" means "explicitly empty"
+    (disable the wrapper/extra for this profile, do not fall back).
     """
-    wrapper = profile_data.get("GAME_WRAPPER") or os.getenv("GAME_WRAPPER", "")
-    extra = profile_data.get("GAME_EXTRA_ARGS") or os.getenv(
-        "GAME_EXTRA_ARGS", ""
-    )
+    wrapper_val = profile_data.get("GAME_WRAPPER")
+    wrapper = os.getenv("GAME_WRAPPER", "") if wrapper_val is None else str(wrapper_val)
+
+    extra_val = profile_data.get("GAME_EXTRA_ARGS")
+    extra = os.getenv("GAME_EXTRA_ARGS", "") if extra_val is None else str(extra_val)
 
     full_cmd: list[str] = shlex.split(str(wrapper)) if wrapper else []
     full_cmd.extend(raw_args)
