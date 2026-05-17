@@ -100,10 +100,9 @@ _SSOT_KEYS: tuple[str, ...] = (
     "NOTIFY_DELAY",
 )
 
-# Regex for extracting AppID from combo display "Name (12345)"
-# Matches the LAST parenthesised number in the string, so names with
-# embedded years like "Half-Life 2 (2004) (220)" resolve to 220.
+# Matches the LAST parenthesised number — "Half-Life 2 (2004) (220)" → 220.
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
+_LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +331,7 @@ class SDYControlCenter(QMainWindow):
         try:
             # pylint: disable=consider-using-with
             subprocess.Popen(cmd)  # nosec B603
-        except (subprocess.SubprocessError, OSError) as err:
+        except OSError as err:
             jlog("SYSTEM", f"SPAWN_FAILED: {cmd[0]}: {err}", level="WARN")
 
     # ── Global Options tab ─────────────────────────────────────────────────
@@ -748,7 +747,7 @@ class SDYControlCenter(QMainWindow):
                 )
 
         for line in lines:
-            m = re.search(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)", line)
+            m = _LOG_TIMESTAMP_RE.search(line)
             pure = m.group(1) if m else line
             if pure == last:
                 count += 1

@@ -57,11 +57,7 @@ class YAMLEditor(QPlainTextEdit):
 
     def line_number_area_width(self):
         """Compute sidebar pixel width to fit the highest line number."""
-        digits = 1
-        max_val = max(1, self.blockCount())
-        while max_val >= 10:
-            max_val /= 10
-            digits += 1
+        digits = len(str(max(1, self.blockCount())))
         return 10 + self.fontMetrics().horizontalAdvance("9") * digits
 
     def update_line_number_area_width(self, _):
@@ -134,10 +130,6 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
 
     def __init__(self, document):
         super().__init__(document)
-        self.rules = []
-        self._setup_rules()
-
-    def _setup_rules(self):
         styles = [
             (r"#.*", "#7f8c8d", False),
             (r"^\s*[\w.-]+(?=:)", "#3498db", True),
@@ -147,6 +139,7 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
             (r"\b\d+\b", "#e67e22", False),
             (r"[:\-]", "#e74c3c", True),
         ]
+        self.rules = []
         for pat, col, bold in styles:
             fmt = QTextCharFormat()
             fmt.setForeground(QColor(col))

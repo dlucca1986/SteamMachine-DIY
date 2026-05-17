@@ -78,11 +78,7 @@ _LEVELS_NUM: dict[str, int] = {
 _DEFAULT_LEVEL_NUM: int = 20  # INFO
 _DEFAULT_LEVEL_C: int = 6  # INFO
 
-# Re-entry guard for jlog — prevents infinite recursion when the SSoT
-# lookup performed by jlog itself fails and would recursively invoke
-# jlog. Wrapped in a single-element list so the inner code can flip
-# the flag without resorting to the `global` statement (which trips
-# pylint W0603 and is generally a code smell).
+# Recursion guard — list so the inner closure writes without `global`.
 _JLOG_REENTRY: list[bool] = [False]
 
 
@@ -144,11 +140,6 @@ def sd_notify_ready() -> None:
 # ---------------------------------------------------------------------------
 
 
-def load_ssot() -> bool:
-    """Return True if the SSoT config file exists."""
-    return os.path.isfile(SSOT_CONF_PATH)
-
-
 @overload
 def get_ssot_var(var_name: str, default: str) -> str: ...
 
@@ -201,8 +192,10 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
         return default
 
 
-def _parse_yaml(path: str | Path) -> dict[str, Any]:
-    """Open *path* and parse YAML; return {} on any error."""
+def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
+    """Parse *path* as YAML; return {} on any error."""
+    if not path or not os.path.exists(path):
+        return {}
     try:
         with open(path, "r", encoding="utf-8") as fh:
             return _yaml_reader.load(fh) or {}
@@ -211,13 +204,6 @@ def _parse_yaml(path: str | Path) -> dict[str, Any]:
     except YAMLError as err:
         jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
     return {}
-
-
-def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
-    """Parse *path* as YAML; return {} on any error."""
-    if not path or not os.path.exists(path):
-        return {}
-    return _parse_yaml(path)
 
 
 def write_atomic(path: str | Path, val: str) -> None:
@@ -280,36 +266,28 @@ def get_real_user() -> tuple[str, Path]:
         return "root", Path("/root")
 
 
-def _chown_recursive(target: Path, user_name: str) -> None:
-    """Run ``chown -R user:user target`` with all output suppressed."""
-    try:
-        subprocess.run(  # nosec B603
-            ["/usr/bin/chown", "-R", f"{user_name}:{user_name}", str(target)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except subprocess.CalledProcessError as err:
-        jlog("CORE", f"CHOWN_R_ERROR: {err}", level="DEBUG")
-
-
 def fix_ownership(target_path: str | Path, user_name: str) -> None:
-    """Set ownership of *target_path* to *user_name*; no-op for root/empty.
-
-    Directories use ``chown -R`` (avoids Python recursion overhead);
-    single files use os.chown directly.
-    """
+    """Set ownership of *target_path* to *user_name*; no-op for root/empty."""
     if not user_name or user_name == "root":
         return
-
     target = Path(target_path)
     try:
         u_info = pwd.getpwnam(user_name)
         if target.is_dir():
-            _chown_recursive(target, user_name)
+            subprocess.run(  # nosec B603
+                [
+                    "/usr/bin/chown",
+                    "-R",
+                    f"{user_name}:{user_name}",
+                    str(target),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         else:
             os.chown(target, u_info.pw_uid, u_info.pw_gid)
-    except (OSError, KeyError) as err:
+    except (OSError, KeyError, subprocess.CalledProcessError) as err:
         jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="DEBUG")
 
 

@@ -35,25 +35,13 @@ _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
 # ---------------------------------------------------------------------------
 
 
-def _is_game_log_line(line: str, chdir_marker: str) -> bool:
-    return chdir_marker in line or "gameID " in line or "AppID = " in line
-
-
 def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
-    """Filter journalctl output; return last _GAME_LOG_TAIL game-launch lines.
-
-    Args:
-        stdout: Full ``journalctl --no-hostname`` output.
-        home: User home path used as chdir prefix anchor.
-
-    Returns:
-        At most _GAME_LOG_TAIL most-recent matching lines, preserving order.
-    """
+    """Return last _GAME_LOG_TAIL game-launch lines from journalctl output."""
     chdir_marker = f'chdir "{home}'
     matched = [
         line
         for line in stdout.splitlines()
-        if _is_game_log_line(line, chdir_marker)
+        if (chdir_marker in line or "gameID " in line or "AppID = " in line)
         and not _GAME_LOG_NOISE.search(line)
     ]
     return matched[-_GAME_LOG_TAIL:]

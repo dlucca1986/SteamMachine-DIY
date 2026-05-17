@@ -20,12 +20,12 @@ from pathlib import Path
 
 from utils import (
     BACKUP_SCRIPT_NAME,
+    SSOT_CONF_PATH,
     check_root,
     fix_ownership,
     get_backup_mapping,
     get_real_user,
     jlog,
-    load_ssot,
     verify_archive,
 )
 
@@ -48,10 +48,9 @@ _ALLOWED_PREFIXES_FIXED: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _allowed_prefixes(home: str) -> tuple[str, ...]:
+def _allowed_prefixes(home_real: str) -> tuple[str, ...]:
     # Trailing slash prevents "alice" from matching "alicebob".
-    home_prefix = str(Path(home).resolve()) + "/"
-    return _ALLOWED_PREFIXES_FIXED + (home_prefix,)
+    return _ALLOWED_PREFIXES_FIXED + (home_real + "/",)
 
 
 # ---------------------------------------------------------------------------
@@ -211,14 +210,6 @@ def _write_member(
         dest.write(src.read())
 
 
-def _apply_metadata(
-    target: str, member: tarfile.TarInfo, home_real: str, user: str
-) -> None:
-    os.chmod(target, member.mode)
-    if os.path.realpath(target).startswith(home_real + "/"):
-        fix_ownership(target, user)
-
-
 def _extract_member(
     tar: tarfile.TarFile,
     member: tarfile.TarInfo,
@@ -227,17 +218,13 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract member to target and apply mode/ownership.
-
-    home_real must be realpath-resolved; a raw startswith on the home
-    string allows path-component collisions with sibling directories.
-
-    Returns False if target is a symlink and the write was refused.
-    """
+    """Extract member to target; False if target is a pre-existing symlink."""
     if not _ensure_safe_target(target):
         return False
     _write_member(tar, member, target)
-    _apply_metadata(target, member, home_real, user)
+    os.chmod(target, member.mode)
+    if os.path.realpath(target).startswith(home_real + "/"):
+        fix_ownership(target, user)
     return True
 
 
@@ -355,7 +342,7 @@ def _prepare_restore(
         (user, home_real, mapping, allowed) ready for _execute_restore.
     """
     check_root()
-    if not load_ssot():
+    if not os.path.isfile(SSOT_CONF_PATH):
         jlog("SYSTEM", "RESTORE_FAILED: SSoT config not found", level="ERROR")
         sys.exit(1)
 
@@ -377,7 +364,7 @@ def _prepare_restore(
         user,
         home_real,
         get_backup_mapping(home_str),
-        _allowed_prefixes(home_str),
+        _allowed_prefixes(home_real),
     )
 
 

@@ -151,9 +151,7 @@ deploy_files() {
         || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
     info "C-Core verified and loadable."
 
-    # Set strict permissions: readable utils/libs, executable binaries
     chmod 755 "$LIB_DIR"
-    chmod 644 "$LIB_DIR/utils.py"
     chmod 644 "$LIB_DIR/libcore.so"
     chmod +x "$LIB_DIR"/*.py
     chmod +x "$HELPERS_DIR"/*.py

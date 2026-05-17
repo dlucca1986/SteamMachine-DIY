@@ -170,7 +170,7 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
         os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
-    except (OSError, FileNotFoundError, PermissionError) as err:
+    except OSError as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
         sys.exit(1)
 
@@ -191,28 +191,21 @@ def run() -> None:
 
     raw_args = sys.argv[1:]
 
-    # 1. Resolve paths via SSoT
     user_config_path = get_ssot_var("user_config")
     game_conf_dir = get_ssot_var("games_conf_dir", _FALLBACK_GAMES_DIR)
 
-    # 2. Derive lookup keys from argv
     stem, eff_name = _resolve_effective_name(raw_args)
     steam_id = os.getenv("SteamAppId")
 
-    # 3. Load profile and global manifesto
     found_path = _get_profile_path(game_conf_dir, steam_id, stem, eff_name)
     global_data = load_yaml_safe(user_config_path)
     profile_data = load_yaml_safe(found_path)
 
-    # 4. Apply environment (SSoT order: global -> profile)
     apply_env_map(global_data.get("env_vars"))
     apply_env_map(profile_data.get("env_vars"))
 
-    # 5. Build final command
     full_cmd = _build_command(raw_args, profile_data)
-
-    # 6. Zero-fork hand-off — Python is replaced by the game process
-    _exec_game(full_cmd, stem, steam_id)
+    _exec_game(full_cmd, stem, steam_id)  # execvpe — replaces this process
 
 
 if __name__ == "__main__":

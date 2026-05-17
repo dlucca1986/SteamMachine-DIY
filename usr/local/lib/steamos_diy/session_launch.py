@@ -41,11 +41,7 @@ DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 STATUS_MAP: dict[str, str] = {
     "steam": "Starting Game Mode...",
     "desktop": "Starting Desktop Mode...",
-    "crash": "Recovery: Starting Desktop...",
 }
-
-# Seconds to wait for graceful SIGTERM before sending SIGKILL on recovery.
-_TERM_TIMEOUT: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +72,7 @@ def _build_gamescope_args() -> list[str]:
 def _monitor_process(
     proc: subprocess.Popen[Any],
     timeout: float,
-    next_sess_path: str,
+    next_path: str,
     target: str,
 ) -> bool:
     """Wait up to *timeout* for proc to exit; treat survival as stable.
@@ -89,18 +85,18 @@ def _monitor_process(
         return False  # Exited early — treat as crash
     except subprocess.TimeoutExpired:
         jlog("CORE", f"VALIDATED_{target.upper()}_STABLE", level="DEBUG")
-        write_atomic(next_sess_path, target)
+        write_atomic(next_path, target)
         notify("Stable", clear_after=True)
         sd_notify_ready()
         return True  # Still running — stable
 
 
 def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
-    """SIGTERM → wait → SIGKILL if ignored within _TERM_TIMEOUT."""
+    """SIGTERM → wait → SIGKILL if ignored within TERM_TIMEOUT."""
     if proc.returncode is None:
         proc.terminate()
     try:
-        proc.wait(timeout=_TERM_TIMEOUT)
+        proc.wait(timeout=int(get_ssot_var("TERM_TIMEOUT", "5")))
     except subprocess.TimeoutExpired:
         jlog("CORE", "SIGTERM_TIMEOUT: escalating to SIGKILL", level="WARN")
         proc.kill()
@@ -122,7 +118,7 @@ def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     """
     jlog("CORE", "CRASH_DETECTED: RECOVERY", level="ERROR")
     target = "desktop"
-    notify(STATUS_MAP["crash"])
+    notify("Recovery: Starting Desktop...")
     write_atomic(next_path, target)
     _terminate_gracefully(proc)
     return target

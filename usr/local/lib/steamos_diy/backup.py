@@ -22,13 +22,13 @@ from pathlib import Path
 from utils import (
     BACKUP_SCRIPT_NAME,
     CORE_LIB_DIR,
+    SSOT_CONF_PATH,
     USER_CONFIG_REL,
     check_root,
     fix_ownership,
     get_backup_mapping,
     get_real_user,
     jlog,
-    load_ssot,
     verify_archive,
 )
 
@@ -77,10 +77,6 @@ _RESTORE_SCRIPT_MODE: int = 0o755
 # ---------------------------------------------------------------------------
 
 
-def _is_relevant_symlink(target: str) -> bool:
-    return any(marker in target for marker in _SYMLINK_TARGET_MARKERS)
-
-
 def _resolve_symlink(entry) -> str | None:
     if not entry.is_symlink():
         return None
@@ -88,7 +84,9 @@ def _resolve_symlink(entry) -> str | None:
         target = os.path.realpath(entry.path)
     except OSError:
         return None
-    return target if _is_relevant_symlink(target) else None
+    return (
+        target if any(m in target for m in _SYMLINK_TARGET_MARKERS) else None
+    )
 
 
 def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
@@ -129,8 +127,9 @@ def _generate_links_recap() -> bytes:
             recap.append(f"mkdir -p {parent_q}")
             recap.append(f"ln -sf {target_q} {link_q}")
 
-    helpers_glob = "/usr/bin/steamos-polkit-helpers/*"
-    recap.append(f"chmod +x {helpers_glob} 2>/dev/null || true")
+    recap.append(
+        "chmod +x /usr/bin/steamos-polkit-helpers/* 2>/dev/null || true"
+    )
     return "\n".join(recap).encode("utf-8")
 
 
@@ -218,7 +217,7 @@ def run_backup() -> None:
     to *.tar.gz. The previous archive is never touched on failure.
     """
     check_root()
-    if not load_ssot():
+    if not os.path.isfile(SSOT_CONF_PATH):
         jlog("SYSTEM", "BACKUP_FAILED: SSoT config not found", level="ERROR")
         sys.exit(1)
 

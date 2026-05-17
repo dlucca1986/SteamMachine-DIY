@@ -42,6 +42,7 @@ void c_notify(const char *status, int clear) {
 // 3. ATOMIC WRITE (fdatasync + rename for hardware durability)
 __attribute__((visibility("default")))
 void c_write_atomic(const char *path, const char *val) {
+    if (!path || !val) return;
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);

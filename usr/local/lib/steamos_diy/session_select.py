@@ -26,8 +26,8 @@ from utils import (
 # Module-level constants — resolved once, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-BIN_STEAM_DEFAULT: str = "/usr/bin/steam"
-BIN_DBUS_DEFAULT: str = "/usr/bin/qdbus6"
+DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
+DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
 # Keywords that map argv[1] to the desktop target. Frozenset to enforce
 # immutability and O(1) membership lookup.
@@ -61,10 +61,10 @@ def _dispatch_switch(target: str) -> bool:
     Returns True if the helper process was spawned (PID > 0).
     """
     if target == "desktop":
-        steam_bin = get_ssot_var("bin_steam", BIN_STEAM_DEFAULT)
+        steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
         pid = spawn_native(steam_bin, [steam_bin, "-shutdown"])
     else:
-        dbus_bin = get_ssot_var("bin_dbus", BIN_DBUS_DEFAULT)
+        dbus_bin = get_ssot_var("bin_dbus", DEFAULT_DBUS_BIN)
         pid = spawn_native(
             dbus_bin,
             [dbus_bin, "org.kde.Shutdown", "/Shutdown", "logout"],
