@@ -141,10 +141,18 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     (disable the wrapper/extra for this profile, do not fall back).
     """
     wrapper_val = profile_data.get("GAME_WRAPPER")
-    wrapper = os.getenv("GAME_WRAPPER", "") if wrapper_val is None else str(wrapper_val)
+    wrapper = (
+        os.getenv("GAME_WRAPPER", "")
+        if wrapper_val is None
+        else str(wrapper_val)
+    )
 
     extra_val = profile_data.get("GAME_EXTRA_ARGS")
-    extra = os.getenv("GAME_EXTRA_ARGS", "") if extra_val is None else str(extra_val)
+    extra = (
+        os.getenv("GAME_EXTRA_ARGS", "")
+        if extra_val is None
+        else str(extra_val)
+    )
 
     full_cmd: list[str] = shlex.split(str(wrapper)) if wrapper else []
     full_cmd.extend(raw_args)

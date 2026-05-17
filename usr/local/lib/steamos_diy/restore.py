@@ -299,9 +299,7 @@ def _extract_payload(
     return script_member
 
 
-def _run_restore_script(
-    tar: tarfile.TarFile, member: tarfile.TarInfo
-) -> None:
+def _run_restore_script(tar: tarfile.TarFile, member: tarfile.TarInfo) -> None:
     """Run restore_links.sh from a root-owned 0700 mkdtemp sandbox.
 
     Writing to /tmp allowed a race between extraction and exec; mkdtemp

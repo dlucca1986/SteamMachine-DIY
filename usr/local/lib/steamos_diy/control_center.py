@@ -321,8 +321,10 @@ class SDYControlCenter(QMainWindow):
         """Vacuum journal via pkexec; emits process_finished."""
         self._run_pkexec(
             ["/usr/bin/journalctl", "--rotate", "--vacuum-time=1s"],
-            "Logs Cleaned", "Journal wiped.",
-            "Error", "Authentication or vacuum failed.",
+            ok_title="Logs Cleaned",
+            ok_msg="Journal wiped.",
+            err_title="Error",
+            err_msg="Authentication or vacuum failed.",
         )
 
     def _safe_spawn(self, cmd):
@@ -790,9 +792,14 @@ class SDYControlCenter(QMainWindow):
 
     # ── Privileged operations ─────────────────────────────────────────────
 
+    # pylint: disable=too-many-arguments
+    # 5 logical inputs (cmd + 4 status strings). The status strings are
+    # keyword-only so call sites stay self-documenting; collapsing them
+    # into a tuple/dataclass would hurt clarity more than it would help.
     def _run_pkexec(
         self,
         cmd: list[str],
+        *,
         ok_title: str,
         ok_msg: str,
         err_title: str,
@@ -802,7 +809,10 @@ class SDYControlCenter(QMainWindow):
 
         Single entry point for every privileged operation in the UI —
         journal vacuum, backup, and restore all route through here.
+        The four status strings are keyword-only to make every call
+        site self-documenting (and to satisfy pylint R0913/R0917).
         """
+
         def worker() -> None:
             try:
                 subprocess.run(  # nosec B603
@@ -823,8 +833,10 @@ class SDYControlCenter(QMainWindow):
         QMessageBox.information(self, "Backup", "Backup process started...")
         self._run_pkexec(
             ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "backup.py")],
-            "Success", "Backup done!",
-            "Error", "backup.py failed.",
+            ok_title="Success",
+            ok_msg="Backup done!",
+            err_title="Error",
+            err_msg="backup.py failed.",
         )
 
     def run_restore(self):
@@ -836,9 +848,15 @@ class SDYControlCenter(QMainWindow):
             return
         QMessageBox.information(self, "Restore", "Restore process started.")
         self._run_pkexec(
-            ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "restore.py"), fpath],
-            "Restore Complete", "Restored!",
-            "Restore Error", "restore.py failed.",
+            [
+                "/usr/bin/python3",
+                os.path.join(CORE_LIB_DIR, "restore.py"),
+                fpath,
+            ],
+            ok_title="Restore Complete",
+            ok_msg="Restored!",
+            err_title="Restore Error",
+            err_msg="restore.py failed.",
         )
 
 

@@ -248,6 +248,9 @@ def spawn_native(path: str, args: list[str]) -> int:
     caller and does not inherit the controlling terminal.
     """
     try:
+        # pylint: disable=consider-using-with
+        # Detached spawn — `with` would force a wait() on context exit,
+        # defeating the whole point of fire-and-forget.
         proc = subprocess.Popen(  # nosec B603
             args,
             executable=path,
