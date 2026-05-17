@@ -19,14 +19,11 @@ import tempfile
 from pathlib import Path
 
 from utils import (
-    CORE_LIB_DIR,
-    NEXT_SESSION_PATH,
-    SERVICE_PATH,
-    SSOT_CONF_PATH,
+    BACKUP_SCRIPT_NAME,
     check_root,
     fix_ownership,
+    get_backup_mapping,
     get_real_user,
-    get_ssot_var,
     jlog,
     load_ssot,
     verify_archive,
@@ -35,9 +32,6 @@ from utils import (
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
-
-# User-side relative path
-_USER_CONFIG_REL: str = ".config/steamos_diy"
 
 # Allow-list of filesystem prefixes the restore is permitted to write to.
 # Each entry is a *real* (symlink-resolved) absolute path; targets are
@@ -48,23 +42,10 @@ _ALLOWED_PREFIXES_FIXED: tuple[str, ...] = (
     "/var/",
 )
 
-# Special-cased archive entry — handled outside the regular extraction loop
-_RESTORE_SCRIPT_ARCNAME: str = "restore_links.sh"
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers — destination mapping
 # ---------------------------------------------------------------------------
-
-
-def _build_mapping(home: str) -> dict[str, str]:
-    return {
-        "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
-        "system/steamos_diy.conf": SSOT_CONF_PATH,
-        "system/service": SERVICE_PATH,
-        "source/steamos_diy": CORE_LIB_DIR,
-        "user/config": os.path.join(home, _USER_CONFIG_REL),
-    }
 
 
 def _allowed_prefixes(home: str) -> tuple[str, ...]:
@@ -121,7 +102,7 @@ def _resolve_target(
 
     Args:
         member_name: Archive-relative path of the tar member.
-        mapping: Prefix-to-destination map from _build_mapping.
+        mapping: Prefix-to-destination map from get_backup_mapping.
         allowed: Real-path-resolved allow-list from _allowed_prefixes.
 
     Returns:
@@ -298,40 +279,37 @@ def _extract_payload(
     allowed: tuple[str, ...],
     home_real: str,
     user: str,
-) -> bool:
-    """Extract safe members; defer restore_links.sh to avoid TOCTOU in /tmp.
+) -> tarfile.TarInfo | None:
+    """Extract safe members; defer restore_links.sh to a sandbox runner.
 
-    Returns True if the archive contains restore_links.sh.
+    Returns the restore-script TarInfo if present (so the caller can hand
+    it straight to _run_restore_script without a second tar lookup),
+    else None.
     """
-    script_found: bool = False
+    script_member: tarfile.TarInfo | None = None
 
     for member in tar.getmembers():
-        if member.name == _RESTORE_SCRIPT_ARCNAME:
-            script_found = (
-                True  # deferred to the post-extraction sandbox runner
-            )
+        if member.name == BACKUP_SCRIPT_NAME:
+            script_member = member
             continue
         _process_member(
             tar, member, mapping, allowed, home_real=home_real, user=user
         )
 
-    return script_found
+    return script_member
 
 
-def _run_restore_script(tar: tarfile.TarFile) -> None:
+def _run_restore_script(
+    tar: tarfile.TarFile, member: tarfile.TarInfo
+) -> None:
     """Run restore_links.sh from a root-owned 0700 mkdtemp sandbox.
 
     Writing to /tmp allowed a race between extraction and exec; mkdtemp
     with mode 0700 (owned by root) closes that TOCTOU window.
     """
-    try:
-        member = tar.getmember(_RESTORE_SCRIPT_ARCNAME)
-    except KeyError:
-        return
-
     # mkdtemp returns a 0700 dir owned by the calling user (root here)
     sandbox = tempfile.mkdtemp(prefix="sdy_restore_")
-    script_path = os.path.join(sandbox, _RESTORE_SCRIPT_ARCNAME)
+    script_path = os.path.join(sandbox, BACKUP_SCRIPT_NAME)
 
     try:
         src = tar.extractfile(member)
@@ -400,7 +378,7 @@ def _prepare_restore(
     return (
         user,
         home_real,
-        _build_mapping(home_str),
+        get_backup_mapping(home_str),
         _allowed_prefixes(home_str),
     )
 
@@ -414,12 +392,12 @@ def _execute_restore(
 ) -> None:
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
-            has_script = _extract_payload(
+            script_member = _extract_payload(
                 tar, mapping, allowed, home_real, user
             )
             jlog("SYSTEM", "RESTORE_PAYLOAD_DONE", level="DEBUG")
-            if has_script:
-                _run_restore_script(tar)
+            if script_member is not None:
+                _run_restore_script(tar, script_member)
                 jlog("SYSTEM", "RESTORE_LINKS_DONE", level="DEBUG")
         _reload_systemd()
         jlog("SYSTEM", "RESTORE_SUCCESS: Environment ready.", level="INFO")

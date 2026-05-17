@@ -5,21 +5,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include <ctype.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 static char current_tag[64] = "";
-
-// Inlined to eliminate call overhead on the hot path
-static inline void trim_inplace(char *s) {
-    char *p = s;
-    int l = strlen(p);
-    while(l > 0 && (isspace((unsigned char)p[l - 1]) || p[l - 1] == '"' || p[l - 1] == '\'')) p[--l] = 0;
-    while(*p && (isspace((unsigned char)*p) || *p == '"' || *p == '\'')) p++, l--;
-    memmove(s, p, l + 1);
-}
 
 // 1. NATIVE LOGGING
 __attribute__((visibility("default")))
@@ -72,78 +61,7 @@ void c_write_atomic(const char *path, const char *val) {
     }
 }
 
-// 4. SSoT CONFIG READER (key=value parser)
-__attribute__((visibility("default")))
-int c_get_conf_val(const char *path, const char *key, char *dest, int dest_len) {
-    FILE *f = fopen(path, "r");
-    if (!f) return 0;
-    char line[512];
-    int found = 0;
-    while (fgets(line, sizeof(line), f)) {
-        if (line[0] == '#' || line[0] == '\n' || !strchr(line, '=')) continue;
-        char *k = strtok(line, "=");
-        char *v = strtok(NULL, "\n");
-        if (k && v) {
-            trim_inplace(k);
-            if (strcmp(k, key) == 0) {
-                trim_inplace(v);
-                strncpy(dest, v, dest_len - 1);
-                dest[dest_len - 1] = '\0';
-                found = 1;
-                break;
-            }
-        }
-    }
-    fclose(f);
-    return found;
-}
-
-// 5. SIMPLE FILE READ (first line only)
-__attribute__((visibility("default")))
-int c_read_file_simple(const char *path, char *dest, int dest_len) {
-    FILE *f = fopen(path, "r");
-    if (!f) return 0;
-    if (fgets(dest, dest_len, f)) {
-        trim_inplace(dest);
-        fclose(f);
-        return 1;
-    }
-    fclose(f);
-    return 0;
-}
-
-// 6. DETACHED SPAWN (fork/exec, returns child PID or 0 on failure)
-__attribute__((visibility("default")))
-int c_spawn_detached(const char *path, char *const argv[]) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        setsid();
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull >= 0) {
-            dup2(devnull, STDOUT_FILENO);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-        }
-        execv(path, argv);
-        _exit(1);
-    }
-    return (pid > 0) ? (int)pid : 0;
-}
-
-// 7. PROCESS MONITOR (/proc polling every 200ms, avoids waitpid conflict with Python subprocess)
-__attribute__((visibility("default")))
-int c_monitor_process(int pid, int timeout_sec) {
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%d", pid);
-    int iterations = timeout_sec * 5;
-    for (int i = 0; i < iterations; i++) {
-        if (access(path, F_OK) != 0) return 0;
-        usleep(200000);
-    }
-    return 1;
-}
-
-// 8. SYSTEMD READINESS NOTIFICATION (handles abstract sockets via '@' prefix)
+// 4. SYSTEMD READINESS NOTIFICATION (handles abstract sockets via '@' prefix)
 __attribute__((visibility("default")))
 void c_sd_notify_ready() {
     const char *sock_path = getenv("NOTIFY_SOCKET");

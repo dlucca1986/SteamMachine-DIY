@@ -54,6 +54,7 @@ from ruamel.yaml import YAML, YAMLError
 from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
+    USER_CONFIG_REL,
     get_journal_cmd,
     get_ssot_var,
     jlog,
@@ -136,7 +137,7 @@ class SDYControlCenter(QMainWindow):
         super().__init__()
         self.setWindowTitle("SteamMachine-DIY Control Center")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
-        self.conf_root = Path(os.path.expanduser("~/.config/steamos_diy"))
+        self.conf_root = Path.home() / USER_CONFIG_REL
 
         # Style maps — emoji + colour per log category
         self.log_styles = {
@@ -318,31 +319,11 @@ class SDYControlCenter(QMainWindow):
 
     def cleanup_logs_privileged(self):
         """Vacuum journal via pkexec; emits process_finished."""
-
-        def worker() -> None:
-            try:
-                subprocess.run(  # nosec B603
-                    [
-                        "/usr/bin/pkexec",
-                        "/usr/bin/journalctl",
-                        "--rotate",
-                        "--vacuum-time=1s",
-                    ],
-                    check=True,
-                )
-                self.process_finished.emit(
-                    "Logs Cleaned", "Journal wiped.", False
-                )
-            except subprocess.CalledProcessError:
-                self.process_finished.emit(
-                    "Error", "Authentication or vacuum failed.", True
-                )
-            except OSError as err:
-                self.process_finished.emit(
-                    "Error", f"Cannot launch pkexec: {err}", True
-                )
-
-        threading.Thread(target=worker, daemon=True).start()
+        self._run_pkexec(
+            ["/usr/bin/journalctl", "--rotate", "--vacuum-time=1s"],
+            "Logs Cleaned", "Journal wiped.",
+            "Error", "Authentication or vacuum failed.",
+        )
 
     def _safe_spawn(self, cmd):
         """Non-blocking Popen; logs errors to journal rather than raising."""
@@ -540,9 +521,7 @@ class SDYControlCenter(QMainWindow):
 
             QMessageBox.information(self, "Success", "Configuration saved!")
         except YAMLError as exc:
-            mark = getattr(exc, "problem_mark", None)
-            if mark:
-                self._highlight_error_line(editor, mark.line)
+            self._highlight_yaml_error(editor, exc)
             QMessageBox.critical(self, "Syntax Error", str(exc))
         except OSError as exc:
             QMessageBox.critical(self, "Save Error", str(exc))
@@ -811,26 +790,27 @@ class SDYControlCenter(QMainWindow):
 
     # ── Privileged operations ─────────────────────────────────────────────
 
-    def _run_privileged_script(
+    def _run_pkexec(
         self,
-        script_name: str,
-        args: tuple = (),
-        ok_title: str = "Success",
-        ok_msg: str = "Done!",
-        err_title: str = "Error",
+        cmd: list[str],
+        ok_title: str,
+        ok_msg: str,
+        err_title: str,
+        err_msg: str,
     ) -> None:
-        """Run a project script under pkexec in a daemon thread; emits process_finished."""
-        script = os.path.join(CORE_LIB_DIR, script_name)
+        """Run *cmd* under pkexec in a daemon thread; emit process_finished.
 
+        Single entry point for every privileged operation in the UI —
+        journal vacuum, backup, and restore all route through here.
+        """
         def worker() -> None:
             try:
                 subprocess.run(  # nosec B603
-                    ["/usr/bin/pkexec", "/usr/bin/python3", script, *args],
-                    check=True,
+                    ["/usr/bin/pkexec", *cmd], check=True
                 )
                 self.process_finished.emit(ok_title, ok_msg, False)
             except subprocess.CalledProcessError:
-                self.process_finished.emit(err_title, f"{script_name} failed.", True)
+                self.process_finished.emit(err_title, err_msg, True)
             except OSError as err:
                 self.process_finished.emit(
                     err_title, f"Cannot launch pkexec: {err}", True
@@ -841,8 +821,10 @@ class SDYControlCenter(QMainWindow):
     def run_backup(self):
         """Run backup via pkexec in a daemon thread; emits process_finished."""
         QMessageBox.information(self, "Backup", "Backup process started...")
-        self._run_privileged_script(
-            "backup.py", ok_title="Success", ok_msg="Backup done!"
+        self._run_pkexec(
+            ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "backup.py")],
+            "Success", "Backup done!",
+            "Error", "backup.py failed.",
         )
 
     def run_restore(self):
@@ -853,12 +835,10 @@ class SDYControlCenter(QMainWindow):
         if not fpath:
             return
         QMessageBox.information(self, "Restore", "Restore process started.")
-        self._run_privileged_script(
-            "restore.py",
-            args=(fpath,),
-            ok_title="Restore Complete",
-            ok_msg="Restored!",
-            err_title="Restore Error",
+        self._run_pkexec(
+            ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "restore.py"), fpath],
+            "Restore Complete", "Restored!",
+            "Restore Error", "restore.py failed.",
         )
 
 

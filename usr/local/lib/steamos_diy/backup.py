@@ -20,14 +20,13 @@ from datetime import datetime
 from pathlib import Path
 
 from utils import (
+    BACKUP_SCRIPT_NAME,
     CORE_LIB_DIR,
-    NEXT_SESSION_PATH,
-    SERVICE_PATH,
-    SSOT_CONF_PATH,
+    USER_CONFIG_REL,
     check_root,
     fix_ownership,
+    get_backup_mapping,
     get_real_user,
-    get_ssot_var,
     jlog,
     load_ssot,
     verify_archive,
@@ -60,18 +59,16 @@ _EXCLUDE_COMPONENTS: frozenset[str] = frozenset(
     }
 )
 
-# User-side paths (relative to home)
-_USER_CONFIG_REL: str = ".config/steamos_diy"
-_USER_BACKUPS_REL: str = ".config/steamos_diy/backups"
+# Subdirectory under USER_CONFIG_REL where archives are stored.
+_USER_BACKUPS_REL: str = f"{USER_CONFIG_REL}/backups"
 
-# Archive
+# Archive naming
 _ARCHIVE_PREFIX: str = "sdy_backup_"
 _ARCHIVE_SUFFIX: str = ".tar.gz"
 _ARCHIVE_TMP_SUFFIX: str = ".tar.gz.tmp"
 _ARCHIVE_TS_FORMAT: str = "%Y%m%d_%H%M%S"
 
-# Restore-script entry inside the archive
-_RESTORE_SCRIPT_NAME: str = "restore_links.sh"
+# Mode for the embedded restore-script tar entry
 _RESTORE_SCRIPT_MODE: int = 0o755
 
 
@@ -142,19 +139,6 @@ def _generate_links_recap() -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def _backup_sources(home: str) -> list[tuple[str, str]]:
-    next_sess = get_ssot_var("next_session", NEXT_SESSION_PATH)
-    user_config = os.path.join(home, _USER_CONFIG_REL)
-
-    return [
-        (next_sess, "system/next_session"),
-        (SSOT_CONF_PATH, "system/steamos_diy.conf"),
-        (SERVICE_PATH, "system/service"),
-        (CORE_LIB_DIR, "source/steamos_diy"),
-        (user_config, "user/config"),
-    ]
-
-
 def _path_is_excluded(name: str) -> bool:
     """Match by path component, not substring — 'backups_2024.yaml' is safe."""
     return any(part in _EXCLUDE_COMPONENTS for part in name.split("/"))
@@ -170,7 +154,7 @@ def _tar_filter(tarinfo):
 def _add_restore_script(tar: tarfile.TarFile) -> None:
     """Append the dynamic restore_links.sh entry to *tar*."""
     data = _generate_links_recap()
-    info = tarfile.TarInfo(name=_RESTORE_SCRIPT_NAME)
+    info = tarfile.TarInfo(name=BACKUP_SCRIPT_NAME)
     info.size = len(data)
     info.mode = _RESTORE_SCRIPT_MODE
     tar.addfile(info, io.BytesIO(data))
@@ -178,7 +162,7 @@ def _add_restore_script(tar: tarfile.TarFile) -> None:
 
 def _add_payload(tar: tarfile.TarFile, home: str) -> None:
     """Add system + user sources to *tar*, skipping missing paths."""
-    for src, arc in _backup_sources(home):
+    for arc, src in get_backup_mapping(home).items():
         if os.path.exists(src):
             tar.add(src, arcname=arc, filter=_tar_filter)
             jlog("SYSTEM", f"BACKUP_ADD: {src}", level="DEBUG")

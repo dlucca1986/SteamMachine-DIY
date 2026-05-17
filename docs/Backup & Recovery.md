@@ -40,7 +40,7 @@ The easiest way to manage your data is through the **Maintenance** tab in the Co
 
 ## 🔍 Mapping Logic
 
-The utility targets specific paths to maintain a minimal backup footprint:
+The utility targets specific paths to maintain a minimal backup footprint. The mapping is defined in `utils.get_backup_mapping(home)` as the single source of truth — both `backup.py` (writing the archive) and `restore.py` (reading it back) consume the same dict, so the archive layout can never drift between the two sides.
 
 | Source Path | Description |
 |:---|:---|

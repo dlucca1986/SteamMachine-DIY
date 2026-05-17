@@ -133,14 +133,6 @@ def _get_profile_path(
     return None
 
 
-def _resolve_games_dir() -> str:
-    """Return games.d path from SSoT, falling back to _FALLBACK_GAMES_DIR."""
-    conf_dir = get_ssot_var("games_conf_dir")
-    if conf_dir:
-        return conf_dir
-    return _FALLBACK_GAMES_DIR
-
-
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     """Compose wrapper + raw_args + extra_args for execvpe.
 
@@ -193,7 +185,7 @@ def run() -> None:
 
     # 1. Resolve paths via SSoT
     user_config_path = get_ssot_var("user_config")
-    game_conf_dir = _resolve_games_dir()
+    game_conf_dir = get_ssot_var("games_conf_dir", _FALLBACK_GAMES_DIR)
 
     # 2. Derive lookup keys from argv
     stem, eff_name = _resolve_effective_name(raw_args)

@@ -38,34 +38,12 @@ try:
     _LIB.c_jlog.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
     _LIB.c_notify.argtypes = [ctypes.c_char_p, ctypes.c_int]
     _LIB.c_write_atomic.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-    _LIB.c_get_conf_val.argtypes = [
-        ctypes.c_char_p,
-        ctypes.c_char_p,
-        ctypes.c_char_p,
-        ctypes.c_int,
-    ]
-    _LIB.c_get_conf_val.restype = ctypes.c_int
-    _LIB.c_read_file_simple.argtypes = [
-        ctypes.c_char_p,
-        ctypes.c_char_p,
-        ctypes.c_int,
-    ]
-    _LIB.c_read_file_simple.restype = ctypes.c_int
-    _LIB.c_spawn_detached.argtypes = [
-        ctypes.c_char_p,
-        ctypes.POINTER(ctypes.c_char_p),
-    ]
-    _LIB.c_spawn_detached.restype = ctypes.c_int
     _LIB.c_sd_notify_ready.argtypes = []
 
 except OSError as err:
     sys.stderr.write(f"FATAL: C-Core missing at {_CORE_LIB_PATH}: {err}\n")
     sys.exit(127)
 
-
-# ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Project-wide path constants — single source of truth for all modules.
@@ -76,14 +54,14 @@ NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
 CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
 SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
-# ---------------------------------------------------------------------------
+# User-side path (relative to home) and embedded restore-script entry name.
+# Centralised here so the archive format contract has a single source of
+# truth — backup and restore can never disagree about what goes where.
+USER_CONFIG_REL: str = ".config/steamos_diy"
+BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 
-# In-process cache for SSoT values — avoids repeated C-Core disk reads.
+# In-process cache for SSoT values — avoids repeated disk reads.
 _SSOT_CACHE: dict[str, str] = {}
-
-# C-Core buffer sizes (must match the contract on the C side).
-_SSOT_BUF_SIZE: int = 512
-_SESSION_BUF_SIZE: int = 64
 
 # syslog priority levels for c_jlog (RFC 5424 severity).
 _LEVELS_C: dict[str, int] = {"DEBUG": 7, "INFO": 6, "WARN": 4, "ERROR": 3}
@@ -179,8 +157,16 @@ def get_ssot_var(var_name: str, default: str) -> str: ...
 def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
 
 
+def _strip_quotes(value: str) -> str:
+    """Strip whitespace and matching outer quotes from a key=value RHS."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
+
+
 def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
-    """Read a SSoT config value via C-Core, caching it in-process.
+    """Read a SSoT config value, caching it in-process.
 
     Also sets os.environ[var_name] so spawned subprocesses inherit it
     without re-reading the config.
@@ -188,38 +174,31 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
     if var_name in _SSOT_CACHE:
         return _SSOT_CACHE[var_name]
 
-    res_buf = ctypes.create_string_buffer(_SSOT_BUF_SIZE)
-    if _LIB.c_get_conf_val(
-        SSOT_CONF_PATH.encode("utf-8"),
-        var_name.encode("utf-8"),
-        res_buf,
-        _SSOT_BUF_SIZE,
-    ):
-        try:
-            value = res_buf.value.decode("utf-8")
-            _SSOT_CACHE[var_name] = value
-            os.environ[var_name] = value
-            return value
-        except UnicodeDecodeError as err:
-            jlog(
-                "CORE", f"SSOT_DECODE_ERROR: {var_name} - {err}", level="WARN"
-            )
-            return default
+    try:
+        with open(SSOT_CONF_PATH, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, raw = line.partition("=")
+                if key.strip() == var_name:
+                    value = _strip_quotes(raw)
+                    _SSOT_CACHE[var_name] = value
+                    os.environ[var_name] = value
+                    return value
+    except OSError as err:
+        jlog("CORE", f"SSOT_READ_ERROR: {var_name} - {err}", level="DEBUG")
     return default
 
 
 def read_session_target(path: str | Path, default: str = "steam") -> str:
-    """Read next_session via C-Core; fall back to *default* on failure."""
-    res_buf = ctypes.create_string_buffer(_SESSION_BUF_SIZE)
-    if _LIB.c_read_file_simple(
-        str(path).encode("utf-8"), res_buf, _SESSION_BUF_SIZE
-    ):
-        try:
-            return res_buf.value.decode("utf-8").strip()
-        except UnicodeDecodeError as err:
-            jlog("CORE", f"SESSION_DECODE_ERROR: {err}", level="WARN")
-            return default
-    return default
+    """Read the first line of *path*; fall back to *default* on failure."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            value = _strip_quotes(fh.readline())
+            return value or default
+    except OSError:
+        return default
 
 
 def _parse_yaml(path: str | Path) -> dict[str, Any]:
@@ -263,18 +242,23 @@ def apply_env_map(data_dict: dict[str, Any] | None) -> None:
 
 
 def spawn_native(path: str, args: list[str]) -> int:
-    """Fork/exec *path* detached via C-Core; returns PID or 0 on failure."""
-    try:
-        encoded_path = path.encode("utf-8")
-        arg_v = (ctypes.c_char_p * (len(args) + 1))()
-        for i, arg in enumerate(args):
-            arg_v[i] = ctypes.c_char_p(arg.encode("utf-8"))
-        arg_v[len(args)] = None
-    except (UnicodeEncodeError, AttributeError) as err:
-        jlog("CORE", f"SPAWN_ENCODE_ERROR: {err}", level="WARN")
-        return 0
+    """Fork/exec *path* detached; returns PID or 0 on failure.
 
-    return _LIB.c_spawn_detached(encoded_path, arg_v)
+    Uses ``start_new_session=True`` (setsid) so the child survives the
+    caller and does not inherit the controlling terminal.
+    """
+    try:
+        proc = subprocess.Popen(  # nosec B603
+            args,
+            executable=path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return proc.pid
+    except (OSError, ValueError) as err:
+        jlog("CORE", f"SPAWN_ERROR: {path} - {err}", level="WARN")
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +314,23 @@ def check_root() -> None:
     """Exit with code 1 unless UID == 0."""
     if os.getuid() != 0:
         sys.exit(1)
+
+
+def get_backup_mapping(home: str) -> dict[str, str]:
+    """Archive-path → filesystem-path map. Single source of truth for the
+    backup format used by both backup.py and restore.py.
+
+    Adding a new entry here propagates to both sides: backup picks it up
+    when adding members, restore picks it up when mapping them back.
+    Order is preserved (3.7+ dict insertion order).
+    """
+    return {
+        "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
+        "system/steamos_diy.conf": SSOT_CONF_PATH,
+        "system/service": SERVICE_PATH,
+        "source/steamos_diy": CORE_LIB_DIR,
+        "user/config": os.path.join(home, USER_CONFIG_REL),
+    }
 
 
 def verify_archive(

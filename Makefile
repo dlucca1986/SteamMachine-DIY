@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -O2 -fPIC -Wall -Wextra -Wno-unused-parameter
+CFLAGS  = -O2 -fPIC -Wall -Wextra
 TARGET  = libcore.so
 SRC     = steamos_diy_core.c
 DESTDIR = /usr/local/lib/steamos_diy

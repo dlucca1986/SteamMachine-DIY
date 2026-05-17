@@ -33,6 +33,18 @@ REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 REAL_UID=$(id -u "$REAL_USER")
 
+# --- Filesystem Layout (shared contract with utils.py constants) ---
+readonly LIB_DIR="/usr/local/lib/steamos_diy"
+readonly HELPERS_DIR="$LIB_DIR/helpers"
+readonly POLKIT_DIR="/usr/bin/steamos-polkit-helpers"
+readonly BIN_DIR="/usr/local/bin"
+readonly SSOT_CONF="/etc/default/steamos_diy.conf"
+readonly SERVICE_FILE="/etc/systemd/system/steamos_diy.service"
+readonly STATE_DIR="/var/lib/steamos_diy"
+readonly APP_DIR="/usr/local/share/applications"
+readonly ALPM_HOOKS_DIR="/usr/share/libalpm/hooks"
+readonly USER_CONFIG_REL=".config/steamos_diy"
+
 # --- 1. Hardware Audit & Driver Selection ---
 check_gpu_and_drivers() {
     info "Auditing Hardware and Graphics Stack..."
@@ -85,24 +97,31 @@ deploy_files() {
     info "Deploying Single Source of Truth (SSoT) and configurations..."
 
     # Initialize Global SSoT Configuration
-    mkdir -p /etc/default
+    mkdir -p "$(dirname "$SSOT_CONF")"
     if [ -f etc/default/steamos_diy.conf ]; then
-        cp -f etc/default/steamos_diy.conf /etc/default/steamos_diy.conf
+        cp -f etc/default/steamos_diy.conf "$SSOT_CONF"
         info "Patching SSoT with User Home: $USER_HOME"
-        sed -i "s|{{HOME}}|$USER_HOME|g" /etc/default/steamos_diy.conf
+        sed -i "s|{{HOME}}|$USER_HOME|g" "$SSOT_CONF"
     fi
 
     # --- Deploy User-space Configurations (with Safety Check) ---
-    local CONFIG_DEST="$USER_HOME/.config/steamos_diy"
-    local CONFIG_SRC="etc/skel/.config/steamos_diy"
+    local CONFIG_DEST="$USER_HOME/$USER_CONFIG_REL"
+    local CONFIG_SRC="etc/skel/$USER_CONFIG_REL"
 
-    # Check for existing user YAML configs BEFORE creating directories
+    # Check for YAMLs on both sides BEFORE creating dest dirs. The src check
+    # is the guard that prevents 'cp -f .../*.yaml' from crashing under
+    # `set -e` when CONFIG_SRC exists but is empty (default bash glob does
+    # not expand to nothing — it stays literal and the cp fails).
     local HAS_EXISTING_YAML=false
+    local HAS_SRC_YAML=false
     compgen -G "$CONFIG_DEST/*.yaml" > /dev/null 2>&1 && HAS_EXISTING_YAML=true
+    compgen -G "$CONFIG_SRC/*.yaml" > /dev/null 2>&1 && HAS_SRC_YAML=true
 
     mkdir -p "$CONFIG_DEST/games.d"
 
-    if $HAS_EXISTING_YAML; then
+    if ! $HAS_SRC_YAML; then
+        info "No template YAML configs to deploy in $CONFIG_SRC; skipping."
+    elif $HAS_EXISTING_YAML; then
         warn "Existing configuration found in $CONFIG_DEST"
         read -r -p "Do you want to overwrite existing YAML configs? (y/N): " overwrite_configs
         if [[ "$overwrite_configs" =~ ^[Yy]$ ]]; then
@@ -110,23 +129,23 @@ deploy_files() {
             cp -f "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
         else
             info "Preserving custom settings. Only deploying new configuration files..."
-            cp -n "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/" 2>/dev/null || true
+            cp -n "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
         fi
-    elif [ -d "$CONFIG_SRC" ]; then
-        # Fresh installation flow
+    else
+        # Fresh installation: no existing user configs, templates available.
         cp -f "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
     fi
     chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DEST"
 
     # Deploy Python Core Libraries, Helpers & C-Core
-    LIB_DIR="/usr/local/lib/steamos_diy"
-    mkdir -p "$LIB_DIR/helpers"
+    mkdir -p "$HELPERS_DIR"
 
     info "Installing Python modules and helpers..."
     cp -rf usr/local/lib/steamos_diy/* "$LIB_DIR/"
 
     info "Building C-Core from source (steamos_diy_core.c)..."
-    gcc -O2 -fPIC -Wall -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
+    # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
+    gcc -O2 -fPIC -Wall -Wextra -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
         || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
     python3 -c "import ctypes; ctypes.CDLL('$LIB_DIR/libcore.so')" 2>/dev/null \
         || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
@@ -137,24 +156,25 @@ deploy_files() {
     chmod 644 "$LIB_DIR/utils.py"
     chmod 644 "$LIB_DIR/libcore.so"
     chmod +x "$LIB_DIR"/*.py
-    chmod +x "$LIB_DIR/helpers"/*.py
+    chmod +x "$HELPERS_DIR"/*.py
 
     # Initialize Session State tracking
-    mkdir -p /var/lib/steamos_diy
-    [ ! -f /var/lib/steamos_diy/next_session ] && echo "steam" > /var/lib/steamos_diy/next_session
-    chown -R "$REAL_USER:$REAL_USER" /var/lib/steamos_diy
-    chmod 775 /var/lib/steamos_diy
+    mkdir -p "$STATE_DIR"
+    [ ! -f "$STATE_DIR/next_session" ] && echo "steam" > "$STATE_DIR/next_session"
+    chown -R "$REAL_USER:$REAL_USER" "$STATE_DIR"
+    chmod 775 "$STATE_DIR"
 
     # --- Desktop Entries ---
     info "Installing desktop applications entries..."
-    mkdir -p /usr/local/share/applications
-    [ -f usr/local/share/applications/Control_Center.desktop ] && cp -f usr/local/share/applications/Control_Center.desktop /usr/local/share/applications/
-    [ -f usr/local/share/applications/Game_Mode.desktop ] && cp -f usr/local/share/applications/Game_Mode.desktop /usr/local/share/applications/
+    mkdir -p "$APP_DIR"
+    for f in Control_Center.desktop Game_Mode.desktop; do
+        [ -f "usr/local/share/applications/$f" ] && cp -f "usr/local/share/applications/$f" "$APP_DIR/"
+    done
 
     # --- ALPM Hooks ---
     info "Installing Pacman hooks..."
-    mkdir -p /usr/share/libalpm/hooks
-    [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp -f usr/share/libalpm/hooks/gamescope-privs.hook /usr/share/libalpm/hooks/
+    mkdir -p "$ALPM_HOOKS_DIR"
+    [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp -f usr/share/libalpm/hooks/gamescope-privs.hook "$ALPM_HOOKS_DIR/"
 
     # Grant Gamescope necessary capabilities for performance
     if [ -f /usr/bin/gamescope ]; then
@@ -166,34 +186,31 @@ deploy_files() {
 # --- 4. SteamOS Compatibility Shim Layer ---
 setup_shim_links() {
     info "Constructing SteamOS Compatibility Layer (Shims)..."
-    
-    local HELPERS="/usr/local/lib/steamos_diy/helpers"
-    local CORE="/usr/local/lib/steamos_diy"
 
     # Polkit Helper Structure (Intercepts Steam Deck UI Settings)
-    mkdir -p /usr/bin/steamos-polkit-helpers
-    ln -sf "$HELPERS/jupiter-biosupdate.py"    /usr/bin/steamos-polkit-helpers/jupiter-biosupdate
-    ln -sf "$HELPERS/steamos-update.py"       /usr/bin/steamos-polkit-helpers/steamos-update
-    ln -sf "$HELPERS/set-timezone.py"         /usr/bin/steamos-polkit-helpers/steamos-set-timezone
-    ln -sf "$HELPERS/jupiter-dock-updater.py" /usr/bin/steamos-polkit-helpers/jupiter-dock-updater
+    mkdir -p "$POLKIT_DIR"
+    ln -sf "$HELPERS_DIR/jupiter-biosupdate.py"    "$POLKIT_DIR/jupiter-biosupdate"
+    ln -sf "$HELPERS_DIR/steamos-update.py"        "$POLKIT_DIR/steamos-update"
+    ln -sf "$HELPERS_DIR/set-timezone.py"          "$POLKIT_DIR/steamos-set-timezone"
+    ln -sf "$HELPERS_DIR/jupiter-dock-updater.py"  "$POLKIT_DIR/jupiter-dock-updater"
 
     # System Integration (Steam Client hardcoded paths)
-    ln -sf "$CORE/session_launch.py"          /usr/bin/steamos-session-launch
-    ln -sf "$CORE/session_select.py"          /usr/bin/steamos-session-select
-    ln -sf "$HELPERS/steamos-select-branch.py" /usr/bin/steamos-select-branch
-    
-    # Direct Aliases for Global Visibility
-    ln -sf /usr/bin/steamos-polkit-helpers/jupiter-biosupdate    /usr/bin/jupiter-biosupdate
-    ln -sf /usr/bin/steamos-polkit-helpers/steamos-update        /usr/bin/steamos-update
-    ln -sf /usr/bin/steamos-polkit-helpers/steamos-set-timezone /usr/bin/steamos-set-timezone
+    ln -sf "$LIB_DIR/session_launch.py"            /usr/bin/steamos-session-launch
+    ln -sf "$LIB_DIR/session_select.py"            /usr/bin/steamos-session-select
+    ln -sf "$HELPERS_DIR/steamos-select-branch.py" /usr/bin/steamos-select-branch
+
+    # Direct Aliases for Global Visibility (two-hop chain ends in $POLKIT_DIR)
+    for name in jupiter-biosupdate steamos-update steamos-set-timezone; do
+        ln -sf "$POLKIT_DIR/$name" "/usr/bin/$name"
+    done
 
     # Administrative & CLI Tools
-    ln -sf "$CORE/sdy.py"                    /usr/local/bin/sdy
-    ln -sf "$CORE/control_center.py"         /usr/local/bin/sdy-control-center
-    ln -sf "$CORE/backup.py"                 /usr/local/bin/sdy-backup
-    ln -sf "$CORE/restore.py"                /usr/local/bin/sdy-restore
+    ln -sf "$LIB_DIR/sdy.py"             "$BIN_DIR/sdy"
+    ln -sf "$LIB_DIR/control_center.py"  "$BIN_DIR/sdy-control-center"
+    ln -sf "$LIB_DIR/backup.py"          "$BIN_DIR/sdy-backup"
+    ln -sf "$LIB_DIR/restore.py"         "$BIN_DIR/sdy-restore"
 
-    chmod +x /usr/bin/steamos-polkit-helpers/*
+    chmod +x "$POLKIT_DIR"/*
 }
 
 # --- 5. Boot & Systemd Configuration ---
@@ -205,9 +222,9 @@ setup_systemd_lockdown() {
     
     # Deploy and personalize the main service
     if [ -f etc/systemd/system/steamos_diy.service ]; then
-        cp -f etc/systemd/system/steamos_diy.service /etc/systemd/system/
-        sed -i "s|{{USER}}|$REAL_USER|g" /etc/systemd/system/steamos_diy.service
-        sed -i "s|{{UID}}|$REAL_UID|g" /etc/systemd/system/steamos_diy.service
+        cp -f etc/systemd/system/steamos_diy.service "$SERVICE_FILE"
+        sed -i "s|{{USER}}|$REAL_USER|g" "$SERVICE_FILE"
+        sed -i "s|{{UID}}|$REAL_UID|g" "$SERVICE_FILE"
     fi
 
     # Refresh systemd state and set default target

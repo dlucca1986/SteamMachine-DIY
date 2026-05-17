@@ -140,14 +140,14 @@ def _run_session(
     next_path: str,
     target: str,
     v_timeout: float,
-    set_proc_ref,
+    proc_holder: list[subprocess.Popen[Any] | None],
 ) -> tuple[str, int]:
     """Spawn cmd, validate stability, recover on crash; return (target, code).
 
-    set_proc_ref is injected by run() so its SIGTERM handler can reach the live
-    Popen without a nonlocal binding. Called with None on exit to prevent the
-    handler from operating on a closed process. On spawn failure, target is
-    returned unchanged to preserve the caller's original intent.
+    proc_holder is the run()'s mutable cell shared with the SIGTERM handler.
+    It is set to the live Popen during the session and reset to None on exit
+    so the handler never operates on a closed process. On spawn failure,
+    target is returned unchanged to preserve the caller's original intent.
     """
     initial_target = target
     ret_code = 0
@@ -155,7 +155,7 @@ def _run_session(
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
-            set_proc_ref(proc)
+            proc_holder[0] = proc
             if not _monitor_process(proc, v_timeout, next_path, target):
                 target = _handle_recovery(proc, next_path)
             proc.wait()
@@ -175,7 +175,7 @@ def _run_session(
         ret_code = 1
         target = initial_target
     finally:
-        set_proc_ref(None)
+        proc_holder[0] = None
     return target, ret_code
 
 
@@ -212,11 +212,7 @@ def run() -> None:
     v_timeout = float(get_ssot_var("VALIDATION_TIMEOUT", "5.0"))
 
     target, ret_code = _run_session(
-        cmd,
-        next_path,
-        target,
-        v_timeout,
-        lambda p: proc_holder.__setitem__(0, p),
+        cmd, next_path, target, v_timeout, proc_holder
     )
 
     notify(_post_session_message(target, ret_code))

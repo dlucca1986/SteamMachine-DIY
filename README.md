@@ -52,8 +52,8 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | Category | Packages |
 | :--- | :--- |
 | **Execution** | `steam`, `gamescope`, `mangohud`, `gamemode`, `xorg-xwayland` |
-| **Python Stack** | `python`, `python-pyqt6`, `python-yaml`, `python-ruamel-yaml` |
-| **System Tools** | `vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `gcc` |
+| **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
+| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `qt6-tools`, `rsync`, `gcc` |
 | **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
 
 ## 🤝 Acknowledgments
