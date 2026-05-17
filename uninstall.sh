@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      1.3.5 - Atomic Restoration
+# VERSION:      2.0.0
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

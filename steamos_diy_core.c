@@ -28,7 +28,7 @@ void c_notify(const char *status, int clear) {
     if (fd < 0) return;
     if (clear) {
         const char *cls = "\033[H\033[2J\033[3J";
-        write(fd, cls, 11);
+        write(fd, cls, strlen(cls));
     } else {
         char buf[256];
         int len = snprintf(buf, sizeof(buf),

@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      1.3.0
+# VERSION:      2.0.0
 # DESCRIPTION:  PyQt6 Dashboard for SteamOS-DIY with Search functionality.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

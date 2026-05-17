@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      1.0.0
+# VERSION:      2.0.0
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -117,11 +117,11 @@ def _consume_export_line(
     """
     if line.startswith("__REALTIME_TIMESTAMP="):
         cur["ts"] = datetime.fromtimestamp(
-            int(line.split("=")[1]) / _MICROSECONDS_PER_SECOND
+            int(line.split("=", 1)[1]) / _MICROSECONDS_PER_SECOND
         )
         return None
     if line.startswith("SYSLOG_IDENTIFIER="):
-        cur["id"] = line.split("=")[1]
+        cur["id"] = line.split("=", 1)[1]
         return None
     if line.startswith("MESSAGE="):
         return _finalize_export_entry(line, cur, launches)

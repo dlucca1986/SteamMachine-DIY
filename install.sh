@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      1.3.4 - Sync-Enabled Production Ready
+# VERSION:      2.0.0
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -237,7 +237,7 @@ setup_systemd_lockdown() {
 disable_display_managers() {
     info "Disabling conflicting Display Managers..."
     # Including 'plasmalogin' for Plasma 6 support and other common DMs
-    for dm in sddm plasmalogin; do
+    for dm in sddm plasmalogin gdm lightdm; do
         systemctl disable "$dm" 2>/dev/null || true
     done
 }
