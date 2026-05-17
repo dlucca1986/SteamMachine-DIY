@@ -7,6 +7,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [2.0.0] — 2026-05-17 — KISS Audit & Robustness Pass
+
+### Removed
+- `utils.py`: `load_ssot()` — one-line wrapper around `os.path.isfile(SSOT_CONF_PATH)`; callers (`backup.py`, `restore.py`) now call it directly.
+- `utils.py`: `_parse_yaml()` — private function called only by `load_yaml_safe`; merged into it, eliminating the split.
+- `utils.py`: `_chown_recursive()` — private function called only by `fix_ownership`; inlined, error handling unified into a single `except`.
+- `backup.py`: `_is_relevant_symlink()` — one-line predicate called only by `_resolve_symlink`; inlined.
+- `restore.py`: `_apply_metadata()` — two-line function called only by `_extract_member`; inlined.
+- `editors.py`: `_setup_rules()` — called only from `__init__`; inlined.
+- `journal.py`: `_is_game_log_line()` — one-line predicate called only by `filter_game_journal_lines`; inlined.
+- `session_launch.py`: `STATUS_MAP["crash"]` entry — used by a single fixed access in `_handle_recovery`; replaced by a string literal.
+- `session_launch.py`: `_TERM_TIMEOUT` module constant — superseded by SSoT `TERM_TIMEOUT`.
+- `install.sh`: `chmod 644 "$LIB_DIR/utils.py"` — dead code, immediately overwritten by `chmod +x "$LIB_DIR"/*.py`.
+
+### Changed
+- `utils.py`: `_JLOG_REENTRY` comment reduced to one line.
+- `steamos_diy_core.c`: `c_write_atomic` — added `if (!path || !val) return;` NULL guard.
+- `steamos_diy_core.c`: `c_notify` — `write(fd, cls, 11)` replaced by `write(fd, cls, strlen(cls))`.
+- `steamos_diy.conf`: added `TERM_TIMEOUT=5` — last session-lifecycle timeout not previously SSoT-configurable.
+- `session_launch.py`: `_terminate_gracefully` now reads `TERM_TIMEOUT` from SSoT instead of using a hardcoded constant.
+- `session_launch.py`: `_monitor_process` parameter renamed `next_sess_path` → `next_path` for consistency with all other functions.
+- `session_select.py`: constants renamed `BIN_STEAM_DEFAULT` → `DEFAULT_STEAM_BIN`, `BIN_DBUS_DEFAULT` → `DEFAULT_DBUS_BIN` to align with `session_launch.py` naming convention.
+- `sdy.py`: `except (OSError, FileNotFoundError, PermissionError)` collapsed to `except OSError` — `FileNotFoundError` and `PermissionError` are subclasses of `OSError`.
+- `sdy.py`: numbered step comments in `run()` removed; only the zero-fork note kept as inline.
+- `restore.py`: `_allowed_prefixes` now receives `home_real` (already resolved) instead of `home_str`, eliminating the double `Path.resolve()` call.
+- `editors.py`: `line_number_area_width` — `while` loop for digit counting replaced by `len(str(...))`.
+- `control_center.py`: timestamp regex compiled as `_LOG_TIMESTAMP_RE` module-level constant instead of inline on every log line.
+- `control_center.py`: `_safe_spawn` except clause narrowed from `(subprocess.SubprocessError, OSError)` to `OSError` — `SubprocessError` is never raised by `Popen()`.
+- `install.sh`: `disable_display_managers` extended to cover `gdm` and `lightdm`, matching the detection list in `uninstall.sh`.
+- `Makefile`: `DESTDIR` renamed to `INSTALL_DIR` — `DESTDIR` is a Make convention for staging prefixes, not direct install paths.
+- `steamos_diy.service`: removed redundant inline comment on `ExecStart`.
+- All modules and scripts: version set to `2.0.0`.
+
 ### Added
 - `editors.py`: new module — `LineNumberArea`, `YAMLEditor`, `YAMLSyntaxHighlighter` extracted from `control_center.py` (SRP: rendering responsibility).
 - `journal.py`: new module — all journalctl/gamescope parsing and game detection extracted from `control_center.py` (SRP: system/data layer, no Qt dependency, fully testable in isolation).
