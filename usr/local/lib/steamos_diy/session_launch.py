@@ -199,7 +199,10 @@ def run() -> None:
     proc_holder: list[subprocess.Popen[Any] | None] = [None]
 
     def _handle_term(signum: int, _frame: Any) -> None:
-        """Drain the live process and exit cleanly on SIGTERM/SIGINT."""
+        """Drain the live process and exit cleanly on SIGTERM/SIGINT.
+
+        Exit code 0 — explicit stop, do NOT trigger a systemd restart.
+        """
         jlog("CORE", f"SIG_{signum}: Shutting down...")
         live_proc = proc_holder[0]
         if live_proc is not None:
@@ -217,6 +220,17 @@ def run() -> None:
 
     notify(_post_session_message(target, ret_code))
     time.sleep(float(get_ssot_var("NOTIFY_DELAY", "0.4")))
+
+    # The child finished naturally — either a session switch (user clicked
+    # "Switch to Desktop" / "Switch to Steam") or a crash that already
+    # routed `next_session` to "desktop" via _handle_recovery. Either way
+    # the new target is now persisted on disk and the only thing missing
+    # is the launcher reloading it. Exit non-zero so the service unit's
+    # `Restart=on-failure` policy reboots us; the next run reads the new
+    # `next_session` value and launches the right target. Without this,
+    # `systemctl stop` (clean SIGTERM → exit 0) stays clean while session
+    # switches still trigger the restart cycle.
+    sys.exit(75)  # EX_TEMPFAIL — semantically "transient, retry"
 
 
 if __name__ == "__main__":
