@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Support](https://img.shields.io/badge/Support-Documentation-blue.svg)](#)
 [![Status](https://img.shields.io/badge/Status-Active-success.svg)](#)
@@ -16,11 +16,10 @@ Traditional display managers conflict with Gamescope's requirement for exclusive
 * No background display manager processes consuming resources.
 
 ### 2. Is NVIDIA supported?
-Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers are supported. The installer automatically deploys the appropriate packages.
+Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers are supported. The installer automatically deploys the appropriate packages. For the best experience (HDR, advanced frame-pacing), AMD (Mesa/RADV) remains the recommended hardware.
+
 > [!IMPORTANT]
-> For the best experience (HDR, advanced frame-pacing), AMD (Mesa/RADV) remains the recommended hardware.
->
-> **Proprietary drivers + Gamescope**: To use Gamescope with proprietary drivers, you **must** enable DRM Kernel Mode Setting (KMS) by adding `nvidia-drm.modeset=1` to your bootloader. See the [Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting) for instructions.
+> Proprietary drivers require DRM Kernel Mode Setting to work with Gamescope (`nvidia-drm.modeset=1` on your bootloader). See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:

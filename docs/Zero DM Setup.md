@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
 [![Session](https://img.shields.io/badge/Session-PAM%20Authenticated-blue.svg)](#)
@@ -17,7 +17,7 @@ The system bypasses traditional login managers to initialize the graphical envir
 4.  **Session Execution**:
     *   **Gaming Mode**: Generates Gamescope parameters ➔ Spawns Steam ➔ Activates Watchdog.
     *   **Desktop Mode**: Spawns a native KDE Plasma session.
-5.  *   **Session Transition**: `session_select.py` updates the state file and sends a termination signal to the active session. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
+5.  **Session Transition**: `session_select.py` updates the state file and sends a termination signal to the active session. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
 
 ---
 
@@ -33,7 +33,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 
 ### Environment & Recovery
 *   **Runtime Context**: The service manages `XDG_RUNTIME_DIR` manually to support Wayland/Gamescope outside of a standard desktop environment.
-*   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay ensures the session recovers automatically from crashes. A clean exit (code 0, e.g. on `systemctl stop`) does **not** trigger a restart.
+*   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay ensures the session recovers automatically from crashes and restarts after session switches.
 
 > [!IMPORTANT]
 > **Plasma 6 & plasmalogin**
@@ -51,8 +51,8 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 A session switch involves three components working in sequence:
 
 1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`).
-2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits cleanly.
-3. `steamos_diy.service` (`Restart=on-failure`, `RestartSec=1.0s`) restarts the launcher, which reads the new target from the state file and spawns the next session.
+2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits with code `75` (`EX_TEMPFAIL`).
+3. `steamos_diy.service` treats code `75` as a failure (`Restart=on-failure`, `RestartSec=1.0s`) and restarts the launcher, which reads the new target from the state file and spawns the next session. A deliberate stop (`systemctl stop`) exits with `0` and does **not** trigger a restart.
 
 For the full lifecycle including crash recovery, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch).
 
@@ -90,12 +90,6 @@ Remove the `splash` flag from the kernel command line.
 To prevent visual artifacts during the handover to the Wayland compositor:
 1. Navigate to **System Settings** > **Colors & Themes** > **Splash Screen**.
 2. Select **None** and click **Apply**.
-
----
-
-## 🛡️ Security & Remote Access
-* **Isolation**: Autologin is strictly hardware-bound to TTY1 and the local seat.
-* **Remote Access**: SSH and other network services remain fully protected by standard authentication protocols.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

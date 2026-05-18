@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Logic](https://img.shields.io/badge/Logic-Selective%20State%20Capture-blue.svg)](#)
 [![Integrity](https://img.shields.io/badge/Integrity-Atomic%20Restoration-orange.svg)](#)
@@ -74,7 +74,7 @@ sudo python3 /usr/local/lib/steamos_diy/restore.py /path/to/your/backup.tar.gz
 ---
 
 ## ⚠️ Important Notes
-* **Atomic Safety**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.
+* **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.
 * **Ownership**: The restore tool is aware of your `SUDO_USER` and will ensure that files in your home directory are not locked as "root" after extraction.
 
 ---

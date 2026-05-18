@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.7.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
@@ -18,10 +18,8 @@ State files are written via a three-step protocol executed entirely in the C-Cor
 
 The target file is never left in a partial state, even after a sudden power loss.
 
-### 2. Configuration Management (`get_ssot_var`, `load_ssot`)
+### 2. Configuration Management (`get_ssot_var`)
 `get_ssot_var(key)` reads a value from `/etc/default/steamos_diy.conf` on the **first call** for that key, using a pure-Python line-by-line `key=value` parser (with quote-stripping via `_strip_quotes`), and stores the result in the module-level `_SSOT_CACHE` dict. Subsequent calls return the cached value without disk I/O. Each resolved value is also written into `os.environ` so child processes inherit it.
-
-`load_ssot()` returns `True` if the SSoT file exists and is readable.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
 `load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error). Never raises.
@@ -81,8 +79,8 @@ Used by `control_center.py` (via `journal.py`) for log display and game discover
 | `session_launch.py` | `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `get_ssot_var` |
 | `session_select.py` | `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
-| `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `load_ssot`, `verify_archive` |
-| `restore.py` | `BACKUP_SCRIPT_NAME`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `load_ssot`, `verify_archive` |
+| `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
+| `restore.py` | `BACKUP_SCRIPT_NAME`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
 | `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `get_journal_cmd`, `get_ssot_var`, `jlog` |
 | `journal.py` | `get_journal_cmd`, `extract_game_metadata` |
 | Compatibility shims | `jlog`, `run_shim` |

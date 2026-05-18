@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Log-System](https://img.shields.io/badge/Logs-Systemd%20Journal-blue.svg)](#)
 [![Status](https://img.shields.io/badge/Status-Diagnostic%20Active-success.svg)](#)
@@ -46,7 +46,7 @@ Add these to your `~/.bashrc` to control the architecture. These commands intera
 # =============================================================================
 
 # --- 📝 JOURNAL MONITORING ---
-# Monitor project activity in real-time (logs from steamos_diy.service)
+# Service lifecycle logs (session start/stop/restart — use -t CORE -t STEAM -t SYSTEM for application logs)
 alias sdy-logs='journalctl -u steamos_diy.service -f -n 100'
 
 # Display only critical errors recorded by the service

@@ -1,6 +1,6 @@
 # 👋 Welcome to the SteamMachine-DIY Wiki
 
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -38,8 +38,6 @@ Transforms Arch Linux into a console-style gaming system — no display manager,
 ---
 
 ### 🤝 Join the Project
-This project is open-source and community-driven! 
-
 * 💡 **Have an idea?** **[Open a Feature Request](https://github.com/dlucca1986/SteamMachine-DIY/issues)**.
 * 🐛 **Found a bug?** **[Report it here](https://github.com/dlucca1986/SteamMachine-DIY/issues)**.
 * 🚀 **Want to contribute?** Feel free to fork the repository and submit a Pull Request!

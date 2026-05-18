@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Session](https://img.shields.io/badge/Logic-Atomic%20State-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
@@ -27,7 +27,7 @@ Located at `/etc/default/steamos_diy.conf`. It stores system-wide variables incl
 Primary execution logic managed by `steamos_diy.service`. It determines the session target (Gaming Mode or Desktop Mode) by evaluating the state file at runtime.
 
 ### 3. Session Switcher (`session_select.py`)
-Handles explicit mode transitions. Writes the next session target atomically to the state file and signals the running session to exit cleanly.
+Handles explicit mode transitions. Writes the next session target atomically to the state file and signals the running session to terminate.
 
 ### 4. DGM Engine (Dynamic Gamescope Mapping)
 A module within the launcher that parses `config.yaml`. It dynamically generates the `gamescope` execution command based on defined flags and parameters.
