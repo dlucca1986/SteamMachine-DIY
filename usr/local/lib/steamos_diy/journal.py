@@ -12,12 +12,11 @@
 # =============================================================================
 """
 
+import os
 import re
 import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
-
-from utils import extract_game_metadata
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -28,6 +27,73 @@ _MIN_APPID_LEN: int = 3  # exclude single/double-digit noise values
 _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
+
+
+# ---------------------------------------------------------------------------
+# Journalctl invocation
+# ---------------------------------------------------------------------------
+
+
+def get_journal_cmd(tag: str) -> list[str]:
+    """Build journalctl argv for *tag*; ALL expands to all known SDY tags."""
+    base_cmd = [
+        "/usr/bin/journalctl",
+        "--since",
+        "12 hours ago",
+        "-n",
+        "300",
+        "--no-hostname",
+        "--no-pager",
+        "-o",
+        "export",
+    ]
+    tag_args = {
+        "ALL": ["-t", "CORE", "-t", "STEAM", "-t", "SYSTEM", "-t", "DEBUG"],
+        "CORE": ["-t", "CORE"],
+        "STEAM": ["-t", "STEAM"],
+        "SYSTEM": ["-t", "SYSTEM"],
+    }
+    return base_cmd + tag_args.get(tag, ["-t", tag])
+
+
+# ---------------------------------------------------------------------------
+# Game metadata extraction
+# ---------------------------------------------------------------------------
+
+
+def _normalize_appid(value: str) -> str:
+    """Collapse Non-Steam shortcut AppIDs to their 32-bit real form.
+
+    Steam logs Non-Steam AppIDs as 64-bit integers: high 32 bits = real
+    AppID (matches $SteamAppId), low 32 bits = internal flag mask.
+    Protontricks, compatdata paths, and the Steam URL bar all use the
+    32-bit form, so shift down anything wider.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        return value
+    if n.bit_length() > 32:
+        return str(n >> 32)
+    return value
+
+
+def extract_game_metadata(line: str) -> tuple[str | None, str | None]:
+    """Extract ("NAME", name) or ("ID", appid) from a raw journal export line.
+
+    NAME is derived from chdir entries; ID from gameID/AppID patterns.
+    AppIDs wider than 32 bits are normalised via _normalize_appid.
+    Returns (None, None) when no metadata is found.
+    """
+    if 'chdir "' in line:
+        match = re.search(r'chdir\s+"([^"]+)"', line)
+        if match:
+            return "NAME", os.path.basename(match.group(1).rstrip("/"))
+
+    match_id = re.search(r"(?:gameID|AppID\s*=\s*)\s*(\d+)", line)
+    if match_id:
+        return "ID", _normalize_appid(match_id.group(1))
+    return (None, None)
 
 
 # ---------------------------------------------------------------------------

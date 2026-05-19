@@ -3,20 +3,28 @@
 [![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-`utils.py` centralizes shared logic for all Python modules in the framework. A narrow set of operations is delegated to the **C-Core** (`libcore.so`) — only the ones where C gives real value: `fdatasync`-backed atomic writes, `O_NOCTTY` TTY notification, `syslog()`-based journal logging, and `NOTIFY_SOCKET` readiness signalling. Everything else (config parsing, file reads, process spawning) is pure Python, since `subprocess` and stdlib `open()` already provide what was previously duplicated in C. The shared library is loaded via `ctypes` at import time — if `/usr/local/lib/steamos_diy/libcore.so` is missing, the import fails immediately with `sys.exit(127)`.
+This page outlines the shared utility module (`utils.py`) and its integration with the native `libcore.so`.
+
+---
+
+## 🔌 C-Core Integration
+
+`utils.py` delegates a narrow set of operations to **`libcore.so`** — only those where C provides measurable value: atomic writes via `fdatasync`, `O_NOCTTY` TTY notification, `syslog()` journal logging, and `NOTIFY_SOCKET` readiness signalling. Everything else (config parsing, YAML loading, process spawning) stays in pure Python, since `subprocess` and stdlib `open()` already cover those cases.
+
+The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/steamos_diy/libcore.so` is missing, the import fails immediately with `sys.exit(127)`.
 
 ---
 
 ## 🏗️ Core Responsibilities
 
 ### 1. Data Integrity (`write_atomic`)
-State files are written via a three-step protocol executed entirely in the C-Core:
+Files persisted via `write_atomic()` follow a three-step protocol executed entirely in the C-Core:
 
 1. Write data to `<path>.tmp`.
 2. Call `fdatasync()` to flush write buffers to physical storage.
 3. Call `rename()` to atomically replace the target file.
 
-The target file is never left in a partial state, even after a sudden power loss.
+The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves.
 
 ### 2. Configuration Management (`get_ssot_var`)
 `get_ssot_var(key)` reads a value from `/etc/default/steamos_diy.conf` on the **first call** for that key, using a pure-Python line-by-line `key=value` parser (with quote-stripping via `_strip_quotes`), and stores the result in the module-level `_SSOT_CACHE` dict. Subsequent calls return the cached value without disk I/O. Each resolved value is also written into `os.environ` so child processes inherit it.
@@ -61,17 +69,6 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 
 ---
 
-## 📖 Journal Utilities
-
-Used by `control_center.py` (via `journal.py`) for log display and game discovery.
-
-| Function | Description |
-| :--- | :--- |
-| `get_journal_cmd(tag)` | Returns the `journalctl` argv for a given tag (`CORE`, `STEAM`, `SYSTEM`, `ALL`, or any custom tag). Fixed window: last 12 hours, 300 entries, `--no-pager -o export`. |
-| `extract_game_metadata(line)` | Parses a raw journal export line for a game name (`chdir` pattern) or AppID (`gameID` / `AppID` pattern). Non-Steam shortcut AppIDs wider than 32 bits are shifted right to their real AppID. Returns `("NAME", value)`, `("ID", value)`, or `(None, None)`. |
-
----
-
 ## 📂 Framework Dependencies
 
 | Component | `utils` imports used |
@@ -81,8 +78,7 @@ Used by `control_center.py` (via `journal.py`) for log display and game discover
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
 | `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
 | `restore.py` | `BACKUP_SCRIPT_NAME`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `get_journal_cmd`, `get_ssot_var`, `jlog` |
-| `journal.py` | `get_journal_cmd`, `extract_game_metadata` |
+| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `get_ssot_var`, `jlog`, `write_atomic` |
 | Compatibility shims | `jlog`, `run_shim` |
 
 ---

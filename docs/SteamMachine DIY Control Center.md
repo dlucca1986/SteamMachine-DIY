@@ -39,13 +39,13 @@ Text editor for YAML configuration files with real-time validation.
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser, converting tabs to two spaces and fixing indentation while preserving comments and quoting.
-* **Save**: `_atomic_save()` validates the YAML, writes to a `.tmp` file, calls `os.fsync()` for durability, then calls `os.replace()` to atomically replace the target file.
+* **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file.
 * **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
 
 ### 4. Game Overrides (Tab Index 3)
 Per-game YAML profile editor backed by journal-based game discovery.
 
-* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` (from `utils.py`) parses each line into a `{name: appid}` dict.
+* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` (from `journal.py`) parses each line into a `{name: appid}` dict.
 * **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
 * **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
@@ -63,7 +63,7 @@ Per-game YAML profile editor backed by journal-based game discovery.
 | **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
 | **1** | Backup | `run_backup()` | `pkexec python3 backup.py` in `threading.Thread` |
 | **1** | Restore | `run_restore()` | `QFileDialog` + `pkexec python3 restore.py <path>` in `threading.Thread` |
-| **2** | Save Config | `_atomic_save()` | YAML validation → `os.fsync()` → `os.replace()` |
+| **2** | Save Config | `_atomic_save()` | YAML validation → `write_atomic()` (C-Core, fdatasync + rename) |
 | **2** | Beautify | `beautify_yaml()` | `ruamel.yaml` round-trip (tabs → spaces, indent fix, comments preserved) |
 | **2** | View Template | `toggle_template("global")` | Loads/restores `.example.yaml`; disables save while active |
 | **3** | Scan Games | `refresh_detected_games()` | `journalctl --since "24 hours ago"` → filter → last 2000 game lines |

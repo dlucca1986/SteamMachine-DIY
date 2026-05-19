@@ -55,14 +55,15 @@ from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
-    get_journal_cmd,
     get_ssot_var,
     jlog,
+    write_atomic,
 )
 from editors import YAMLEditor, YAMLSyntaxHighlighter
 from journal import (
     fetch_gamescope_logs,
     filter_game_journal_lines,
+    get_journal_cmd,
     parse_export_format,
     parse_game_logs,
 )
@@ -497,29 +498,13 @@ class SDYControlCenter(QMainWindow):
         hl.rehighlight()
 
     def _atomic_save(self, path, content, editor):
-        """Validate YAML and write atomically via tmp+fsync+rename.
-
-        Guarantees durability on btrfs/ext4 across abrupt power loss.
-
-        Args:
-            path: Destination path.
-            content: YAML text to write.
-            editor: Editor widget for error highlight on parse failure.
-        """
+        """Validate YAML and persist via the shared C-Core atomic-write path."""
         editor.setExtraSelections([])
         try:
             yaml_parser.load(content)
             p_obj = Path(path)
             p_obj.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p_obj.with_suffix(".tmp")
-
-            # Write + fsync before rename for true durability
-            with open(tmp, "w", encoding="utf-8") as fh:
-                fh.write(content)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, p_obj)
-
+            write_atomic(p_obj, content)
             QMessageBox.information(self, "Success", "Configuration saved!")
         except YAMLError as exc:
             self._highlight_yaml_error(editor, exc)
