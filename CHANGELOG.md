@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `journal.py`: gamescope log filter no longer matches arbitrary lines containing "gamescope" as a substring. The Diagnostics tab was picking up Dolphin/kio `copy() QUrl(...)` operations and Plasma `PreviewJob` errors involving `gamescope.example.yaml` files — anything with the word "gamescope" anywhere on the line passed through. Now `journalctl` is invoked with `-t steam -t python3` (the only two identifiers that carry gamescope output: `steam` after the exec hop, `python3` for early CLI errors before exec), and lines must match the upstream gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) via the new `_GAMESCOPE_PAYLOAD` regex. Validated on a real session: 0 false positives, all genuine gamescope output preserved.
+
+### Changed
+- `control_center.py`: `_atomic_save()` no longer reimplements `tmp + fsync + rename` in Python; delegates to `write_atomic()` (C-Core, `fdatasync`). Single durability path for both session state writes and Control Center YAML saves.
+- `utils.py`: `extract_game_metadata`, `_normalize_appid`, `get_journal_cmd` moved to `journal.py` — the only consumer is the journal pipeline. `journal.py` no longer imports from `utils.py`.
+- `utils.py`: `write_atomic()` no longer strips whitespace from values — paranoid `.strip()` removed; all callers already pass clean strings.
+- `utils.py`: `SERVICE_PATH` renamed to `_SERVICE_PATH` — the only internal user is `get_backup_mapping`, no external consumer.
+- `utils.py`: dead `import re` removed after the regex-using functions were relocated to `journal.py`.
+
+### Removed
+- `control_center.py`: `_SSOT_KEYS` tuple and `_load_ssot_to_env()` method. The preload had no consumer — no module reads the nine pre-loaded keys via `os.getenv`; subprocesses re-read the SSoT file via `get_ssot_var`. Drops the now-unused `get_ssot_var` import as well.
+- `steamos_diy_core.c`: `#include <sys/stat.h>` — zero symbols used in the file, `-Wall -Wextra` still compiles clean.
+
+### Documentation
+- `Utilities Engine.md`: opening rewritten in one sentence (matching the other wiki pages); the C-Core philosophy now lives in a dedicated "🔌 C-Core Integration" section. "📖 Journal Utilities" section removed (functions relocated to `journal.py`). Framework Dependencies table updated accordingly.
+- `SteamMachine DIY Control Center.md`: `_atomic_save()` and `extract_game_metadata()` descriptions updated to reflect the new module layout. Diagnostics section updated with the narrower journalctl invocation. Orphan paragraph on `_load_ssot_to_env()` removed.
+- `Architecture.md`: `journal.py` function list extended with `get_journal_cmd` and `extract_game_metadata`.
+
 ---
 
 ## [2.0.0] — 2026-05-17 — KISS Audit & Robustness Pass
