@@ -55,7 +55,6 @@ from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
-    get_ssot_var,
     jlog,
     write_atomic,
 )
@@ -87,19 +86,6 @@ _YAML_WIDTH: int = 4096
 _YAML_INDENT_MAPPING: int = 2
 _YAML_INDENT_SEQUENCE: int = 4
 _YAML_INDENT_OFFSET: int = 2
-
-# SSoT keys to pre-load into os.environ at startup
-_SSOT_KEYS: tuple[str, ...] = (
-    "next_session",
-    "user_config",
-    "games_conf_dir",
-    "bin_gs",
-    "bin_steam",
-    "bin_plasma",
-    "LOG_LEVEL",
-    "VALIDATION_TIMEOUT",
-    "NOTIFY_DELAY",
-)
 
 # Matches the LAST parenthesised number — "Half-Life 2 (2004) (220)" → 220.
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
@@ -186,7 +172,6 @@ class SDYControlCenter(QMainWindow):
             "games": {"is_template": False, "cache": ""},
         }
 
-        self._load_ssot_to_env()
         self._setup_ui()
 
         # Wire async signals
@@ -203,11 +188,6 @@ class SDYControlCenter(QMainWindow):
         )
 
     # ── Setup ──────────────────────────────────────────────────────────────
-
-    def _load_ssot_to_env(self):
-        """Pre-load SSoT keys into os.environ; get_ssot_var caches on miss."""
-        for key in _SSOT_KEYS:
-            get_ssot_var(key)
 
     def _setup_ui(self):
         self.tabs = QTabWidget()

@@ -126,8 +126,6 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 
 ## 🛠️ Internal Logic: Round-Trip Engine
 
-`_load_ssot_to_env()` is called at startup and explicitly reads each key in `_SSOT_KEYS` via `get_ssot_var()`, pre-loading them into `os.environ`. This is distinct from the lazy per-key caching behaviour of other modules.
-
 The module-level `yaml_parser` instance is shared across all save and beautify operations:
 
 ```python

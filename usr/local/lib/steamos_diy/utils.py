@@ -51,7 +51,7 @@ except OSError as err:
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
 CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
-SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
+_SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
 # User-side path (relative to home) and embedded restore-script entry name.
 # Centralised here so the archive format contract has a single source of
@@ -307,7 +307,7 @@ def get_backup_mapping(home: str) -> dict[str, str]:
     return {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,
-        "system/service": SERVICE_PATH,
+        "system/service": _SERVICE_PATH,
         "source/steamos_diy": CORE_LIB_DIR,
         "user/config": os.path.join(home, USER_CONFIG_REL),
     }
