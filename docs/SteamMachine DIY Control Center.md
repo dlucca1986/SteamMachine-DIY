@@ -13,7 +13,7 @@ PyQt6 dashboard for system management, YAML configuration editing, and log analy
 Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab. `on_tab_changed` detects the diagnostics tab dynamically via `self.tabs.indexOf(self.diag_tab)` — no magic index.
 
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
-* **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl --since "1 hour ago" -o short-iso`) fetches gamescope-tagged lines and merges them into the display, deduplicated against already-seen `LAUNCH_ARGS` strings.
+* **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
 * **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note.
 * **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
 

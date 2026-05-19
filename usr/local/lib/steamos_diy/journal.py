@@ -28,6 +28,14 @@ _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
 
+# Allow-list for genuine gamescope log payloads (upstream output format).
+# Excludes false positives where "gamescope" appears only as a substring
+# inside file paths (e.g. Dolphin/kio copying gamescope.example.yaml) or
+# inside steam wrapper noise (steam.sh boot messages).
+_GAMESCOPE_PAYLOAD = re.compile(
+    r"\[(?:Info|Warn|Error|Gamescope WSI)\]|/usr/bin/gamescope:"
+)
+
 
 # ---------------------------------------------------------------------------
 # Journalctl invocation
@@ -213,7 +221,7 @@ def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
 
     ents = []
     for line in stdout.splitlines():
-        if "gamescope" not in line.lower():
+        if not _GAMESCOPE_PAYLOAD.search(line):
             continue
         entry = _parse_gamescope_line(line, launches)
         if entry is not None:
@@ -222,14 +230,21 @@ def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
 
 
 def _run_journalctl_iso() -> str:
+    """Pull last hour of gamescope-bearing identifiers.
+
+    `steam` carries gamescope output once gamescope has exec'd the Steam
+    child; `python3` carries the early gamescope errors (e.g. unrecognized
+    CLI flag) emitted before the exec hop, since session_launch.py is
+    still the parent. Narrowing here keeps Dolphin/plasmashell noise out.
+    """
     try:
         res = subprocess.run(  # nosec B603
             [
                 "/usr/bin/journalctl",
-                "--since",
-                "1 hour ago",
-                "-o",
-                "short-iso",
+                "-t", "steam",
+                "-t", "python3",
+                "--since", "1 hour ago",
+                "-o", "short-iso",
                 "--no-pager",
             ],
             capture_output=True,
