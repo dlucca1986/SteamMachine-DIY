@@ -12,3 +12,4 @@ env_vars:
   GAME_WRAPPER: ""
   GAME_EXTRA_ARGS: ""
 flags:
+post_start_cmds:

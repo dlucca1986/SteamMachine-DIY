@@ -15,6 +15,7 @@ import shlex
 import signal
 import subprocess  # nosec B404
 import sys
+import threading
 import time
 from typing import Any
 
@@ -27,6 +28,7 @@ from utils import (
     notify,
     read_session_target,
     sd_notify_ready,
+    spawn_native,
     write_atomic,
 )
 
@@ -67,6 +69,26 @@ def _build_gamescope_args() -> list[str]:
 
     jlog("STEAM", f"LAUNCH_ARGS: {' '.join(gs_args)}")
     return gs_args
+
+
+def _get_post_start_cmds() -> list[str]:
+    """Return post_start_cmds from user config; [] if absent or invalid."""
+    user_cfg_path = get_ssot_var("user_config")
+    if not user_cfg_path:
+        return []
+    cfg = load_yaml_safe(user_cfg_path)
+    cmds = cfg.get("post_start_cmds") or []
+    return [str(c) for c in cmds if c]
+
+
+def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
+    """Sleep *delay* seconds, then fire each cmd via spawn_native."""
+    time.sleep(delay)
+    for cmd_str in cmds:
+        parts = shlex.split(cmd_str)
+        if parts:
+            spawn_native(parts[0], parts)
+            jlog("STEAM", f"POST_START_CMD: {cmd_str}")
 
 
 def _monitor_process(
@@ -147,11 +169,19 @@ def _run_session(
     """
     initial_target = target
     ret_code = 0
+    post_start_cmds = _get_post_start_cmds() if target == "steam" else []
     try:
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
             proc_holder[0] = proc
+            if post_start_cmds:
+                delay = float(get_ssot_var("POST_START_DELAY", "2.0"))
+                threading.Thread(
+                    target=_schedule_post_start_cmds,
+                    args=(post_start_cmds, delay),
+                    daemon=True,
+                ).start()
             if not _monitor_process(proc, v_timeout, next_path, target):
                 target = _handle_recovery(proc, next_path)
             proc.wait()
