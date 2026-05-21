@@ -47,6 +47,15 @@ gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3"])
 
 ---
 
+## ⚙️ Post-Start Hook
+After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **daemon thread** is started that sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then fires each command via `spawn_native` (detached, `start_new_session=True`). The delay is shorter than `VALIDATION_TIMEOUT`, so all commands are executed before the session is declared stable.
+
+This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
+
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires.
+
+---
+
 ## 🛡️ Watchdog & Recovery
 The supervisor uses an event-driven mechanism to monitor process health and prevent boot loops.
 

@@ -33,7 +33,21 @@ flags:
   - "--rt"                   # Enable Realtime scheduling
   - "--immediate-flips"      # Minimize latency (Low latency/Tearing)
 
+  # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
+  - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
+  - "--mangoapp"              # Native MangoHud overlay (configurable from Steam QAM)
+
   # --- WRONG SYNTAX (EXAMPLES) ---
   # - -H 720                 # ERROR: Missing quotes
   # - "-H" "720"             # ERROR: Space between quotes breaks the flag
   # - "-H720"                # ERROR: Missing space between flag and value
+
+# --- POST-START COMMANDS ---
+# Shell commands executed once after gamescope has started, in a background
+# thread. Useful for runtime configuration that requires the gamescope socket
+# to be available (e.g. gamescopectl). Each command is fired with spawn_native
+# after POST_START_DELAY seconds (configured in steamos_diy.conf, default: 2.0s).
+post_start_cmds:
+  # Fix erratic VRR behaviour when --mangoapp overlay is active.
+  # Without this, the overlay surface interferes with adaptive sync decisions.
+  - "gamescopectl adaptive_sync_ignore_overlay 1"

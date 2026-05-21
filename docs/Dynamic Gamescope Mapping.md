@@ -10,7 +10,7 @@ This page outlines the configuration system for managing global settings and per
 ## 🌎 Global System Config
 **Path:** `~/.config/steamos_diy/config.yaml`
 
-This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of two main sections: `env_vars` and `flags`.
+This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of three sections: `env_vars`, `flags`, and `post_start_cmds`.
 
 ### 1. Execution Control & Environment Variables (`env_vars`)
 The system manages two types of configuration inputs:
@@ -27,11 +27,24 @@ This is a **YAML List** that defines how Gamescope should render the session.
 * **Resolution**: `-W 1280` and `-H 720` (Output resolution).
 * **Upscaling**: `-F fsr` (AMD FidelityFX) and `--sharpness 5`.
 * **Performance**: `--rt` (Realtime scheduling) and `--immediate-flips` (Low latency/Tearing).
+* **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay, toggleable from the Steam Quick Access Menu).
 
 #### ⚠️ Essential Syntax Rule
 In YAML, parameters and values must be enclosed in the **same set of quotes** to be parsed correctly by the launcher.
 * ✅ **Correct**: `- "-F fsr"`
 * ❌ **Wrong**: `- -F fsr` (missing quotes), `- "-F" "fsr"` (split into two items), `- "-Ffsr"` (missing space between flag and value)
+
+### 3. Post-Start Commands (`post_start_cmds`)
+This is a **YAML List** of shell commands executed once after Gamescope has started, in a background thread. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
+
+Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay ensures the Gamescope socket is ready before the commands are executed. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
+
+**Typical use case — VRR stability fix with `--mangoapp`:**
+When `--mangoapp` is active, the overlay surface can interfere with VRR/adaptive sync decisions. The following command tells Gamescope to ignore the overlay when evaluating VRR:
+```yaml
+post_start_cmds:
+  - "gamescopectl adaptive_sync_ignore_overlay 1"
+```
 
 ---
 
@@ -64,6 +77,12 @@ flags:
   - "--sharpness 5"
   - "--rt"
   - "--immediate-flips"
+  - "--adaptive-sync"
+  - "--mangoapp"
+
+# --- POST-START COMMANDS ---
+post_start_cmds:
+  - "gamescopectl adaptive_sync_ignore_overlay 1"
 ```
 
 ### Game Profile Template (`game.example.yaml`)

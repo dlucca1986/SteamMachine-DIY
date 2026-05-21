@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `session_launch.py`: post-start hook mechanism — `_get_post_start_cmds()` reads a `post_start_cmds` YAML list from `config.yaml`; `_schedule_post_start_cmds()` fires each command via `spawn_native` in a daemon thread after `POST_START_DELAY` seconds. Enables runtime Gamescope socket commands (e.g. `gamescopectl`) that cannot be expressed as launch flags. Hook is skipped entirely when the list is empty or the target is not `steam`.
+- `steamos_diy.conf`: `POST_START_DELAY=2.0` — configurable delay (seconds) before post-start commands are fired; joins the existing timing parameters (`VALIDATION_TIMEOUT`, `NOTIFY_DELAY`, `TERM_TIMEOUT`).
+- `config.yaml`: `post_start_cmds:` key — empty by default; populated by the user.
+- `config.example.yaml`: documented `--adaptive-sync` and `--mangoapp` flags under a new `VRR / MangoHud` group; added `post_start_cmds` section with `gamescopectl adaptive_sync_ignore_overlay 1` example and inline explanation of the VRR/overlay interaction.
+
 ### Fixed
 - `journal.py`: gamescope log filter no longer matches arbitrary lines containing "gamescope" as a substring. The Diagnostics tab was picking up Dolphin/kio `copy() QUrl(...)` operations and Plasma `PreviewJob` errors involving `gamescope.example.yaml` files — anything with the word "gamescope" anywhere on the line passed through. Now `journalctl` is invoked with `-t steam -t python3` (the only two identifiers that carry gamescope output: `steam` after the exec hop, `python3` for early CLI errors before exec), and lines must match the upstream gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) via the new `_GAMESCOPE_PAYLOAD` regex. Validated on a real session: 0 false positives, all genuine gamescope output preserved.
 
