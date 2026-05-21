@@ -14,7 +14,8 @@ env_vars:
   # Enable hardware features (recognized by Steam UI)
   STEAM_GAMESCOPE_VRR_SUPPORTED: "1"
 
-  # Default performance wrapper (e.g., gamemoderun, mangohud)
+  # Default performance wrapper applied to all games via sdy (e.g., gamemoderun)
+  # Note: MangoHud integration in Gamescope mode uses the --mangoapp flag, not GAME_WRAPPER
   GAME_WRAPPER: "gamemoderun"
 
   # Default extra arguments (usually empty for global defaults)

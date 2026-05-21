@@ -24,7 +24,7 @@ The easiest way to manage your data is through the **Maintenance** tab in the Co
 1. Navigate to the **Maintenance** tab.
 2. Click on **📦 Create Full System Backup**.
 3. A `pkexec` prompt will ask for your password to access system files.
-4. The system will create a compressed `.tar.gz` archive in `~/.config/steamos_diy/backups/` named `sdy_backup_YYYYMMDD_HHMMSS.tar.gz`.
+4. The system will create a compressed `.tar.gz` archive in `~/.config/steamos_diy/backups/` named `sdy_backup_YYYYMMDD_HHMMSS.tar.gz`. The archive is written atomically: the tool writes to a `.tmp` file first, verifies integrity end-to-end with `verify_archive()`, then renames it to the final path — the previous archive is never touched on failure.
 
 ### Restoring the System
 1. Click on **🔄 Restore from Archive**.
@@ -72,6 +72,13 @@ sudo python3 /usr/local/lib/steamos_diy/restore.py /path/to/your/backup.tar.gz
 ```
 
 ---
+
+## 🛡️ Restore Security
+The restore tool implements multiple layers of validation before writing anything to disk:
+* **Path allow-list**: Writes are only permitted to `/etc/`, `/usr/`, `/var/`, and the user's home directory. Any archive member resolving outside these paths is rejected and logged.
+* **Path traversal protection**: Archive members containing `..` components are rejected before resolution, preventing crafted archives from escaping the allow-list.
+* **Archive content filter**: Hardlinks, symlinks, device nodes, and FIFOs inside the archive are rejected — only regular files and directories are extracted.
+* **Pre-existing symlink guard**: If a symlink already exists at the target path on disk, the write is refused to prevent redirect attacks from a previously planted link.
 
 ## ⚠️ Important Notes
 * **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.

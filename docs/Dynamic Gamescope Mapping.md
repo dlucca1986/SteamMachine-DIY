@@ -16,7 +16,7 @@ This file defines the system-wide environment and the default behavior of the **
 The system manages two types of configuration inputs:
 
 * **Execution Prefixes (`GAME_WRAPPER`)**: Defined as a string, this value is prepended to the game command (e.g., `gamemoderun` or `mangohud`). It is used by `sdy.py` to wrap the process execution.
-* **Environment Variables**: Key-value pairs (like `DXVK_HUD` or `MANGOHUD_CONFIG`) injected directly into the process environment before launch.
+* **Environment Variables**: Key-value pairs injected into the session environment before launch (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"` to signal VRR support to Steam). **Note**: MangoHud integration in Gamescope mode requires the `--mangoapp` flag — setting `MANGOHUD=1` as an env var has no effect inside the compositor. `MANGOHUD_CONFIG` and similar variables are valid in per-game profiles where `mangohud` is used as a `GAME_WRAPPER`.
 
 ---
 
@@ -27,7 +27,10 @@ This is a **YAML List** that defines how Gamescope should render the session.
 * **Resolution**: `-W 1280` and `-H 720` (Output resolution).
 * **Upscaling**: `-F fsr` (AMD FidelityFX) and `--sharpness 5`.
 * **Performance**: `--rt` (Realtime scheduling) and `--immediate-flips` (Low latency/Tearing).
-* **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay, toggleable from the Steam Quick Access Menu).
+* **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay embedded directly into the Gamescope compositor).
+
+> [!NOTE]
+> When `--mangoapp` is active, MangoHud reads its configuration from `~/.config/MangoHud/MangoHud.conf` and `~/.config/MangoHud/presets.conf`. These files must be created manually to customize the overlay display.
 
 #### ⚠️ Essential Syntax Rule
 In YAML, parameters and values must be enclosed in the **same set of quotes** to be parsed correctly by the launcher.
@@ -100,10 +103,15 @@ env_vars:
   MANGOHUD_CONFIG: "cpu_temp,gpu_temp,fps"
 ```
 
-## 🚀 Dynamic Argument Mapping (DGM)
-The **DGM** engine maps **YAML** flags directly to the gamescope command line. This allows the system to support new `Gamescope`features without core script modifications.
+### Gamescope Flags Reference (`gamescope.example.yaml`)
+`~/.config/steamos_diy/gamescope.example.yaml` is a read-only reference document — it is **not** loaded by the launcher. It contains the full list of available Gamescope CLI flags translated to YAML format with descriptions, organized by category (general, HDR & performance, embedded mode, VR, debug, shaders, keyboard shortcuts).
 
-* **Find a new flag**: Check `gamescope --help` for new features or the provided `gamescope.example`
+---
+
+## 🚀 Dynamic Argument Mapping (DGM)
+The **DGM** engine maps **YAML** flags directly to the gamescope command line. This allows the system to support new Gamescope features without core script modifications.
+
+* **Find a new flag**: Check `gamescope --help` or consult `~/.config/steamos_diy/gamescope.example.yaml` for the full categorized reference.
 
 * **Add it**: Simply add a new line to your `flags`: list in `config.yaml`.
 

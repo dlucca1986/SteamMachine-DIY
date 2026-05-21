@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -O2 -fPIC -Wall -Wextra
+CFLAGS  = -O2 -fPIC -Wall -Wextra -march=native
 TARGET  = libcore.so
 SRC     = steamos_diy_core.c
 INSTALL_DIR = /usr/local/lib/steamos_diy

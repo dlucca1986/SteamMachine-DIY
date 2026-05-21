@@ -76,7 +76,7 @@ restore_display_manager() {
     dm_units=$(systemctl list-unit-files)
 
     # First match wins — order encodes priority.
-    for candidate in plasmalogin.service sddm.service gdm.service lightdm.service; do
+    for candidate in plasmalogin.service sddm.service; do
         if echo "$dm_units" | grep -q "$candidate"; then
             dm_service=$candidate
             break

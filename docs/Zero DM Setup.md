@@ -32,8 +32,11 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 *   **Readiness Notification**: `Type=notify` is set so systemd receives `READY=1` only after the session survives the validation window. This means dependent units and `systemctl start` calls block until the session is confirmed stable.
 
 ### Environment & Recovery
-*   **Runtime Context**: The service manages `XDG_RUNTIME_DIR` manually to support Wayland/Gamescope outside of a standard desktop environment.
+*   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>` and `XDG_SESSION_TYPE=wayland` explicitly, ensuring Gamescope and Wayland clients operate correctly outside a standard desktop login session.
+*   **Log Routing**: `StandardOutput=journal` and `StandardError=journal` route all session output to the systemd journal, visible via `journalctl -u steamos_diy.service`.
 *   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay ensures the session recovers automatically from crashes and restarts after session switches.
+*   **TTY Cleanup**: `TTYReset=yes` and `TTYVTDisallocate=yes` ensure the terminal is fully reset between session restarts, preventing display artifacts.
+*   **Kill Policy**: `KillMode=mixed` sends `SIGTERM` to the main process only (not the whole cgroup), allowing `session_launch.py`'s signal handler to drain the child process before exiting. `TimeoutStopSec=10` sets the hard limit before systemd escalates to `SIGKILL`.
 
 > [!IMPORTANT]
 > **Plasma 6 & plasmalogin**

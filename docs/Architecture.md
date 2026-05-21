@@ -21,7 +21,7 @@ Centralizes shared functions used across the framework:
 ---
 
 ### 1. SSoT (Single Source of Truth)
-Located at `/etc/default/steamos_diy.conf`. It stores system-wide variables including binary paths, user identities, and log levels. This configuration ensures consistent behavior across all Python components.
+Located at `/etc/default/steamos_diy.conf`. It stores system-wide variables including binary paths, user config paths, timing parameters, and log levels. This configuration ensures consistent behavior across all Python components.
 
 ### 2. Session Launcher (`session_launch.py`)
 Primary execution logic managed by `steamos_diy.service`. It determines the session target (Gaming Mode or Desktop Mode) by evaluating the state file at runtime.

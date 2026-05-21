@@ -557,7 +557,7 @@ class SDYControlCenter(QMainWindow):
         hdr = f'# SDY_ID: {aid}\nSTEAM_APPID: "{aid}"\n' if aid else ""
         return (
             f'{hdr}# Profile for {name}\nGAME_WRAPPER: ""\n'
-            f'GAME_EXTRA_ARGS: ""\nenv_vars:\n  # MANGOHUD: "1"\n'
+            f'GAME_EXTRA_ARGS: ""\nenv_vars:\n'
         )
 
     def save_game_profile(self):

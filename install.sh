@@ -235,7 +235,7 @@ setup_systemd_lockdown() {
 disable_display_managers() {
     info "Disabling conflicting Display Managers..."
     # Including 'plasmalogin' for Plasma 6 support and other common DMs
-    for dm in sddm plasmalogin gdm lightdm; do
+    for dm in sddm plasmalogin; do
         systemctl disable "$dm" 2>/dev/null || true
     done
 }

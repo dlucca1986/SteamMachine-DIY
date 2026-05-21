@@ -65,7 +65,7 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Detached spawn via `subprocess.Popen(start_new_session=True)`; stdout/stderr redirected to `/dev/null`. Returns the child PID, or `0` on failure. |
 | `verify_archive(path, tag)` | Gzip-tar integrity check via `tarfile.open` + member iteration. Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
-| `run_shim(name, exit_code)` | Logs the shim intercept via `jlog` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
+| `run_shim(tag, message, exit_code)` | Logs the shim intercept via `jlog(tag, message)` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
 
 ---
 
@@ -73,12 +73,12 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 
 | Component | `utils` imports used |
 | :--- | :--- |
-| `session_launch.py` | `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `get_ssot_var` |
-| `session_select.py` | `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
+| `session_launch.py` | `NEXT_SESSION_PATH`, `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `spawn_native`, `get_ssot_var` |
+| `session_select.py` | `NEXT_SESSION_PATH`, `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
-| `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `restore.py` | `BACKUP_SCRIPT_NAME`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `get_ssot_var`, `jlog`, `write_atomic` |
+| `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
+| `restore.py` | `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
+| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `jlog`, `write_atomic` |
 | Compatibility shims | `jlog`, `run_shim` |
 
 ---

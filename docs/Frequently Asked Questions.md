@@ -42,7 +42,8 @@ Yes. `sdy` is binary-agnostic. It scans the executable path and looks for a matc
 ### 6. Steam shows "Update Error" or "BIOS Update Failed".
 This is expected on non-Valve hardware. We provide **Compatibility Shims** that intercept these calls and return a safe exit code to maintain Steam UI stability.
 * `steamos-update` exits **7** (RAUC convention: "no update available") — Steam treats this as "up to date".
-* All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, etc.) exit **0** (success).
+* `jupiter-dock-updater` exits **7** (same RAUC convention — "firmware up to date").
+* All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, `steamos-select-branch`) exit **0** (success).
 ---
 
 ## 💻 Logic & Control Center

@@ -18,7 +18,7 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
 
 ### 2. Maintenance (Tab Index 1)
-All operations run in a background `threading.Thread`. Results surface via the `process_finished` PyQt signal.
+Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder, Edit SSoT) use fire-and-forget `subprocess.Popen` via `_safe_spawn`.
 
 Buttons in order:
 
@@ -45,7 +45,7 @@ Text editor for YAML configuration files with real-time validation.
 ### 4. Game Overrides (Tab Index 3)
 Per-game YAML profile editor backed by journal-based game discovery.
 
-* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` (from `journal.py`) parses each line into a `{name: appid}` dict.
+* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `parse_game_logs()` (from `journal.py`) then builds the `{name: appid}` dict by calling `extract_game_metadata()` per line.
 * **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
 * **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
