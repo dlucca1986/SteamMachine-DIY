@@ -241,10 +241,14 @@ def _run_journalctl_iso() -> str:
         res = subprocess.run(  # nosec B603
             [
                 "/usr/bin/journalctl",
-                "-t", "steam",
-                "-t", "python3",
-                "--since", "1 hour ago",
-                "-o", "short-iso",
+                "-t",
+                "steam",
+                "-t",
+                "python3",
+                "--since",
+                "1 hour ago",
+                "-o",
+                "short-iso",
                 "--no-pager",
             ],
             capture_output=True,

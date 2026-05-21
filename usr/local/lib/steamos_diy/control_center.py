@@ -478,7 +478,7 @@ class SDYControlCenter(QMainWindow):
         hl.rehighlight()
 
     def _atomic_save(self, path, content, editor):
-        """Validate YAML and persist via the shared C-Core atomic-write path."""
+        """Validate YAML and persist via the C-Core atomic-write path."""
         editor.setExtraSelections([])
         try:
             yaml_parser.load(content)

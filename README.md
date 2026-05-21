@@ -74,6 +74,6 @@ sudo ./install.sh
 ## 🗑️ Uninstallation
 
 ```bash
-   chmod +x uninstall.sh
-   sudo ./uninstall.sh
+chmod +x uninstall.sh
+sudo ./uninstall.sh
 ```

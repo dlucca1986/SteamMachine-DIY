@@ -207,9 +207,7 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
 
 def write_atomic(path: str | Path, val: str) -> None:
     """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable)."""
-    _LIB.c_write_atomic(
-        str(path).encode("utf-8"), str(val).encode("utf-8")
-    )
+    _LIB.c_write_atomic(str(path).encode("utf-8"), str(val).encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -331,5 +329,3 @@ def run_shim(tag: str, message: str, exit_code: int = 0) -> None:
     """Log the intercepted SteamOS call and exit with the expected code."""
     jlog(tag, message)
     sys.exit(exit_code)
-
-
