@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
 [![Session](https://img.shields.io/badge/Session-PAM%20Authenticated-blue.svg)](#)

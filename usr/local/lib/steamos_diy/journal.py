@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)

@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -18,13 +18,13 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
 
 ### 2. Maintenance (Tab Index 1)
-Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder, Edit SSoT) use fire-and-forget `subprocess.Popen` via `_safe_spawn`.
+Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
 
 Buttons in order:
 
 | Button | Action |
 | :--- | :--- |
-| **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `_safe_spawn`. |
+| **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `spawn_native`. |
 | **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
 | **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |

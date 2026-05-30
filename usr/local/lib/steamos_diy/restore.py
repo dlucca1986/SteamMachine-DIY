@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -359,7 +359,7 @@ def _prepare_restore(
 
     user, home = get_real_user()
     home_str = str(home)
-    home_real = str(Path(home).resolve())
+    home_real = str(home.resolve())
     return (
         user,
         home_real,

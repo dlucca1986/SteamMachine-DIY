@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -145,7 +145,7 @@ deploy_files() {
 
     info "Building C-Core from source (steamos_diy_core.c)..."
     # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
-    gcc -O2 -fPIC -Wall -Wextra -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
+    gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
         || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
     python3 -c "import ctypes; ctypes.CDLL('$LIB_DIR/libcore.so')" 2>/dev/null \
         || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }

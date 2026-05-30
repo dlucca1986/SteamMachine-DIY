@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  Core Session Manager
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -51,18 +51,14 @@ STATUS_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
-def _build_gamescope_args() -> list[str]:
+def _build_gamescope_args(cfg: dict) -> list[str]:
     """Build gamescope+steam argv, applying user_config env_vars and flags."""
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
     gs_args = [gs_bin, "-e", "-f"]
 
-    user_cfg_path = get_ssot_var("user_config")
-    if user_cfg_path:
-        cfg = load_yaml_safe(user_cfg_path)
-        if isinstance(cfg, dict):
-            apply_env_map(cfg.get("env_vars"))
-            for flag in cfg.get("flags") or []:
-                gs_args.extend(shlex.split(str(flag)))
+    apply_env_map(cfg.get("env_vars"))
+    for flag in cfg.get("flags") or []:
+        gs_args.extend(shlex.split(str(flag)))
 
     steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
     gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3"])
@@ -71,12 +67,8 @@ def _build_gamescope_args() -> list[str]:
     return gs_args
 
 
-def _get_post_start_cmds() -> list[str]:
+def _get_post_start_cmds(cfg: dict) -> list[str]:
     """Return post_start_cmds from user config; [] if absent or invalid."""
-    user_cfg_path = get_ssot_var("user_config")
-    if not user_cfg_path:
-        return []
-    cfg = load_yaml_safe(user_cfg_path)
     cmds = cfg.get("post_start_cmds") or []
     return [str(c) for c in cmds if c]
 
@@ -125,10 +117,10 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
         proc.wait()
 
 
-def _build_command_for(target: str) -> list[str]:
+def _build_command_for(target: str, cfg: dict) -> list[str]:
     """Resolve argv: "steam" → gamescope+Steam, else → Plasma."""
     if target == "steam":
-        return _build_gamescope_args()
+        return _build_gamescope_args(cfg)
     return [get_ssot_var("bin_plasma", DEFAULT_PLASMA_BIN)]
 
 
@@ -153,12 +145,14 @@ def _post_session_message(target: str, ret_code: int) -> str:
     return f"Ended (Code: {ret_code})"
 
 
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 def _run_session(
     cmd: list[str],
     next_path: str,
     target: str,
     v_timeout: float,
     proc_holder: list[subprocess.Popen[Any] | None],
+    post_start_cmds: list[str],
 ) -> tuple[str, int]:
     """Spawn cmd, validate stability, recover on crash; return (target, code).
 
@@ -169,7 +163,6 @@ def _run_session(
     """
     initial_target = target
     ret_code = 0
-    post_start_cmds = _get_post_start_cmds() if target == "steam" else []
     try:
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
@@ -217,7 +210,9 @@ def run() -> None:
 
     notify(STATUS_MAP.get(target, "Initializing..."))
 
-    cmd = _build_command_for(target)
+    cfg = load_yaml_safe(get_ssot_var("user_config"))
+    cmd = _build_command_for(target, cfg)
+    post_start_cmds = _get_post_start_cmds(cfg) if target == "steam" else []
 
     # Mutable closure cell for the signal handler. Wrapped in a list so
     # the inner function can rebind without needing `nonlocal` (and
@@ -241,7 +236,7 @@ def run() -> None:
     v_timeout = float(get_ssot_var("VALIDATION_TIMEOUT", "5.0"))
 
     target, ret_code = _run_session(
-        cmd, next_path, target, v_timeout, proc_holder
+        cmd, next_path, target, v_timeout, proc_holder, post_start_cmds
     )
 
     notify(_post_session_message(target, ret_code))

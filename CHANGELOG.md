@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [2.1.0] — 2026-05-23 — KDE-Focused Hardening & Gamescope Integration
 
 ### Added
 - `session_launch.py`: post-start hook mechanism — `_get_post_start_cmds()` reads a `post_start_cmds` YAML list from `config.yaml`; `_schedule_post_start_cmds()` fires each command via `spawn_native` in a daemon thread after `POST_START_DELAY` seconds. Enables runtime Gamescope socket commands (e.g. `gamescopectl`) that cannot be expressed as launch flags. Hook is skipped entirely when the list is empty or the target is not `steam`.
@@ -23,10 +23,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `utils.py`: `write_atomic()` no longer strips whitespace from values — paranoid `.strip()` removed; all callers already pass clean strings.
 - `utils.py`: `SERVICE_PATH` renamed to `_SERVICE_PATH` — the only internal user is `get_backup_mapping`, no external consumer.
 - `utils.py`: dead `import re` removed after the regex-using functions were relocated to `journal.py`.
+- `install.sh`: C-Core build flags aligned with `Makefile` — `-march=native` added to the `gcc` invocation. The installer always runs on the target machine, so native ISA optimisation is safe and consistent with `make` builds.
+- `install.sh`: `disable_display_managers` scope limited to `sddm` and `plasmalogin` — the project targets KDE Plasma exclusively; GNOME and other DMs are out of scope.
+- `session_launch.py`: user config YAML loaded once in `run()` and passed as `cfg: dict` to `_build_gamescope_args`, `_build_command_for`, `_get_post_start_cmds`, and `_run_session` — eliminates the duplicate `load_yaml_safe` call that was made separately by `_build_gamescope_args` and `_get_post_start_cmds` at every session start. Also drops the now-redundant `isinstance(cfg, dict)` guard (load_yaml_safe always returns dict).
+- `control_center.py`: `_safe_spawn` removed — replaced by direct `spawn_native` calls from `utils.py`. `spawn_native` already provides the same error handling plus `start_new_session=True` (setsid) and stdout/stderr redirect, giving spawned tools (Konsole, xdg-open, session_select) proper process-group isolation from the Control Center.
+- `restore.py`: `Path(home).resolve()` simplified to `home.resolve()` — `home` is already a `Path` object returned by `get_real_user()`, so the redundant `Path()` construction is removed.
 
 ### Removed
+- `control_center.py`: `_safe_spawn` method — redundant wrapper around `subprocess.Popen` superseded by `spawn_native` from `utils.py`.
 - `control_center.py`: `_SSOT_KEYS` tuple and `_load_ssot_to_env()` method. The preload had no consumer — no module reads the nine pre-loaded keys via `os.getenv`; subprocesses re-read the SSoT file via `get_ssot_var`. Drops the now-unused `get_ssot_var` import as well.
 - `steamos_diy_core.c`: `#include <sys/stat.h>` — zero symbols used in the file, `-Wall -Wextra` still compiles clean.
+- `control_center.py`: `OSError` removed from `beautify_yaml` except clause — `yaml_parser.load()` and `yaml_parser.dump()` are pure in-memory operations and cannot raise `OSError`; the handler was dead code.
 
 ### Documentation
 - `Utilities Engine.md`: opening rewritten in one sentence (matching the other wiki pages); the C-Core philosophy now lives in a dedicated "🔌 C-Core Integration" section. "📖 Journal Utilities" section removed (functions relocated to `journal.py`). Framework Dependencies table updated accordingly.
@@ -63,7 +70,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `editors.py`: `line_number_area_width` — `while` loop for digit counting replaced by `len(str(...))`.
 - `control_center.py`: timestamp regex compiled as `_LOG_TIMESTAMP_RE` module-level constant instead of inline on every log line.
 - `control_center.py`: `_safe_spawn` except clause narrowed from `(subprocess.SubprocessError, OSError)` to `OSError` — `SubprocessError` is never raised by `Popen()`.
-- `install.sh`: `disable_display_managers` extended to cover `gdm` and `lightdm`, matching the detection list in `uninstall.sh`.
+- `install.sh`: `disable_display_managers` scope limited to `sddm` and `plasmalogin` — the project targets KDE Plasma exclusively; GNOME and other DMs are out of scope.
 - `Makefile`: `DESTDIR` renamed to `INSTALL_DIR` — `DESTDIR` is a Make convention for staging prefixes, not direct install paths.
 - `steamos_diy.service`: removed redundant inline comment on `ExecStart`.
 - All modules and scripts: version set to `2.0.0`.

@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  PyQt6 Dashboard for SteamOS-DIY with Search functionality.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -55,7 +55,7 @@ from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
-    jlog,
+    spawn_native,
     write_atomic,
 )
 from editors import YAMLEditor, YAMLSyntaxHighlighter
@@ -248,12 +248,13 @@ class SDYControlCenter(QMainWindow):
         tools = [
             (
                 "🎮 Switch to Steam (Game Mode)",
-                lambda: self._safe_spawn(
+                lambda: spawn_native(
+                    "/usr/bin/python3",
                     [
                         "/usr/bin/python3",
                         os.path.join(CORE_LIB_DIR, "session_select.py"),
                         "steam",
-                    ]
+                    ],
                 ),
             ),
             ("📝 Edit System Config (SSoT)", self.edit_ssot_privileged),
@@ -262,12 +263,13 @@ class SDYControlCenter(QMainWindow):
             ("🔄 Restore from Archive", self.run_restore),
             (
                 "🖥️ Open Konsole Terminal",
-                lambda: self._safe_spawn(["/usr/bin/konsole"]),
+                lambda: spawn_native("/usr/bin/konsole", ["/usr/bin/konsole"]),
             ),
             (
                 "📂 Browse Config Folder",
-                lambda: self._safe_spawn(
-                    ["/usr/bin/xdg-open", str(self.conf_root)]
+                lambda: spawn_native(
+                    "/usr/bin/xdg-open",
+                    ["/usr/bin/xdg-open", str(self.conf_root)],
                 ),
             ),
         ]
@@ -306,14 +308,6 @@ class SDYControlCenter(QMainWindow):
             err_title="Error",
             err_msg="Authentication or vacuum failed.",
         )
-
-    def _safe_spawn(self, cmd):
-        """Non-blocking Popen; logs errors to journal rather than raising."""
-        try:
-            # pylint: disable=consider-using-with
-            subprocess.Popen(cmd)  # nosec B603
-        except OSError as err:
-            jlog("SYSTEM", f"SPAWN_FAILED: {cmd[0]}: {err}", level="WARN")
 
     # ── Global Options tab ─────────────────────────────────────────────────
 
@@ -406,7 +400,7 @@ class SDYControlCenter(QMainWindow):
             stream = StringIO()
             yaml_parser.dump(data, stream)
             clean = stream.getvalue()
-        except (YAMLError, OSError) as err:
+        except YAMLError as err:
             self._highlight_yaml_error(editor, err)
             return
         if raw.strip() == clean.strip():
