@@ -1,6 +1,6 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
-# VERSION:      2.0.0
+# VERSION:      2.1.0
 # DESCRIPTION:  Systemd service for automated session management.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -11,6 +11,16 @@
 [Unit]
 Description=SteamMachine-DIY - Session Launcher
 After=systemd-user-sessions.service dbus.service systemd-logind.service
+
+# session_launch.py exits 75 on every session switch (intentional restart),
+# and a crashed Steam already falls back to Desktop via _handle_recovery —
+# so legitimate restarts are frequent and self-limiting. The only runaway
+# case is both targets crashing instantly (e.g. broken Plasma/Wayland):
+# this guard lets systemd give up instead of hammering TTY1 at ~1 Hz.
+# Tuned generous enough to never trip on normal Steam<->Desktop toggling.
+# Recovery after give-up is via another TTY / SSH (TTY1 getty is masked).
+StartLimitIntervalSec=120
+StartLimitBurst=10
 
 [Service]
 Type=notify
