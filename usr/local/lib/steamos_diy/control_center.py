@@ -356,7 +356,12 @@ class SDYControlCenter(QMainWindow):
         header = QHBoxLayout()
         self.combo_games = QComboBox()
         self.combo_games.setEditable(True)
-        self.combo_games.currentTextChanged.connect(self.load_game_file)
+        # `activated` (selection/Enter) — NOT currentTextChanged. The latter
+        # fires per keystroke on an editable combo, re-scaffolding the editor
+        # and discarding edits while the user is still typing a name.
+        self.combo_games.activated.connect(
+            lambda _i: self.load_game_file(self.combo_games.currentText())
+        )
         btn_scan = QPushButton("🔍 Scan History")
         btn_scan.clicked.connect(self.refresh_detected_games)
         header.addWidget(QLabel("<b>Game ID:</b>"))

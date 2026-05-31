@@ -358,6 +358,9 @@ def _prepare_restore(
         sys.exit(1)
 
     user, home = get_real_user()
+    # Two forms intentionally: home_str (unresolved) keeps the mapping in
+    # lockstep with the paths backup.py wrote; home_real (symlink-resolved)
+    # is what the security allow-list must check against. Not redundant.
     home_str = str(home)
     home_real = str(home.resolve())
     return (

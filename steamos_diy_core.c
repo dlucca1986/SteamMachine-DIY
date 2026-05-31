@@ -33,6 +33,9 @@ void c_notify(const char *status, int clear) {
         int len = snprintf(buf, sizeof(buf),
                            "\033[?25l\033[H\033[2J\033[3J\n \033[1m◢◤ SteamOs_Diy\033[0m | %s\n",
                            status);
+        // snprintf returns the would-be length: clamp so an oversized
+        // status never makes write() read past the buffer.
+        if (len > (int)sizeof(buf)) len = sizeof(buf);
         write(fd, buf, len);
     }
     close(fd);
