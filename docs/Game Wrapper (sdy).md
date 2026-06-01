@@ -36,10 +36,10 @@ To maintain a clean process tree, `sdy` uses `os.execvpe`. The launcher process 
 
 ```python
 # Construction of the final command list
-full_cmd = shlex.split(str(wrapper)) if wrapper else []
+full_cmd = shlex.split(wrapper) if wrapper else []
 full_cmd.extend(raw_args)
 if extra:
-    full_cmd.extend(shlex.split(str(extra)))
+    full_cmd.extend(shlex.split(extra))
 
 # Replace this process with the game
 os.execvpe(full_cmd[0], full_cmd, os.environ)

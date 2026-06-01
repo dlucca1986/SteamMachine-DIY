@@ -3,7 +3,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
 # VERSION:      2.1.0
-# DESCRIPTION:  Executes games with per-game overrides and global manifesto.
+# DESCRIPTION:  Executes games with per-game overrides and global config.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/sdy.py
@@ -154,10 +154,10 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
         else str(extra_val)
     )
 
-    full_cmd: list[str] = shlex.split(str(wrapper)) if wrapper else []
+    full_cmd: list[str] = shlex.split(wrapper) if wrapper else []
     full_cmd.extend(raw_args)
     if extra:
-        full_cmd.extend(shlex.split(str(extra)))
+        full_cmd.extend(shlex.split(extra))
 
     return full_cmd
 

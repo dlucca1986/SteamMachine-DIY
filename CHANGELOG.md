@@ -5,10 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — Post-2.1.0 Hardening (UI, buffers, systemd & concurrency)
+## [Unreleased] — Post-2.1.0 Hardening & KISS/Doc Cleanup Pass
 
 ### Added
 - `steamos_diy.service`: `StartLimitIntervalSec=120` / `StartLimitBurst=10`. `session_launch.py` exits 75 on every session switch (intentional restart) and a crashed Steam already falls back to Desktop via `_handle_recovery`, so legitimate restarts are frequent and self-limiting. This guard only catches the pathological case (both targets crashing instantly, e.g. a broken Plasma/Wayland) — systemd gives up instead of hammering TTY1 at ~1 Hz. Tuned generous enough never to trip on normal Steam↔Desktop toggling.
+
+### Changed
+- `sdy.py`: dropped redundant `str()` casts in `_build_command` — `wrapper` and `extra` are already `str` from both branches that build them, so `shlex.split(str(x))` became `shlex.split(x)`.
+
+### Removed
+- `install.sh`: dropped `rsync` and `qt6-tools` from `BASE_PKGS`. Neither is used anywhere in the project — backup/restore use `tarfile` (not rsync) and the Control Center is pure PyQt6 at runtime (qt6-tools ships dev-only tooling like Designer). Removing them trims install-time dependency bloat.
 
 ### Fixed
 - `control_center.py`: the editable game-overrides combo was bound to `currentTextChanged`, which fires on every keystroke — re-scaffolding the editor and discarding edits while the user was still typing a profile name. Rebound to `activated` (selection/Enter only), so the profile loads or scaffolds on confirmation, not mid-type.
@@ -20,6 +26,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Documentation
 - `restore.py`: comment in `_prepare_restore` explaining why `home_str` (unresolved, kept in lockstep with the paths `backup.py` wrote) and `home_real` (symlink-resolved, checked by the security allow-list) intentionally coexist — they are not redundant.
 - `SteamMachine DIY Control Center.md`: game-overrides combo description updated — the profile loads (or scaffolds) on selection; typing a new name does not reload until confirmed.
+- `control_center.py`: header `DESCRIPTION` corrected — it advertised a non-existent "Search functionality"; now describes the actual dashboard (diagnostics, maintenance, YAML editing). `_run_pkexec` docstring trimmed of the keyword-only rationale already stated in the adjacent pylint-disable comment.
+- `sdy.py`: header `DESCRIPTION` reworded "global manifesto" → "global config".
+- `Utilities Engine.md`: corrected the `control_center.py` dependency row — it listed `jlog`, but the module actually imports `spawn_native` from `utils`.
+- `Installer Workflow.md`, `README.md`: dependency lists synced with `install.sh` (removed `rsync`/`qt6-tools`); documented `gcc` command updated to include `-march=native` (matches `install.sh` and the `Makefile`).
+- `Game Wrapper (sdy).md`: the `_build_command` code snippet synced with the source after the redundant `str()` casts were removed.
 
 ---
 

@@ -3,7 +3,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
 # VERSION:      2.1.0
-# DESCRIPTION:  PyQt6 Dashboard for SteamOS-DIY with Search functionality.
+# DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/control_center.py
@@ -772,8 +772,6 @@ class SDYControlCenter(QMainWindow):
 
         Single entry point for every privileged operation in the UI —
         journal vacuum, backup, and restore all route through here.
-        The four status strings are keyword-only to make every call
-        site self-documenting (and to satisfy pylint R0913/R0917).
         """
 
         def worker() -> None:
