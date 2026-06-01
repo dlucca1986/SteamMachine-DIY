@@ -5,11 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — Concurrency Hardening (POSIX fd hygiene & thread-local logging)
+## [Unreleased] — Post-2.1.0 Hardening (UI, buffers, systemd & concurrency)
+
+### Added
+- `steamos_diy.service`: `StartLimitIntervalSec=120` / `StartLimitBurst=10`. `session_launch.py` exits 75 on every session switch (intentional restart) and a crashed Steam already falls back to Desktop via `_handle_recovery`, so legitimate restarts are frequent and self-limiting. This guard only catches the pathological case (both targets crashing instantly, e.g. a broken Plasma/Wayland) — systemd gives up instead of hammering TTY1 at ~1 Hz. Tuned generous enough never to trip on normal Steam↔Desktop toggling.
 
 ### Fixed
+- `control_center.py`: the editable game-overrides combo was bound to `currentTextChanged`, which fires on every keystroke — re-scaffolding the editor and discarding edits while the user was still typing a profile name. Rebound to `activated` (selection/Enter only), so the profile loads or scaffolds on confirmation, not mid-type.
+- `steamos_diy_core.c`: `c_notify` now clamps the `snprintf` return value before `write()`. `snprintf` returns the *would-be* length, so an oversized status string could make `write()` read past the 256-byte buffer; the length is capped at `sizeof(buf)`.
+- `steamos_diy.service`: header `VERSION` corrected `2.0.0` → `2.1.0` — the unit file had been missed by the `.py`/`.sh`/`.conf` version bump.
 - `steamos_diy_core.c`: the three fd-opening paths now set the close-on-exec flag — `c_notify` (`O_CLOEXEC` on `/dev/tty1`), `c_write_atomic` (`O_CLOEXEC` on the temp file), and `c_sd_notify_ready` (`SOCK_CLOEXEC` on the AF_UNIX socket). `ctypes` releases the GIL during each C call, so the `post_start_cmds` daemon thread (`session_launch.py`) can `fork`/`exec` a child while one of these fds is briefly open; without close-on-exec the spawned game/helper would inherit that descriptor. The flags close the leak at no added complexity.
 - `utils.py`: `_JLOG_REENTRY` recursion guard moved from a shared `list[bool]` to `threading.local()`. The post-start daemon thread and the main thread both call `jlog`; with a single shared flag, a log emitted by one thread while the other held the guard would bypass the `LOG_LEVEL` threshold. Each thread now tracks its own re-entry state independently. (No crash was possible — Python's GIL makes the flag write atomic — but a suppressed-level line from a secondary thread could leak into the journal.)
+
+### Documentation
+- `restore.py`: comment in `_prepare_restore` explaining why `home_str` (unresolved, kept in lockstep with the paths `backup.py` wrote) and `home_real` (symlink-resolved, checked by the security allow-list) intentionally coexist — they are not redundant.
+- `SteamMachine DIY Control Center.md`: game-overrides combo description updated — the profile loads (or scaffolds) on selection; typing a new name does not reload until confirmed.
 
 ---
 
