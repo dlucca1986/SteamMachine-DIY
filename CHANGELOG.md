@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — Concurrency Hardening (POSIX fd hygiene & thread-local logging)
+
+### Fixed
+- `steamos_diy_core.c`: the three fd-opening paths now set the close-on-exec flag — `c_notify` (`O_CLOEXEC` on `/dev/tty1`), `c_write_atomic` (`O_CLOEXEC` on the temp file), and `c_sd_notify_ready` (`SOCK_CLOEXEC` on the AF_UNIX socket). `ctypes` releases the GIL during each C call, so the `post_start_cmds` daemon thread (`session_launch.py`) can `fork`/`exec` a child while one of these fds is briefly open; without close-on-exec the spawned game/helper would inherit that descriptor. The flags close the leak at no added complexity.
+- `utils.py`: `_JLOG_REENTRY` recursion guard moved from a shared `list[bool]` to `threading.local()`. The post-start daemon thread and the main thread both call `jlog`; with a single shared flag, a log emitted by one thread while the other held the guard would bypass the `LOG_LEVEL` threshold. Each thread now tracks its own re-entry state independently. (No crash was possible — Python's GIL makes the flag write atomic — but a suppressed-level line from a secondary thread could leak into the journal.)
+
+---
+
 ## [2.1.0] — 2026-05-23 — KDE-Focused Hardening & Gamescope Integration
 
 ### Added

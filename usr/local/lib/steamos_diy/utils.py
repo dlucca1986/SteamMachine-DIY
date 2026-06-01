@@ -17,6 +17,7 @@ import pwd
 import subprocess  # nosec B404
 import sys
 import tarfile
+import threading
 from pathlib import Path
 from typing import Any, overload
 
@@ -77,8 +78,11 @@ _LEVELS_NUM: dict[str, int] = {
 _DEFAULT_LEVEL_NUM: int = 20  # INFO
 _DEFAULT_LEVEL_C: int = 6  # INFO
 
-# Recursion guard — list so the inner closure writes without `global`.
-_JLOG_REENTRY: list[bool] = [False]
+# Recursion guard — thread-local so the post_start_cmds thread and the
+# main thread each track their own jlog re-entry independently. A shared
+# flag would let one thread's log bypass the LOG_LEVEL threshold while
+# another holds the guard.
+_JLOG_REENTRY = threading.local()
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +97,7 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
     _JLOG_REENTRY prevents infinite recursion when get_ssot_var itself
     triggers a log call (e.g. a decode error while reading LOG_LEVEL).
     """
-    if _JLOG_REENTRY[0]:
+    if getattr(_JLOG_REENTRY, "active", False):
         # Already inside jlog: skip threshold lookup and emit directly
         # at the requested level. This avoids recursion via get_ssot_var.
         _LIB.c_jlog(
@@ -103,7 +107,7 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
         )
         return
 
-    _JLOG_REENTRY[0] = True
+    _JLOG_REENTRY.active = True
     try:
         sys_threshold = _LEVELS_NUM.get(
             get_ssot_var("LOG_LEVEL", "INFO").upper(),
@@ -121,7 +125,7 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
             _LEVELS_C.get(level.upper(), _DEFAULT_LEVEL_C),
         )
     finally:
-        _JLOG_REENTRY[0] = False
+        _JLOG_REENTRY.active = False
 
 
 def notify(status: str, clear_after: bool = False) -> None:

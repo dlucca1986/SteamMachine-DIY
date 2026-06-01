@@ -23,7 +23,9 @@ void c_jlog(const char *tag, const char *msg, int priority) {
 // 2. TTY NOTIFICATION (low-PSI write via O_NOCTTY)
 __attribute__((visibility("default")))
 void c_notify(const char *status, int clear) {
-    int fd = open("/dev/tty1", O_WRONLY | O_NOCTTY);
+    // O_CLOEXEC: a child forked from another thread mid-call must not
+    // inherit this tty fd (ctypes releases the GIL during the C call).
+    int fd = open("/dev/tty1", O_WRONLY | O_NOCTTY | O_CLOEXEC);
     if (fd < 0) return;
     if (clear) {
         const char *cls = "\033[H\033[2J\033[3J";
@@ -47,7 +49,8 @@ void c_write_atomic(const char *path, const char *val) {
     if (!path || !val) return;
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
-    int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    // O_CLOEXEC: keep this transient fd out of any concurrently forked child.
+    int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd < 0) return;
     size_t len = strlen(val);
     ssize_t written = write(fd, val, len);
@@ -69,7 +72,8 @@ __attribute__((visibility("default")))
 void c_sd_notify_ready() {
     const char *sock_path = getenv("NOTIFY_SOCKET");
     if (!sock_path) return;
-    int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    // SOCK_CLOEXEC: don't leak the notify socket into a forked child.
+    int fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (fd < 0) return;
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
