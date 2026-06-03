@@ -22,6 +22,7 @@ from typing import Any
 from utils import (
     NEXT_SESSION_PATH,
     apply_env_map,
+    get_ssot_num,
     get_ssot_var,
     jlog,
     load_yaml_safe,
@@ -110,7 +111,7 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
     if proc.returncode is None:
         proc.terminate()
     try:
-        proc.wait(timeout=int(get_ssot_var("TERM_TIMEOUT", "5")))
+        proc.wait(timeout=get_ssot_num("TERM_TIMEOUT", 5.0))
     except subprocess.TimeoutExpired:
         jlog("CORE", "SIGTERM_TIMEOUT: escalating to SIGKILL", level="WARN")
         proc.kill()
@@ -169,7 +170,7 @@ def _run_session(
         ) as proc:
             proc_holder[0] = proc
             if post_start_cmds:
-                delay = float(get_ssot_var("POST_START_DELAY", "2.0"))
+                delay = get_ssot_num("POST_START_DELAY", 2.0)
                 threading.Thread(
                     target=_schedule_post_start_cmds,
                     args=(post_start_cmds, delay),
@@ -233,14 +234,14 @@ def run() -> None:
     signal.signal(signal.SIGTERM, _handle_term)
     signal.signal(signal.SIGINT, _handle_term)
 
-    v_timeout = float(get_ssot_var("VALIDATION_TIMEOUT", "5.0"))
+    v_timeout = get_ssot_num("VALIDATION_TIMEOUT", 5.0)
 
     target, ret_code = _run_session(
         cmd, next_path, target, v_timeout, proc_holder, post_start_cmds
     )
 
     notify(_post_session_message(target, ret_code))
-    time.sleep(float(get_ssot_var("NOTIFY_DELAY", "0.4")))
+    time.sleep(get_ssot_num("NOTIFY_DELAY", 0.4))
 
     # The child finished naturally — either a session switch (user clicked
     # "Switch to Desktop" / "Switch to Steam") or a crash that already

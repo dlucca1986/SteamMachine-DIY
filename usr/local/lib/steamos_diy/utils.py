@@ -185,6 +185,20 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
     return default
 
 
+def get_ssot_num(var_name: str, default: float) -> float:
+    """Read a numeric SSoT value; fall back to *default* if malformed.
+
+    SSoT values are hand-editable, so a typo (e.g. "5s", a stray comma, an
+    empty value) must degrade to the default with a warning rather than raise
+    an unguarded ValueError that could brick the session boot loop.
+    """
+    try:
+        return float(get_ssot_var(var_name, str(default)))
+    except (TypeError, ValueError):
+        jlog("CORE", f"BAD_SSOT_NUM: {var_name} - using {default}", "WARN")
+        return default
+
+
 def read_session_target(path: str | Path, default: str = "steam") -> str:
     """Read the first line of *path*; fall back to *default* on failure."""
     try:
