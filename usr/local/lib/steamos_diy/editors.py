@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
-# VERSION:      2.1.0
+# VERSION:      2.1.1
 # DESCRIPTION:  Line-number gutter and syntax highlighting for QPlainTextEdit.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

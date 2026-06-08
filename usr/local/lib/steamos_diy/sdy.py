@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
-# VERSION:      2.1.0
+# VERSION:      2.1.1
 # DESCRIPTION:  Executes games with per-game overrides and global config.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

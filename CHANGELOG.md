@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — Post-2.1.0 Hardening & KISS/Doc Cleanup Pass
+## [2.1.1] — 2026-06-08 — Post-2.1.0 Hardening & KISS/Doc Cleanup Pass
 
 ### Added
 - `utils.py`: `get_ssot_num(key, default)` — typed accessor that wraps `get_ssot_var` for numeric timing parameters, returning a `float` and falling back to `default` (with a `WARN`) when the value is missing or malformed.
