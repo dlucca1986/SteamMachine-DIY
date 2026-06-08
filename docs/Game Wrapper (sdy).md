@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.3.4-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -36,14 +36,13 @@ To maintain a clean process tree, `sdy` uses `os.execvpe`. The launcher process 
 
 ```python
 # Construction of the final command list
-full_cmd = shlex.split(str(wrapper)) if wrapper else []
+full_cmd = shlex.split(wrapper) if wrapper else []
 full_cmd.extend(raw_args)
 if extra:
-    full_cmd.extend(shlex.split(str(extra)))
+    full_cmd.extend(shlex.split(extra))
 
-# Resolve the real executable path, then replace this process
-executable = shutil.which(full_cmd[0])
-os.execvpe(executable, full_cmd, os.environ)
+# Replace this process with the game
+os.execvpe(full_cmd[0], full_cmd, os.environ)
 ```
 
 **YAML Resilience**: If a profile YAML is missing or unparseable, `load_yaml_safe` returns `{}` silently. The game still launches using only the global `config.yaml` values — no error is raised and no message is logged.

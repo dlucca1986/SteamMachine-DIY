@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Log-System](https://img.shields.io/badge/Logs-Systemd%20Journal-blue.svg)](#)
 [![Status](https://img.shields.io/badge/Status-Diagnostic%20Active-success.svg)](#)
@@ -33,7 +33,7 @@ The framework uses a unified tagging system. Use `journalctl` to filter logs and
 | `cat /sys/class/drm/*/modes` | List all resolutions natively detected by the Kernel (DRM). |
 | `vulkaninfo --summary` | Verify that the Vulkan stack (Mesa/NVK) is operational. |
 | `python3 -m py_compile script.py` | Check for syntax errors in the core logic after a manual edit. |
-| `pkexec journalctl --rotate && pkexec journalctl --vacuum-time=1s` | Rotate and purge system logs (mirrors the Control Center cleanup action). |
+| `pkexec journalctl --rotate --vacuum-time=1s` | Rotate and purge system logs in a single invocation (mirrors the Control Center cleanup action). |
 
 ---
 
@@ -46,7 +46,7 @@ Add these to your `~/.bashrc` to control the architecture. These commands intera
 # =============================================================================
 
 # --- 📝 JOURNAL MONITORING ---
-# Monitor project activity in real-time (logs from steamos_diy.service)
+# Service lifecycle logs (session start/stop/restart — use -t CORE -t STEAM -t SYSTEM for application logs)
 alias sdy-logs='journalctl -u steamos_diy.service -f -n 100'
 
 # Display only critical errors recorded by the service

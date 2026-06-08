@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Backup Tool
-# VERSION:      1.3.0
+# VERSION:      2.1.1
 # DESCRIPTION:  Surgical backup with deep symlink recovery for SteamOS shims.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -20,24 +20,21 @@ from datetime import datetime
 from pathlib import Path
 
 from utils import (
+    BACKUP_SCRIPT_NAME,
+    CORE_LIB_DIR,
+    SSOT_CONF_PATH,
+    USER_CONFIG_REL,
     check_root,
     fix_ownership,
+    get_backup_mapping,
     get_real_user,
-    get_ssot_var,
     jlog,
-    load_ssot,
+    verify_archive,
 )
-
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
-
-# Filesystem layout
-_CORE_LIB_PREFIX: str = "/usr/local/lib/steamos_diy"
-_SSOT_CONF_PATH: str = "/etc/default/steamos_diy.conf"
-_SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
-_DEFAULT_NEXT_SESSION: str = "/var/lib/steamos_diy/next_session"
 
 # Folders scanned for symlinks pointing into the core library
 _SYMLINK_SEARCH_PATHS: tuple[str, ...] = (
@@ -48,30 +45,30 @@ _SYMLINK_SEARCH_PATHS: tuple[str, ...] = (
 
 # Markers in symlink targets that qualify them for inclusion in the recap
 _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
-    _CORE_LIB_PREFIX,
+    CORE_LIB_DIR,
     "steamos-polkit-helpers",
 )
 
-# Path components excluded from the archive (compared as components, not
-# as substrings — so a game called "backups" is not erroneously skipped).
-_EXCLUDE_COMPONENTS: frozenset[str] = frozenset({
-    ".cache",
-    "__pycache__",
-    "backups",
-})
+# Path components excluded from the archive — matched by component, not
+# substring, so "my_backups.yaml" is safe while a dir named "backups" is not.
+_EXCLUDE_COMPONENTS: frozenset[str] = frozenset(
+    {
+        ".cache",
+        "__pycache__",
+        "backups",
+    }
+)
 
-# User-side paths (relative to home)
-_USER_CONFIG_REL: str = ".config/steamos_diy"
-_USER_BACKUPS_REL: str = ".config/steamos_diy/backups"
+# Subdirectory under USER_CONFIG_REL where archives are stored.
+_USER_BACKUPS_REL: str = f"{USER_CONFIG_REL}/backups"
 
-# Archive
+# Archive naming
 _ARCHIVE_PREFIX: str = "sdy_backup_"
 _ARCHIVE_SUFFIX: str = ".tar.gz"
 _ARCHIVE_TMP_SUFFIX: str = ".tar.gz.tmp"
 _ARCHIVE_TS_FORMAT: str = "%Y%m%d_%H%M%S"
 
-# Restore-script entry inside the archive
-_RESTORE_SCRIPT_NAME: str = "restore_links.sh"
+# Mode for the embedded restore-script tar entry
 _RESTORE_SCRIPT_MODE: int = 0o755
 
 
@@ -79,49 +76,21 @@ _RESTORE_SCRIPT_MODE: int = 0o755
 # Internal helpers — symlink scan
 # ---------------------------------------------------------------------------
 
-def _is_relevant_symlink(target: str) -> bool:
-    """Return True if *target* points into the core library or polkit helpers.
-
-    Args:
-        target: Resolved (absolute) symlink target.
-
-    Returns:
-        True if any of _SYMLINK_TARGET_MARKERS is a substring of *target*.
-    """
-    return any(marker in target for marker in _SYMLINK_TARGET_MARKERS)
-
 
 def _resolve_symlink(entry) -> str | None:
-    """Return realpath of *entry* if it's a relevant symlink, else None.
-
-    Args:
-        entry: os.DirEntry produced by os.scandir.
-
-    Returns:
-        Resolved absolute target if *entry* is a symlink whose target
-        passes _is_relevant_symlink. None for non-symlinks, broken
-        symlinks, or targets outside the markers of interest.
-    """
     if not entry.is_symlink():
         return None
     try:
         target = os.path.realpath(entry.path)
     except OSError:
         return None
-    return target if _is_relevant_symlink(target) else None
+    return (
+        target if any(m in target for m in _SYMLINK_TARGET_MARKERS) else None
+    )
 
 
 def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
-    """Return [(link_path, resolved_target), ...] for relevant symlinks.
-
-    Args:
-        search_path: Directory to scan (non-recursive).
-
-    Returns:
-        List of (link_path, target) tuples. Empty list if *search_path*
-        is missing or unreadable. Targets are resolved with realpath so
-        that downstream substring checks work on absolute paths.
-    """
+    """Non-recursive scandir; returns [] on missing/unreadable dir."""
     if not os.path.isdir(search_path):
         return []
     try:
@@ -138,17 +107,10 @@ def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
 
 
 def _generate_links_recap() -> bytes:
-    """Build the symlink-restore shell script as UTF-8 bytes.
+    """Build restore_links.sh as UTF-8 bytes.
 
-    Output is a self-contained bash script that recreates every relevant
-    symlink under the well-known shim folders. All paths are passed
-    through ``shlex.quote`` so that names containing spaces, dollars or
-    quotes are restored verbatim and cannot be mis-interpreted by the
-    shell.
-
-    Returns:
-        Bytes ready to be appended to the tar archive as
-        ``restore_links.sh``.
+    All paths go through shlex.quote — names with spaces or shell
+    metacharacters are restored verbatim, not interpreted.
     """
     recap = [
         "#!/bin/bash",
@@ -165,8 +127,9 @@ def _generate_links_recap() -> bytes:
             recap.append(f"mkdir -p {parent_q}")
             recap.append(f"ln -sf {target_q} {link_q}")
 
-    helpers_glob = "/usr/bin/steamos-polkit-helpers/*"
-    recap.append(f"chmod +x {helpers_glob} 2>/dev/null || true")
+    recap.append(
+        "chmod +x /usr/bin/steamos-polkit-helpers/* 2>/dev/null || true"
+    )
     return "\n".join(recap).encode("utf-8")
 
 
@@ -174,41 +137,9 @@ def _generate_links_recap() -> bytes:
 # Internal helpers — archive content
 # ---------------------------------------------------------------------------
 
-def _backup_sources(home: str) -> list[tuple[str, str]]:
-    """Return [(source_path, archive_name), ...] for the backup payload.
-
-    Args:
-        home: Real user's home directory (resolved by get_real_user).
-
-    Returns:
-        Ordered list of (source, archive_name) pairs. Sources may not
-        exist on disk — callers must check before adding.
-    """
-    next_sess = get_ssot_var("next_session", _DEFAULT_NEXT_SESSION)
-    user_config = os.path.join(home, _USER_CONFIG_REL)
-
-    return [
-        (next_sess,           "system/next_session"),
-        (_SSOT_CONF_PATH,     "system/steamos_diy.conf"),
-        (_SERVICE_PATH,       "system/service"),
-        (_CORE_LIB_PREFIX,    "source/steamos_diy"),
-        (user_config,         "user/config"),
-    ]
-
 
 def _path_is_excluded(name: str) -> bool:
-    """Return True if any component of *name* is in _EXCLUDE_COMPONENTS.
-
-    Compares **path components** rather than substrings so that legitimate
-    names like ``backups_2024.yaml`` or ``my.cache.notes`` are NOT
-    excluded by accident.
-
-    Args:
-        name: Archive-relative path (POSIX separators).
-
-    Returns:
-        True iff a component-level match exists.
-    """
+    """Match by path component, not substring — 'backups_2024.yaml' is safe."""
     return any(part in _EXCLUDE_COMPONENTS for part in name.split("/"))
 
 
@@ -222,7 +153,7 @@ def _tar_filter(tarinfo):
 def _add_restore_script(tar: tarfile.TarFile) -> None:
     """Append the dynamic restore_links.sh entry to *tar*."""
     data = _generate_links_recap()
-    info = tarfile.TarInfo(name=_RESTORE_SCRIPT_NAME)
+    info = tarfile.TarInfo(name=BACKUP_SCRIPT_NAME)
     info.size = len(data)
     info.mode = _RESTORE_SCRIPT_MODE
     tar.addfile(info, io.BytesIO(data))
@@ -230,7 +161,7 @@ def _add_restore_script(tar: tarfile.TarFile) -> None:
 
 def _add_payload(tar: tarfile.TarFile, home: str) -> None:
     """Add system + user sources to *tar*, skipping missing paths."""
-    for src, arc in _backup_sources(home):
+    for arc, src in get_backup_mapping(home).items():
         if os.path.exists(src):
             tar.add(src, arcname=arc, filter=_tar_filter)
             jlog("SYSTEM", f"BACKUP_ADD: {src}", level="DEBUG")
@@ -240,25 +171,16 @@ def _add_payload(tar: tarfile.TarFile, home: str) -> None:
 # Internal helpers — archive lifecycle
 # ---------------------------------------------------------------------------
 
+
 def _ensure_backup_dir(home: str, user: str) -> Path:
-    """Create the backup directory and chown it only when it didn't exist.
+    """Chown only on first creation — not on every run.
 
-    Avoids the previous behaviour where the whole backups/ tree was
-    chowned recursively on every run — which was wasteful when the tree
-    contained gigabytes of historical archives.
-
-    Args:
-        home: Real user's home directory.
-        user: Real username.
-
-    Returns:
-        Path object pointing to the backups directory.
+    Avoids recursive chown over potentially gigabytes of historical archives.
     """
     backup_dir = Path(home) / _USER_BACKUPS_REL
     pre_existing = backup_dir.is_dir()
     backup_dir.mkdir(parents=True, exist_ok=True)
     if not pre_existing:
-        # Only chown on first creation, not every run.
         fix_ownership(backup_dir, user)
     return backup_dir
 
@@ -266,37 +188,12 @@ def _ensure_backup_dir(home: str, user: str) -> Path:
 def _archive_paths(backup_dir: Path) -> tuple[Path, Path]:
     """Return (final_path, tmp_path) for the new archive.
 
-    Tmp is in the same directory so the final ``os.replace`` is atomic
-    (same filesystem). Names share a timestamp so partial leftovers are
-    immediately distinguishable from completed archives.
+    tmp lives in the same directory so os.replace is atomic (same fs).
     """
     timestamp = datetime.now().strftime(_ARCHIVE_TS_FORMAT)
     final = backup_dir / f"{_ARCHIVE_PREFIX}{timestamp}{_ARCHIVE_SUFFIX}"
     tmp = backup_dir / f"{_ARCHIVE_PREFIX}{timestamp}{_ARCHIVE_TMP_SUFFIX}"
     return final, tmp
-
-
-def _verify_archive(path: Path) -> bool:
-    """Read back *path* and walk its members to confirm integrity.
-
-    A successful walk means tarfile decompressed the gzip stream and
-    parsed every header without error — catching truncation and gzip
-    corruption introduced by power loss or full-disk conditions.
-
-    Args:
-        path: Final archive path.
-
-    Returns:
-        True if the archive opens and iterates cleanly, False otherwise.
-    """
-    try:
-        with tarfile.open(path, "r:gz") as tar:
-            for _ in tar:
-                pass
-        return True
-    except (tarfile.TarError, OSError, EOFError) as err:
-        jlog("SYSTEM", f"BACKUP_VERIFY_FAIL: {err}", level="ERROR")
-        return False
 
 
 def _cleanup_tmp(tmp: Path) -> None:
@@ -312,43 +209,36 @@ def _cleanup_tmp(tmp: Path) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def run_backup() -> None:
-    """Orchestrate a complete surgical backup.
+    """Execute a complete surgical backup.
 
-    Flow:
-        1. Verify root privileges and load the SSoT config.
-        2. Resolve the real user behind sudo/pkexec.
-        3. Ensure the per-user backups directory exists.
-        4. Compose the tar archive on a *.tmp path.
-        5. Verify the archive by reading it back end-to-end.
-        6. Atomically rename *.tmp -> *.tar.gz only on success.
-        7. Chown the final archive to the real user.
-
-    On any failure, the partial *.tmp file is removed and exit code 1
-    is returned. The previous archive (if any) is never touched.
+    Writes to a *.tmp path, verifies end-to-end, then atomically renames
+    to *.tar.gz. The previous archive is never touched on failure.
     """
     check_root()
-    if not load_ssot():
+    if not os.path.isfile(SSOT_CONF_PATH):
         jlog("SYSTEM", "BACKUP_FAILED: SSoT config not found", level="ERROR")
         sys.exit(1)
 
     user, home = get_real_user()
+    home_str = str(home)
 
-    backup_dir = _ensure_backup_dir(home, user)
+    backup_dir = _ensure_backup_dir(home_str, user)
     final_path, tmp_path = _archive_paths(backup_dir)
 
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")
 
     try:
         with tarfile.open(tmp_path, "w:gz") as tar:
-            _add_payload(tar, home)
+            _add_payload(tar, home_str)
             _add_restore_script(tar)
     except (OSError, tarfile.TarError) as err:
         jlog("SYSTEM", f"BACKUP_FAILED: {err}", level="ERROR")
         _cleanup_tmp(tmp_path)
         sys.exit(1)
 
-    if not _verify_archive(tmp_path):
+    if not verify_archive(tmp_path, "BACKUP_VERIFY_FAIL"):
         _cleanup_tmp(tmp_path)
         sys.exit(1)
 

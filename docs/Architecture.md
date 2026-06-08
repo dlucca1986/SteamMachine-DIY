@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Session](https://img.shields.io/badge/Logic-Atomic%20State-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
@@ -21,13 +21,13 @@ Centralizes shared functions used across the framework:
 ---
 
 ### 1. SSoT (Single Source of Truth)
-Located at `/etc/default/steamos_diy.conf`. It stores system-wide variables including binary paths, user identities, and log levels. This configuration ensures consistent behavior across all Python components.
+Located at `/etc/default/steamos_diy.conf`. It stores system-wide variables including binary paths, user config paths, timing parameters, and log levels. This configuration ensures consistent behavior across all Python components.
 
 ### 2. Session Launcher (`session_launch.py`)
 Primary execution logic managed by `steamos_diy.service`. It determines the session target (Gaming Mode or Desktop Mode) by evaluating the state file at runtime.
 
 ### 3. Session Switcher (`session_select.py`)
-Handles explicit mode transitions. Writes the next session target atomically to the state file and signals the running session to exit cleanly.
+Handles explicit mode transitions. Writes the next session target atomically to the state file and signals the running session to terminate.
 
 ### 4. DGM Engine (Dynamic Gamescope Mapping)
 A module within the launcher that parses `config.yaml`. It dynamically generates the `gamescope` execution command based on defined flags and parameters.
@@ -35,8 +35,8 @@ A module within the launcher that parses `config.yaml`. It dynamically generates
 ### 5. SDY Discovery Engine (`sdy.py`)
 A wrapper that identifies games via `SteamAppId` or executable name and applies per-game YAML overrides from `games.d/`.
 
-### 6. Control Center (`control_center.py`)
-The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting.
+### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`)
+The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
 
 ---
 
@@ -57,7 +57,7 @@ The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` lib
 
 The framework implements a redirection layer using symbolic links to satisfy Steam's expectations for specific SteamOS paths and to provide CLI access.
 
-* **SteamOS UI Shims**: These links prevent UI errors in Game Mode by redirecting SteamOS-specific system requests to the framework logic. For `steamos-update`, `jupiter-biosupdate`, and `steamos-set-timezone`, the `/usr/bin/` alias is itself a symlink to the polkit helper, forming a two-hop chain: `.py` → `/usr/bin/steamos-polkit-helpers/<name>` → `/usr/bin/<name>`.
+* **SteamOS UI Shims**: These links prevent UI errors in Game Mode by redirecting SteamOS-specific system requests to the framework logic. For `steamos-update`, `jupiter-biosupdate`, and `steamos-set-timezone`, the `/usr/bin/` alias is itself a symlink to the polkit helper, forming a two-hop chain: `/usr/bin/<name>` → `/usr/bin/steamos-polkit-helpers/<name>` → `.py`.
 
 | Target (Logic in `/usr/local/lib/steamos_diy/`) | Shim Paths (Steam & System) | Purpose |
 | :--- | :--- | :--- |

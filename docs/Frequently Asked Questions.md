@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Support](https://img.shields.io/badge/Support-Documentation-blue.svg)](#)
 [![Status](https://img.shields.io/badge/Status-Active-success.svg)](#)
@@ -16,11 +16,10 @@ Traditional display managers conflict with Gamescope's requirement for exclusive
 * No background display manager processes consuming resources.
 
 ### 2. Is NVIDIA supported?
-Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers are supported. The installer automatically deploys the appropriate packages.
+Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers are supported. The installer automatically deploys the appropriate packages. For the best experience (HDR, advanced frame-pacing), AMD (Mesa/RADV) remains the recommended hardware.
+
 > [!IMPORTANT]
-> For the best experience (HDR, advanced frame-pacing), AMD (Mesa/RADV) remains the recommended hardware.
->
-> **Proprietary drivers + Gamescope**: To use Gamescope with proprietary drivers, you **must** enable DRM Kernel Mode Setting (KMS) by adding `nvidia-drm.modeset=1` to your bootloader. See the [Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting) for instructions.
+> Proprietary drivers require DRM Kernel Mode Setting to work with Gamescope (`nvidia-drm.modeset=1` on your bootloader). See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:
@@ -43,7 +42,8 @@ Yes. `sdy` is binary-agnostic. It scans the executable path and looks for a matc
 ### 6. Steam shows "Update Error" or "BIOS Update Failed".
 This is expected on non-Valve hardware. We provide **Compatibility Shims** that intercept these calls and return a safe exit code to maintain Steam UI stability.
 * `steamos-update` exits **7** (RAUC convention: "no update available") — Steam treats this as "up to date".
-* All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, etc.) exit **0** (success).
+* `jupiter-dock-updater` exits **7** (same RAUC convention — "firmware up to date").
+* All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, `steamos-select-branch`) exit **0** (success).
 ---
 
 ## 💻 Logic & Control Center
@@ -53,7 +53,7 @@ A write pattern (tmp file → `fdatasync()` → `rename()`) that ensures files l
 
 ### 8. How do I switch to Desktop Mode?
 1. **From Steam**: Use the "Switch to Desktop" button in the Steam Power menu.
-2. **From the Dashboard**: Use the "Switch to Desktop" button in the Control Center.
+2. **From the terminal**: Run `steamos-session-select desktop`.
 The logic handles the termination signals and ensures a clean transition to KDE Plasma.
 
 ---

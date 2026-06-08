@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.5.5-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -18,7 +18,7 @@ Execution arguments are generated from a **YAML configuration**.
 #### **Transformation Logic**
 The `_build_gamescope_args()` function constructs the execution string:
 * **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command.
-* **Environment Overrides**: Injects custom variables (e.g., `MANGOHUD=1`) into the session environment.
+* **Environment Overrides**: Injects custom variables from `env_vars` (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"`) into the session environment. MangoHud integration in Gamescope mode requires the `--mangoapp` flag — setting `MANGOHUD=1` as an env var has no effect inside the compositor.
 * **Safe Execution**: Uses `subprocess.Popen` with argument arrays to prevent shell-injection vulnerabilities.
 
 ### 3. Atomic State Management
@@ -36,14 +36,27 @@ The session target is persisted to `/var/lib/steamos_diy/next_session` via `writ
 ---
 
 ## 🎮 Steam Execution Arguments
-Steam is passed as a child process to Gamescope (after `--`) rather than launched directly:
+Gamescope is launched with two hardcoded flags, followed by the user-defined YAML flags, and finally the Steam process after `--`:
 
 ```python
+gs_args = [gs_bin, "-e", "-f"]          # hardcoded: embedded + fullscreen
+# ... flags from config.yaml appended here ...
 gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3"])
 ```
 
-* **`-gamepadui`**: Enables the Deck-optimized interface.
+* **`-e`**: Runs Gamescope in embedded mode, integrating with the existing DRM/KMS session rather than creating a new display server.
+* **`-f`**: Forces fullscreen output.
+* **`-gamepadui`**: Launches Steam in Big Picture / Gamepad UI mode — the controller-friendly interface optimised for TV/couch use.
 * **`-steamos3`**: Activates SteamOS-specific features, including system update channels and controller mapping.
+
+---
+
+## ⚙️ Post-Start Hook
+After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **daemon thread** is started that sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then fires each command via `spawn_native` (detached, `start_new_session=True`). The delay is shorter than `VALIDATION_TIMEOUT`, so all commands are executed before the session is declared stable.
+
+This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
+
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires.
 
 ---
 
@@ -52,17 +65,17 @@ The supervisor uses an event-driven mechanism to monitor process health and prev
 
 * **Process monitoring**: Uses `proc.wait()` instead of a polling loop. If the session exits before `VALIDATION_TIMEOUT` elapses, it is treated as a crash.
 * **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration. Default is `5.0s`; lower values (e.g. `3.0s`) suit fast NVMe storage.
-* **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. Termination sends `SIGTERM` and waits up to 5 s; if the process doesn't exit, `SIGKILL` is sent.
+* **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. Termination sends `SIGTERM` and waits up to `TERM_TIMEOUT` seconds (SSoT, default `5`); if the process doesn't exit, `SIGKILL` is sent.
 
----
+## 🔌 Signal Handling & Exit Codes
+The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit code controls whether `systemd` restarts the service:
 
-## 📊 Diagnostics
-The launcher utilizes the `jlog` system. Session logs can be monitored via journalctl:
-`journalctl -u steamos_diy.service -f`
+| Event | Handler | Exit code | systemd effect |
+| :--- | :--- | :--- | :--- |
+| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — terminates child gracefully, then exits | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
+| Session ended naturally (switch or crash recovery) | `run()` — exits after `NOTIFY_DELAY` pause | `75` (`EX_TEMPFAIL`) | Restart triggered — launcher re-reads `next_session` and spawns the new target |
 
-* **Tags used by this module**: `CORE` (lifecycle, crash recovery, signals), `STEAM` (Gamescope launch args, game events).
-* **Configuration**: Logging verbosity is defined by `LOG_LEVEL` in `steamos_diy.conf`.
-* **Readiness**: Because the service uses `Type=notify`, `systemctl status steamos_diy.service` shows `active (running)` only after `sd_notify_ready()` has been called — i.e., after the session has passed the validation window.
+`NOTIFY_DELAY` (SSoT, default `0.4s`) is a brief sleep inserted between the TTY transition message and `sys.exit(75)`, giving the user time to read the message before the service restarts.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

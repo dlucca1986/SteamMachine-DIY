@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      1.3.5 - Atomic Restoration
+# VERSION:      2.1.1
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -31,6 +31,17 @@ fi
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 
+# --- Filesystem Layout (must mirror install.sh / utils.py constants) ---
+readonly LIB_DIR="/usr/local/lib/steamos_diy"
+readonly POLKIT_DIR="/usr/bin/steamos-polkit-helpers"
+readonly BIN_DIR="/usr/local/bin"
+readonly SSOT_CONF="/etc/default/steamos_diy.conf"
+readonly SERVICE_FILE="/etc/systemd/system/steamos_diy.service"
+readonly STATE_DIR="/var/lib/steamos_diy"
+readonly APP_DIR="/usr/local/share/applications"
+readonly ALPM_HOOKS_DIR="/usr/share/libalpm/hooks"
+readonly USER_CONFIG_REL=".config/steamos_diy"
+
 # --- Cgroup Escape (Survival Mechanism) ---
 # Prevents the script from being killed when steamos_diy.service stops.
 if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
@@ -53,7 +64,7 @@ cleanup_services() {
     systemctl enable getty@tty1.service 2>/dev/null || true
 
     # Clean unit files
-    rm -f /etc/systemd/system/steamos_diy.service
+    rm -f "$SERVICE_FILE"
     systemctl daemon-reload
 }
 
@@ -61,17 +72,16 @@ cleanup_services() {
 restore_display_manager() {
     info "Detecting system Display Manager..."
     local dm_service=""
+    local dm_units
+    dm_units=$(systemctl list-unit-files)
 
-    # Prioritize standard DM services
-    if systemctl list-unit-files | grep -q "plasmalogin.service"; then
-        dm_service="plasmalogin.service"
-    elif systemctl list-unit-files | grep -q "sddm.service"; then
-        dm_service="sddm.service"
-    elif systemctl list-unit-files | grep -q "gdm.service"; then
-        dm_service="gdm.service"
-    elif systemctl list-unit-files | grep -q "lightdm.service"; then
-        dm_service="lightdm.service"
-    fi
+    # First match wins — order encodes priority.
+    for candidate in plasmalogin.service sddm.service; do
+        if echo "$dm_units" | grep -q "$candidate"; then
+            dm_service=$candidate
+            break
+        fi
+    done
 
     if [ -n "$dm_service" ]; then
         echo -e "${YELLOW}>>> Found $dm_service. Re-enable as default? (y/n)${NC}"
@@ -95,23 +105,25 @@ restore_display_manager() {
 remove_components() {
     info "Removing DIY shims and libraries..."
 
-    # SteamOS Shims
-    rm -rf /usr/bin/steamos-polkit-helpers
-    rm -f /usr/bin/steamos-session-launch /usr/bin/steamos-session-select \
-          /usr/bin/steamos-select-branch /usr/bin/jupiter-biosupdate \
-          /usr/bin/steamos-update /usr/bin/steamos-set-timezone
+    # SteamOS shims — polkit dir gone wholesale; aliases removed one-by-one
+    # to match the explicit list created by install.sh::setup_shim_links.
+    rm -rf "$POLKIT_DIR"
+    for name in steamos-session-launch steamos-session-select \
+                steamos-select-branch jupiter-biosupdate \
+                steamos-update steamos-set-timezone; do
+        rm -f "/usr/bin/$name"
+    done
 
-    # SDY Tools (Sync with utils.py standards)
-    rm -f /usr/local/bin/sdy /usr/local/bin/sdy-control-center \
-          /usr/local/bin/sdy-backup /usr/local/bin/sdy-restore
+    # SDY CLI tools
+    for name in sdy sdy-control-center sdy-backup sdy-restore; do
+        rm -f "$BIN_DIR/$name"
+    done
 
-    # Project Files
-    rm -rf /usr/local/lib/steamos_diy
-    rm -rf /var/lib/steamos_diy
-    rm -f /etc/default/steamos_diy.conf
-    rm -f /usr/local/share/applications/Control_Center.desktop
-    rm -f /usr/local/share/applications/Game_Mode.desktop
-    rm -f /usr/share/libalpm/hooks/gamescope-privs.hook
+    # Project files
+    rm -rf "$LIB_DIR" "$STATE_DIR"
+    rm -f "$SSOT_CONF"
+    rm -f "$APP_DIR/Control_Center.desktop" "$APP_DIR/Game_Mode.desktop"
+    rm -f "$ALPM_HOOKS_DIR/gamescope-privs.hook"
 
     # Reset Capabilities
     if [ -x /usr/bin/gamescope ]; then
@@ -119,10 +131,11 @@ remove_components() {
     fi
 
     # User Configs
-    echo -e "${RED}>>> Delete user data in $USER_HOME/.config/steamos_diy? (y/n)${NC}"
+    local user_cfg="$USER_HOME/$USER_CONFIG_REL"
+    echo -e "${RED}>>> Delete user data in $user_cfg? (y/n)${NC}"
     read -r -p "> " confirm_wipe
     if [[ "$confirm_wipe" =~ ^[Yy]$ ]]; then
-        rm -rf "$USER_HOME/.config/steamos_diy"
+        rm -rf "$user_cfg"
         info "User configurations purged."
     fi
 }

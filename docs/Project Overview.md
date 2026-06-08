@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -35,7 +35,7 @@ Replaces traditional Display Managers (SDDM/plasmalogin) to eliminate session co
 * **Visual Transitions**: The integrated `notify` engine manages visual feedback during session swaps, suppressing raw TTY output.
 
 #### 2. Session Management
-Session state is persisted to `/var/lib/steamos_diy/next_session` via atomic writes (fdatasync + rename), so the file is never partially written after a power loss.
+Session state is persisted to `/var/lib/steamos_diy/next_session` via [atomic writes](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine), ensuring the file is never partially written after a power loss.
 
 * **Crash Recovery**: The launcher monitors sessions via `proc.wait()`. If a session exits before `VALIDATION_TIMEOUT` (default: 5s), the system boots to Desktop to prevent a soft-lock loop.
 
@@ -74,8 +74,8 @@ Configuration is split into system-level (`/etc/default/steamos_diy.conf`) and u
 * **[Bottles](https://github.com/bottlesdevs/Bottles)**: Run Windows software and games.
 * **[ProtonUp-Qt](https://davidotek.github.io/protonup-qt/)**: Manage Proton-GE and Wine-GE versions.
 * **[Lutris](https://lutris.net/)**: Central interface for all your game libraries.
-* **[Ludusavi](https://github.com/mtkennerly/ludusavi)**: Ludusavi is a tool for backing up your PC video game save data, written in Rust.
-* **[Protontricks](https://github.com/matoking/protontricks)**: Run Winetricks commands for Steam Play/Proton games among other common Wine features, such as launching external Windows executables.
+* **[Ludusavi](https://github.com/mtkennerly/ludusavi)**: Back up PC game save data.
+* **[Protontricks](https://github.com/matoking/protontricks)**: Run Winetricks commands for Steam Play/Proton games.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

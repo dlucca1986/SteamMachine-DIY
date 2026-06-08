@@ -1,35 +1,50 @@
-[![Version](https://img.shields.io/badge/Version-1.7.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-`utils.py` centralizes shared logic for all Python modules in the framework. Performance-critical operations (file I/O, process management, logging) are delegated to the **C-Core** (`libcore.so`). The shared library is loaded via `ctypes` at import time — if `/usr/local/lib/steamos_diy/libcore.so` is missing, the import fails immediately with `sys.exit(127)`.
+This page outlines the shared utility module (`utils.py`) and its integration with the native `libcore.so`.
+
+---
+
+## 🔌 C-Core Integration
+
+`utils.py` delegates a narrow set of operations to **`libcore.so`** — only those where C provides measurable value: atomic writes via `fdatasync`, `O_NOCTTY` TTY notification, `syslog()` journal logging, and `NOTIFY_SOCKET` readiness signalling. Everything else (config parsing, YAML loading, process spawning) stays in pure Python, since `subprocess` and stdlib `open()` already cover those cases.
+
+The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/steamos_diy/libcore.so` is missing, the import fails immediately with `sys.exit(127)`.
 
 ---
 
 ## 🏗️ Core Responsibilities
 
 ### 1. Data Integrity (`write_atomic`)
-State files are written via a three-step protocol executed entirely in the C-Core:
+Files persisted via `write_atomic()` follow a three-step protocol executed entirely in the C-Core:
 
 1. Write data to `<path>.tmp`.
 2. Call `fdatasync()` to flush write buffers to physical storage.
 3. Call `rename()` to atomically replace the target file.
 
-The target file is never left in a partial state, even after a sudden power loss.
+The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves.
 
-### 2. Configuration Management (`get_ssot_var`, `load_ssot`)
-`get_ssot_var(key)` reads a value from `/etc/default/steamos_diy.conf` via the C-Core on the **first call** for that key, storing the result in the module-level `_SSOT_CACHE` dict. Subsequent calls return the cached value without disk I/O. Each resolved value is also written into `os.environ` so child processes inherit it.
+### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`)
+`get_ssot_var(key)` reads a value from `/etc/default/steamos_diy.conf` on the **first call** for that key, using a pure-Python line-by-line `key=value` parser (with quote-stripping via `_strip_quotes`), and stores the result in the module-level `_SSOT_CACHE` dict. Subsequent calls return the cached value without disk I/O. Each resolved value is also written into `os.environ` so child processes inherit it.
 
-`load_ssot()` returns `True` if the SSoT file exists and is readable.
+`get_ssot_num(key, default)` wraps `get_ssot_var` for the timing parameters (`VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising an unguarded `ValueError` that would otherwise abort the session boot loop.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
-`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error, missing PyYAML module). Never raises.
+`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error). Never raises.
 
 `apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are silently ignored.
 
 ### 4. Session State (`read_session_target`)
-`read_session_target(path, default="steam")` reads the first line of `path` via the C-Core. Returns the stripped string, or `default` if the file is missing or unreadable.
+`read_session_target(path, default="steam")` opens `path`, reads the first line and runs it through `_strip_quotes`. Returns the cleaned string, or `default` if the file is missing or unreadable.
+
+### 5. Backup Format Contract (`USER_CONFIG_REL`, `BACKUP_SCRIPT_NAME`, `get_backup_mapping`)
+Single source of truth for the on-disk format shared between `backup.py` and `restore.py`:
+
+* `USER_CONFIG_REL` — relative path of the user-config directory (`".config/steamos_diy"`). Also reused by `control_center.py`.
+* `BACKUP_SCRIPT_NAME` — name of the embedded link-recreation script (`"restore_links.sh"`).
+* `get_backup_mapping(home)` — returns the `{archive_path: filesystem_path}` dict. Adding a new entry here propagates simultaneously to backup (where to read from) and restore (where to write to); they can never disagree about the archive layout.
 
 ---
 
@@ -50,20 +65,9 @@ The target file is never left in a partial state, even after a sudden power loss
 | `check_root()` | Calls `sys.exit(1)` if the effective UID is not 0. |
 | `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current effective UID. |
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
-| `spawn_native(path, args)` | Forks via C-Core (`fork` → `setsid` → `execv`), redirects child stdout/stderr to `/dev/null`. Returns the child PID, or `0` on failure. |
-| `spawn_process(cmd)` | `subprocess.Popen` wrapper with `start_new_session=True` and both streams devnull'd. Returns the `Popen` object or `None` on `OSError`. |
-| `monitor_pid(pid, timeout)` | Polls `/proc/<pid>` every 200 ms for up to `timeout` seconds. Returns `True` if the process is still alive at the end of the window. Avoids `waitpid` conflicts with Python's `subprocess`. |
-
----
-
-## 📖 Journal Utilities
-
-Used by `control_center.py` for log display and game discovery.
-
-| Function | Description |
-| :--- | :--- |
-| `get_journal_cmd(tag)` | Returns the `journalctl` argv for a given tag (`CORE`, `STEAM`, `SYSTEM`, `ALL`, or any custom tag). Fixed window: last 12 hours, 300 entries, `--no-pager -o export`. |
-| `extract_game_metadata(line)` | Parses a raw journal export line for a game name (`chdir` pattern) or AppID (`gameID` / `AppID` pattern). Non-Steam shortcut AppIDs wider than 32 bits are shifted right to their real AppID. Returns `("NAME", value)`, `("ID", value)`, or `(None, None)`. |
+| `spawn_native(path, args)` | Detached spawn via `subprocess.Popen(start_new_session=True)`; stdout/stderr redirected to `/dev/null`. Returns the child PID, or `0` on failure. |
+| `verify_archive(path, tag)` | Gzip-tar integrity check via `tarfile.open` + member iteration. Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
+| `run_shim(tag, message, exit_code)` | Logs the shim intercept via `jlog(tag, message)` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
 
 ---
 
@@ -71,13 +75,13 @@ Used by `control_center.py` for log display and game discovery.
 
 | Component | `utils` imports used |
 | :--- | :--- |
-| `session_launch.py` | `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `get_ssot_var` |
-| `session_select.py` | `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
+| `session_launch.py` | `NEXT_SESSION_PATH`, `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `spawn_native`, `get_ssot_var`, `get_ssot_num` |
+| `session_select.py` | `NEXT_SESSION_PATH`, `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
-| `backup.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
-| `restore.py` | `check_root`, `fix_ownership`, `get_real_user`, `get_ssot_var`, `jlog`, `load_ssot` |
-| `control_center.py` | `get_ssot_var`, `get_journal_cmd`, `extract_game_metadata` |
-| Compatibility shims | `jlog` |
+| `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
+| `restore.py` | `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
+| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `spawn_native`, `write_atomic` |
+| Compatibility shims | `jlog`, `run_shim` |
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

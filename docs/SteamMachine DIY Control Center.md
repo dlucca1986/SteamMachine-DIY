@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -10,23 +10,23 @@ PyQt6 dashboard for system management, YAML configuration editing, and log analy
 ## 📂 UI Navigation & Tab Logic
 
 ### 1. Diagnostics (Tab Index 0)
-Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab (`on_tab_changed(index=0)`).
+Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab. `on_tab_changed` detects the diagnostics tab dynamically via `self.tabs.indexOf(self.diag_tab)` — no magic index.
 
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
-* **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl --since "1 hour ago" -o short-iso`) fetches gamescope-tagged lines and merges them into the display, deduplicated against already-seen `LAUNCH_ARGS` strings.
+* **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
 * **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note.
 * **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
 
 ### 2. Maintenance (Tab Index 1)
-All operations run in a background `threading.Thread`. Results surface via the `process_finished` PyQt signal.
+Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
 
 Buttons in order:
 
 | Button | Action |
 | :--- | :--- |
-| **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `_safe_spawn`. |
+| **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `spawn_native`. |
 | **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
-| **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate` then `pkexec journalctl --vacuum-time=1s`. |
+| **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
@@ -39,15 +39,15 @@ Text editor for YAML configuration files with real-time validation.
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser, converting tabs to two spaces and fixing indentation while preserving comments and quoting.
-* **Save**: `_atomic_save()` validates the YAML, writes to a `.tmp` file, calls `os.fsync()` for durability, then calls `os.replace()` to atomically replace the target file.
+* **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file.
 * **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
 
 ### 4. Game Overrides (Tab Index 3)
 Per-game YAML profile editor backed by journal-based game discovery.
 
-* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `_filter_game_journal_lines()` then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `extract_game_metadata()` parses each line into a `{name: appid}` dict.
+* **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" --no-hostname --no-pager` (no entry limit) in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `parse_game_logs()` (from `journal.py`) then builds the `{name: appid}` dict by calling `extract_game_metadata()` per line.
 * **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
-* **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable.
+* **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable; the profile is loaded (or scaffolded) on selection — typing a new name does not reload until you confirm it.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
 * **Unsaved edits**: `view_states["games"]` caches unsaved editor content while switching between games or toggling templates.
 * **Save**: `save_game_profile()` writes to `games.d/<Name>.yaml` via `_atomic_save()`.
@@ -60,10 +60,10 @@ Per-game YAML profile editor backed by journal-based game discovery.
 | :--- | :--- | :--- | :--- |
 | **0** | Load Logs | `load_logs()` | `get_journal_cmd(tag)` → `journalctl -t` (12h, 300 entries); `ALL`/`STEAM` also merge gamescope logs (last 1h, `short-iso`) |
 | **0** | Export Log | `export_support_log()` | `QFileDialog` + `Path.write_text` |
-| **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate` → `pkexec journalctl --vacuum-time=1s` |
+| **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
 | **1** | Backup | `run_backup()` | `pkexec python3 backup.py` in `threading.Thread` |
 | **1** | Restore | `run_restore()` | `QFileDialog` + `pkexec python3 restore.py <path>` in `threading.Thread` |
-| **2** | Save Config | `_atomic_save()` | YAML validation → `os.fsync()` → `os.replace()` |
+| **2** | Save Config | `_atomic_save()` | YAML validation → `write_atomic()` (C-Core, fdatasync + rename) |
 | **2** | Beautify | `beautify_yaml()` | `ruamel.yaml` round-trip (tabs → spaces, indent fix, comments preserved) |
 | **2** | View Template | `toggle_template("global")` | Loads/restores `.example.yaml`; disables save while active |
 | **3** | Scan Games | `refresh_detected_games()` | `journalctl --since "24 hours ago"` → filter → last 2000 game lines |
@@ -72,6 +72,8 @@ Per-game YAML profile editor backed by journal-based game discovery.
 ---
 
 ## 🖊️ Editor Widgets
+
+> Defined in `editors.py` — zero dependency on project modules, purely self-contained Qt widgets.
 
 ### YAMLEditor (`QPlainTextEdit` subclass)
 Custom editor used in both the Global Options and Game Overrides tabs.
@@ -123,8 +125,6 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 ---
 
 ## 🛠️ Internal Logic: Round-Trip Engine
-
-`_load_ssot_to_env()` is called at startup and explicitly reads each key in `_SSOT_KEYS` via `get_ssot_var()`, pre-loading them into `os.environ`. This is distinct from the lazy per-key caching behaviour of other modules.
 
 The module-level `yaml_parser` instance is shared across all save and beautify operations:
 

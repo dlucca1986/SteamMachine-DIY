@@ -1,7 +1,7 @@
 # 🎮 SteamMachine-DIY
 
 
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
@@ -53,8 +53,8 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | Category | Packages |
 | :--- | :--- |
 | **Execution** | `steam`, `gamescope`, `mangohud`, `gamemode`, `xorg-xwayland` |
-| **Python Stack** | `python`, `python-pyqt6`, `python-yaml`, `python-ruamel-yaml` |
-| **System Tools** | `vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `gcc` |
+| **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
+| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `gcc` |
 | **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
 
 ## 🤝 Acknowledgments
@@ -67,7 +67,7 @@ Special thanks to the Linux gaming community:
 
 ```bash
 git clone https://github.com/dlucca1986/SteamMachine-DIY.git
-cd SteamMachine-DIY*
+cd SteamMachine-DIY
 chmod +x install.sh
 sudo ./install.sh
 ```

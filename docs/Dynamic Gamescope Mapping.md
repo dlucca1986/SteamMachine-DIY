@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Configuration](https://img.shields.io/badge/Logic-Dynamic%20YAML-blue.svg)](#)
 [![Engine](https://img.shields.io/badge/Engine-DGM%20Injection-orange.svg)](#)
@@ -10,13 +10,13 @@ This page outlines the configuration system for managing global settings and per
 ## 🌎 Global System Config
 **Path:** `~/.config/steamos_diy/config.yaml`
 
-This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of two main sections: `env_vars` and `flags`.
+This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of three sections: `env_vars`, `flags`, and `post_start_cmds`.
 
 ### 1. Execution Control & Environment Variables (`env_vars`)
 The system manages two types of configuration inputs:
 
 * **Execution Prefixes (`GAME_WRAPPER`)**: Defined as a string, this value is prepended to the game command (e.g., `gamemoderun` or `mangohud`). It is used by `sdy.py` to wrap the process execution.
-* **Environment Variables**: Key-value pairs (like `DXVK_HUD` or `MANGOHUD_CONFIG`) injected directly into the process environment before launch.
+* **Environment Variables**: Key-value pairs injected into the session environment before launch (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"` to signal VRR support to Steam). **Note**: MangoHud integration in Gamescope mode requires the `--mangoapp` flag — setting `MANGOHUD=1` as an env var has no effect inside the compositor. `MANGOHUD_CONFIG` and similar variables are valid in per-game profiles where `mangohud` is used as a `GAME_WRAPPER`.
 
 ---
 
@@ -27,11 +27,27 @@ This is a **YAML List** that defines how Gamescope should render the session.
 * **Resolution**: `-W 1280` and `-H 720` (Output resolution).
 * **Upscaling**: `-F fsr` (AMD FidelityFX) and `--sharpness 5`.
 * **Performance**: `--rt` (Realtime scheduling) and `--immediate-flips` (Low latency/Tearing).
+* **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay embedded directly into the Gamescope compositor).
+
+> [!NOTE]
+> When `--mangoapp` is active, MangoHud reads its configuration from `~/.config/MangoHud/MangoHud.conf` and `~/.config/MangoHud/presets.conf`. These files must be created manually to customize the overlay display.
 
 #### ⚠️ Essential Syntax Rule
 In YAML, parameters and values must be enclosed in the **same set of quotes** to be parsed correctly by the launcher.
 * ✅ **Correct**: `- "-F fsr"`
 * ❌ **Wrong**: `- -F fsr` (missing quotes), `- "-F" "fsr"` (split into two items), `- "-Ffsr"` (missing space between flag and value)
+
+### 3. Post-Start Commands (`post_start_cmds`)
+This is a **YAML List** of shell commands executed once after Gamescope has started, in a background thread. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
+
+Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay ensures the Gamescope socket is ready before the commands are executed. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
+
+**Typical use case — VRR stability fix with `--mangoapp`:**
+When `--mangoapp` is active, the overlay surface can interfere with VRR/adaptive sync decisions. The following command tells Gamescope to ignore the overlay when evaluating VRR:
+```yaml
+post_start_cmds:
+  - "gamescopectl adaptive_sync_ignore_overlay 1"
+```
 
 ---
 
@@ -64,6 +80,12 @@ flags:
   - "--sharpness 5"
   - "--rt"
   - "--immediate-flips"
+  - "--adaptive-sync"
+  - "--mangoapp"
+
+# --- POST-START COMMANDS ---
+post_start_cmds:
+  - "gamescopectl adaptive_sync_ignore_overlay 1"
 ```
 
 ### Game Profile Template (`game.example.yaml`)
@@ -81,10 +103,15 @@ env_vars:
   MANGOHUD_CONFIG: "cpu_temp,gpu_temp,fps"
 ```
 
-## 🚀 Dynamic Argument Mapping (DGM)
-The **DGM** engine maps **YAML** flags directly to the gamescope command line. This allows the system to support new `Gamescope`features without core script modifications.
+### Gamescope Flags Reference (`gamescope.example.yaml`)
+`~/.config/steamos_diy/gamescope.example.yaml` is a read-only reference document — it is **not** loaded by the launcher. It contains the full list of available Gamescope CLI flags translated to YAML format with descriptions, organized by category (general, HDR & performance, embedded mode, VR, debug, shaders, keyboard shortcuts).
 
-* **Find a new flag**: Check `gamescope --help` for new features or the provided `gamescope.example`
+---
+
+## 🚀 Dynamic Argument Mapping (DGM)
+The **DGM** engine maps **YAML** flags directly to the gamescope command line. This allows the system to support new Gamescope features without core script modifications.
+
+* **Find a new flag**: Check `gamescope --help` or consult `~/.config/steamos_diy/gamescope.example.yaml` for the full categorized reference.
 
 * **Add it**: Simply add a new line to your `flags`: list in `config.yaml`.
 
