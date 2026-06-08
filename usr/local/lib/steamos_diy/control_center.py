@@ -66,6 +66,7 @@ from journal import (
     parse_export_format,
     parse_game_logs,
 )
+from health import get_service_status, run_preflight
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -118,6 +119,8 @@ class SDYControlCenter(QMainWindow):
     process_finished = pyqtSignal(str, str, bool)  # (title, message, is_error)
     logs_ready = pyqtSignal(list, str)  # (entries, tag)
     games_detected = pyqtSignal(dict)  # {name: appid_or_name}
+    preflight_ready = pyqtSignal(list)  # list[CheckResult]
+    service_status_ready = pyqtSignal(object)  # ServiceStatus
 
     def __init__(self):
         super().__init__()
@@ -166,6 +169,10 @@ class SDYControlCenter(QMainWindow):
         self.game_save_btn = None
         self.game_hl = None
 
+        # Service health strip (status bar)
+        self.service_label = None
+        self._service_timer = None
+
         # Per-tab template view state
         self.view_states = {
             "global": {"is_template": False, "cache": ""},
@@ -178,6 +185,8 @@ class SDYControlCenter(QMainWindow):
         self.process_finished.connect(self._show_completion_message)
         self.logs_ready.connect(self._on_logs_ready)
         self.games_detected.connect(self._update_game_combo_ui)
+        self.preflight_ready.connect(self._on_preflight_ready)
+        self.service_status_ready.connect(self._on_service_status)
 
         # Clear error highlight on any user edit
         self.global_editor.textChanged.connect(
@@ -186,6 +195,9 @@ class SDYControlCenter(QMainWindow):
         self.game_editor.textChanged.connect(
             lambda: self.game_editor.setExtraSelections([])
         )
+
+        # Service health strip + periodic refresh
+        self._setup_service_strip()
 
     # ── Setup ──────────────────────────────────────────────────────────────
 
@@ -206,6 +218,15 @@ class SDYControlCenter(QMainWindow):
         """Reload logs when the user switches to the diagnostics tab."""
         if index == self.tabs.indexOf(self.diag_tab):
             self.load_logs()
+
+    def _setup_service_strip(self):
+        """Mount the service-health label in the status bar and poll it."""
+        self.service_label = QLabel("steamos_diy: …")
+        self.statusBar().addPermanentWidget(self.service_label)
+        self._service_timer = QTimer(self)
+        self._service_timer.timeout.connect(self._refresh_service_status)
+        self._service_timer.start(4000)
+        self._refresh_service_status()
 
     # ── Diagnostics tab ────────────────────────────────────────────────────
 
@@ -258,6 +279,7 @@ class SDYControlCenter(QMainWindow):
                 ),
             ),
             ("📝 Edit System Config (SSoT)", self.edit_ssot_privileged),
+            ("🩺 Validate Configuration", self.validate_config),
             ("🧹 Clean System Logs (Vacuum)", self.cleanup_logs_privileged),
             ("📦 Create Full System Backup", self.run_backup),
             ("🔄 Restore from Archive", self.run_restore),
@@ -308,6 +330,35 @@ class SDYControlCenter(QMainWindow):
             err_title="Error",
             err_msg="Authentication or vacuum failed.",
         )
+
+    def validate_config(self):
+        """Run preflight checks in a daemon thread; emit preflight_ready."""
+
+        def worker() -> None:
+            self.preflight_ready.emit(run_preflight())
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_preflight_ready(self, results):
+        """Render the preflight report as a colored message box."""
+        rows = []
+        for res in results:
+            ico = "✅" if res.ok else "❌"
+            col = "#2ecc71" if res.ok else "#e74c3c"
+            rows.append(
+                f"<span style='color:{col};'>{ico} <b>{res.name}</b></span>"
+                f" — {res.detail}"
+            )
+        box = QMessageBox(self)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText("<br>".join(rows))
+        if all(r.ok for r in results):
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle("Preflight: PASSED")
+        else:
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Preflight: ISSUES FOUND")
+        box.exec()
 
     # ── Global Options tab ─────────────────────────────────────────────────
 
@@ -407,12 +458,23 @@ class SDYControlCenter(QMainWindow):
             clean = stream.getvalue()
         except YAMLError as err:
             self._highlight_yaml_error(editor, err)
+            self.statusBar().showMessage("Syntax error — see highlight", 3000)
             return
         if raw.strip() == clean.strip():
+            self.statusBar().showMessage("Already clean", 2000)
             return
-        editor.setPlainText(clean)
+        # Single undoable edit — setPlainText would wipe the undo history;
+        # the saved scroll offset keeps the view from jumping to the top.
+        scroll = editor.verticalScrollBar().value()
+        cursor = editor.textCursor()
+        cursor.beginEditBlock()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText(clean)
+        cursor.endEditBlock()
+        editor.verticalScrollBar().setValue(scroll)
         hl = self.global_hl if editor is self.global_editor else self.game_hl
         hl.rehighlight()
+        self.statusBar().showMessage("✨ YAML formatted", 2000)
 
     def toggle_template(self, context):
         """Toggle between live config and read-only template view.
@@ -752,6 +814,25 @@ class SDYControlCenter(QMainWindow):
             QMessageBox.warning(self, title, message)
         else:
             QMessageBox.information(self, title, message)
+
+    def _refresh_service_status(self):
+        """Fetch service status off-thread; emit service_status_ready."""
+
+        def worker() -> None:
+            self.service_status_ready.emit(get_service_status())
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_service_status(self, status):
+        """Update the status-bar strip from a ServiceStatus snapshot."""
+        col = {"active": "#2ecc71", "failed": "#e74c3c"}.get(
+            status.active, "#95a5a6"
+        )
+        self.service_label.setText(
+            f"<span style='color:{col};'>●</span> steamos_diy: "
+            f"{status.active} ({status.sub}) · restarts: "
+            f"{status.restarts} · last exit: {status.exit_code}"
+        )
 
     # ── Privileged operations ─────────────────────────────────────────────
 

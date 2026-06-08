@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — Control Center Health Tooling
+
+### Added
+- `health.py`: new Qt-free backend module (mirrors `journal.py` — pure functions, testable in isolation, ready for a future `sdy doctor` CLI) exposing config-validation and service-status helpers.
+  - `run_preflight()` returns a list of `CheckResult`s covering: SSoT config presence; binary handlers (`bin_gs`/`bin_steam`/`bin_plasma`/`bin_dbus`) resolving to executables; the declared SSoT paths (`user_config`, `games_conf_dir`) actually existing; YAML syntax of the global config and every game profile (reporting the offending line); session-critical group membership (`tty`/`video`/`render`/`input`); C-Core loadability; and a writable session-state directory.
+  - It also flags the two top-level config fields the launcher iterates directly (`flags`, `post_start_cmds`) when mistyped as a scalar instead of a list — runtime would otherwise walk a string character-by-character into junk argv. Absent or null fields are correctly treated as empty and skipped. Full schema/semantic validation is deliberately out of scope (the runtime already degrades unexpected keys and bad `LOG_LEVEL`/timing values gracefully).
+  - `get_service_status()` / `parse_service_status()` snapshot `steamos_diy.service` via `systemctl show` (no root) into a `ServiceStatus`, degrading missing or non-numeric fields to safe placeholders.
+- `control_center.py`: **🩺 Validate Configuration** button (Maintenance tab) runs the preflight off-thread and renders a colour-coded pass/fail report (`preflight_ready` signal) — surfacing a broken config *before* it causes a black-screen boot.
+- `control_center.py`: service-health strip in the window status bar — shows `steamos_diy.service` state/sub-state/restart-count/last-exit, colour-coded (green `active`, red `failed`), refreshed every 4 s by a `QTimer` fetching status off-thread (`service_status_ready` signal).
+- `utils.py`: `clear_ssot_cache()` drops the in-process `_SSOT_CACHE` so long-lived tools (the Control Center doctor) re-validate the *current* on-disk config after an edit instead of returning cached values. `run_preflight()` calls it first, so re-running the doctor after fixing the config no longer requires restarting the Control Center.
+
+### Changed
+- `control_center.py`: `beautify_yaml` now applies the reformat as a single undoable edit (cursor edit-block) instead of `setPlainText`, so `Ctrl+Z` reverts it in one step; the editor's scroll position is preserved (no jump to the top); and the status bar reports the outcome (`✨ YAML formatted` / `Already clean` / `Syntax error — see highlight`).
+
+### Documentation
+- `Utilities Engine.md`: documented `clear_ssot_cache` and added `health.py` to the framework-dependency matrix.
+- `SteamMachine DIY Control Center.md`: documented the Validate Configuration button, the service-health strip, the `health.py` backend, and the improved beautify behaviour.
+
+---
+
 ## [2.1.1] — 2026-06-08 — Post-2.1.0 Hardening & KISS/Doc Cleanup Pass
 
 ### Added

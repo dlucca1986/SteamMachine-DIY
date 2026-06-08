@@ -185,6 +185,16 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
     return default
 
 
+def clear_ssot_cache() -> None:
+    """Drop the in-process SSoT cache so the next read hits disk.
+
+    The session launcher reads config once at boot and benefits from the
+    cache, but long-lived tools (the Control Center doctor) must re-validate
+    the *current* on-disk config after the user edits it.
+    """
+    _SSOT_CACHE.clear()
+
+
 def get_ssot_num(var_name: str, default: float) -> float:
     """Read a numeric SSoT value; fall back to *default* if malformed.
 
