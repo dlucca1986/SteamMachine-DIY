@@ -18,10 +18,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - `control_center.py`: `beautify_yaml` now applies the reformat as a single undoable edit (cursor edit-block) instead of `setPlainText`, so `Ctrl+Z` reverts it in one step; the editor's scroll position is preserved (no jump to the top); and the status bar reports the outcome (`✨ YAML formatted` / `Already clean` / `Syntax error — see highlight`).
+- `health.py`: review pass — split `_check_yaml_files` into `_check_user_config` + `_check_game_profiles` (one check, one function, matching the structure of every other preflight check) and extracted `_load_user_config` out of `_check_config_types` (loading vs. checking separated). Behaviour identical.
+- `install.sh`: the Intel driver set now also installs `intel-media-driver` (iHD) alongside the legacy `libva-intel-driver`. libva probes `iHD` before `i965` on i915, so 64-bit processes (Steam Remote Play encode, browsers) automatically get the actively-maintained VAAPI driver, while 32-bit processes keep falling back to `lib32-libva-intel-driver` (no official `lib32-intel-media-driver` exists — everything stays in the official repos).
+
+### Removed
+- `install.sh`: dropped `libva-mesa-driver` / `lib32-libva-mesa-driver` from the AMD driver set — obsolete split-package names absorbed into `mesa` / `lib32-mesa` (already in the same list) since mesa 1:24.2.7; pacman was resolving them as virtual providers of packages being installed anyway.
+- `install.sh`: dropped `procps-ng` (dependency of the `base` meta-package — present on every Arch system by definition, and unused by the project) and `mesa-utils` (`glxinfo`/`glxgears` referenced nowhere in code, configs or docs — the stack is Vulkan-centric). `vulkan-tools` stays (`vulkaninfo` is part of the documented troubleshooting workflow) and so does `pciutils` (`lspci` is used by install.sh itself).
+
+### Fixed
+- `control_center.py`: `beautify_yaml` no longer destroys a comments-only document. ruamel loads such a document as `None` and would round-trip it to a literal `null`, wiping the user's comments from the editor; it is now left untouched ("Nothing to format").
+- `steamos_diy_core.c`: `c_notify` clamped the `snprintf` would-be length to `sizeof(buf)` instead of `sizeof(buf) - 1`, sending the trailing NUL byte to the TTY; a negative return (encoding error) would also have reached `write()` as a huge unsigned length. Both paths are now guarded — the build is clean under `-Wconversion`.
+- `steamos_diy_core.c`: `c_sd_notify_ready` passed `sizeof(struct sockaddr_un)` as the address length, which breaks abstract-socket addressing (`@` prefix): abstract names are length-delimited, so the kernel treated the NUL padding as part of the name and `READY=1` went to a non-existent socket. The length is now computed as `offsetof(sun_path) + strlen(path)`, valid for both abstract and filesystem sockets.
 
 ### Documentation
 - `Utilities Engine.md`: documented `clear_ssot_cache` and added `health.py` to the framework-dependency matrix.
 - `SteamMachine DIY Control Center.md`: documented the Validate Configuration button, the service-health strip, the `health.py` backend, and the improved beautify behaviour.
+- Full docs/README review pass against the current code: package lists in `README.md` and `Installer Workflow.md` realigned with `install.sh` (Intel VAAPI drivers added, dropped packages removed); duplicated content consolidated to its home page (MangoHud/`--mangoapp` caveat → Dynamic Gamescope Mapping, optional-packages list → Useful Links & Resources, redundant per-tag journalctl rows → tag table); the boilerplate "This page outlines…" opener replaced with a direct per-page summary; minor wording and formatting cleanups.
 
 ---
 

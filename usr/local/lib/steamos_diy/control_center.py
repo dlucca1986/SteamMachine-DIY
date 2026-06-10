@@ -343,8 +343,9 @@ class SDYControlCenter(QMainWindow):
         """Render the preflight report as a colored message box."""
         rows = []
         for res in results:
-            ico = "✅" if res.ok else "❌"
-            col = "#2ecc71" if res.ok else "#e74c3c"
+            ico, col = (
+                ("✅", "#2ecc71") if res.ok else ("❌", "#e74c3c")
+            )
             rows.append(
                 f"<span style='color:{col};'>{ico} <b>{res.name}</b></span>"
                 f" — {res.detail}"
@@ -453,6 +454,11 @@ class SDYControlCenter(QMainWindow):
             return
         try:
             data = yaml_parser.load(raw.replace("\t", "  "))
+            # A comments-only document loads as None and would dump as
+            # "null", wiping the user's comments — leave it untouched.
+            if data is None:
+                self.statusBar().showMessage("Nothing to format", 2000)
+                return
             stream = StringIO()
             yaml_parser.dump(data, stream)
             clean = stream.getvalue()

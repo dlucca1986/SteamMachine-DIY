@@ -3,7 +3,7 @@
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
 
-This page outlines the Python-based supervisor responsible for session transitions and environment control.
+The supervisor behind session transitions: lifecycle, watchdog, signals and exit codes.
 
 ---
 
@@ -18,7 +18,7 @@ Execution arguments are generated from a **YAML configuration**.
 #### **Transformation Logic**
 The `_build_gamescope_args()` function constructs the execution string:
 * **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command.
-* **Environment Overrides**: Injects custom variables from `env_vars` (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"`) into the session environment. MangoHud integration in Gamescope mode requires the `--mangoapp` flag — setting `MANGOHUD=1` as an env var has no effect inside the compositor.
+* **Environment Overrides**: Injects custom variables from `env_vars` (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"`) into the session environment. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
 * **Safe Execution**: Uses `subprocess.Popen` with argument arrays to prevent shell-injection vulnerabilities.
 
 ### 3. Atomic State Management

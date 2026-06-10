@@ -96,57 +96,66 @@ def _check_yaml(path: str) -> CheckResult:
         return CheckResult(name, False, f"{type(err).__name__}{where}")
 
 
-def _check_yaml_files() -> list[CheckResult]:
-    """Validate the global config plus every per-game profile.
+def _check_user_config() -> CheckResult:
+    """Validate the global config declared in the SSoT.
 
     A path declared in the SSoT that does not resolve is reported as a
     failure, not skipped: a typo silently disables config loading, so
     "configured but missing" must surface rather than pass unnoticed.
     """
-    results: list[CheckResult] = []
-
     user_config = get_ssot_var("user_config")
     if not user_config:
-        results.append(CheckResult("user_config", False, "not set in SSoT"))
-    elif not os.path.isfile(user_config):
-        results.append(
-            CheckResult("user_config", False, f"not found: {user_config}")
-        )
-    else:
-        results.append(_check_yaml(user_config))
+        return CheckResult("user_config", False, "not set in SSoT")
+    if not os.path.isfile(user_config):
+        return CheckResult("user_config", False, f"not found: {user_config}")
+    return _check_yaml(user_config)
 
+
+def _check_game_profiles() -> list[CheckResult]:
+    """Validate every per-game profile in games_conf_dir.
+
+    Same "configured but missing" contract as _check_user_config: a
+    games_conf_dir that does not resolve is a failure, not a skip.
+    """
     games_dir = get_ssot_var("games_conf_dir")
     if not games_dir:
-        results.append(
-            CheckResult("games_conf_dir", False, "not set in SSoT")
-        )
-    elif not os.path.isdir(games_dir):
-        results.append(
+        return [CheckResult("games_conf_dir", False, "not set in SSoT")]
+    if not os.path.isdir(games_dir):
+        return [
             CheckResult("games_conf_dir", False, f"not found: {games_dir}")
-        )
-    else:
-        for entry in sorted(Path(games_dir).glob("*.yaml")):
-            results.append(_check_yaml(str(entry)))
+        ]
+    return [
+        _check_yaml(str(entry))
+        for entry in sorted(Path(games_dir).glob("*.yaml"))
+    ]
 
-    return results
+
+def _load_user_config() -> dict | None:
+    """Parse user_config into a dict; None if unreadable or not a mapping.
+
+    Missing path, parse error and non-mapping root all collapse to None —
+    those failures are _check_user_config's job to report, not this one's.
+    """
+    user_config = get_ssot_var("user_config")
+    if not user_config:
+        return None
+    try:
+        with open(user_config, "r", encoding="utf-8") as fh:
+            data = _yaml_probe.load(fh)
+    except (OSError, YAMLError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _check_config_types() -> list[CheckResult]:
     """Flag list-typed global-config fields mistyped as a scalar.
 
-    Presence and syntax are already covered by _check_yaml_files; this only
+    Presence and syntax are already covered by _check_user_config; this only
     inspects the parsed structure. A field that is absent or null is fine
     (runtime treats it as empty), so only a present, non-list value fails.
     """
-    user_config = get_ssot_var("user_config")
-    if not user_config or not os.path.isfile(user_config):
-        return []
-    try:
-        with open(user_config, "r", encoding="utf-8") as fh:
-            data = _yaml_probe.load(fh) or {}
-    except (OSError, YAMLError):
-        return []
-    if not isinstance(data, dict):
+    data = _load_user_config()
+    if data is None:
         return []
 
     results: list[CheckResult] = []
@@ -211,7 +220,8 @@ def run_preflight() -> list[CheckResult]:
     clear_ssot_cache()
     results = [_check_ssot()]
     results.extend(_check_binaries())
-    results.extend(_check_yaml_files())
+    results.append(_check_user_config())
+    results.extend(_check_game_profiles())
     results.extend(_check_config_types())
     results.append(_check_groups())
     results.append(_check_core())

@@ -20,7 +20,7 @@
 
 ## ✨ Key Features
 * **SSOT Architecture**: System lifecycle and identity are governed by a central configuration: `/etc/default/steamos_diy.conf`.
-* **Session Launcher**: Manages transitions between Gamescope and KDE Plasma using atomic state updates and process monitoring via `proc.wait()`.
+* **Session Launcher**: Manages transitions between Gamescope and KDE Plasma with atomic state updates and crash recovery.
 * **Compatibility Shims**: Redirects SteamOS-specific system calls (e.g., updates, BIOS) to DIY logic, ensuring UI stability.
 * **Dynamic Parameter Mapping**: Maps YAML configuration flags directly to Gamescope command-line arguments without modifying source code.
 * **Game Wrapper (`sdy`)**: Intercepts game launches to apply per-game YAML profiles, environment variables, and wrappers (MangoHud, GameMode).
@@ -54,8 +54,8 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | :--- | :--- |
 | **Execution** | `steam`, `gamescope`, `mangohud`, `gamemode`, `xorg-xwayland` |
 | **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
-| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `gcc` |
-| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
+| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc` |
+| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
 
 ## 🤝 Acknowledgments
 Special thanks to the Linux gaming community:

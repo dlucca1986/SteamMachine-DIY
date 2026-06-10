@@ -3,7 +3,7 @@
 [![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-This page outlines the shared utility module (`utils.py`) and its integration with the native `libcore.so`.
+The shared utility module (`utils.py`) and its integration with the native `libcore.so`.
 
 ---
 

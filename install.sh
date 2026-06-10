@@ -61,10 +61,10 @@ check_gpu_and_drivers() {
         fi
     elif echo "$GPU_INFO" | grep -iq "amd"; then
         info "AMD GPU detected. Preparing RADV and Mesa layers..."
-        DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon vulkan-mesa-layers lib32-vulkan-mesa-layers libva-mesa-driver lib32-libva-mesa-driver mesa lib32-mesa"
+        DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon vulkan-mesa-layers lib32-vulkan-mesa-layers mesa lib32-mesa"
     elif echo "$GPU_INFO" | grep -iq "intel"; then
         info "Intel GPU detected. Preparing ANV and Mesa layers..."
-        DRIVER_PKGS="vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
+        DRIVER_PKGS="vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers intel-media-driver libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
     else
         warn "GPU not recognized. Skipping driver-specific packages."
     fi
@@ -79,7 +79,7 @@ install_dependencies() {
     fi
 
     # Core system and gaming dependencies
-    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools mesa-utils pciutils procps-ng gcc"
+    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc"
 
     info "Synchronizing package databases and installing core dependencies..."
     pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS

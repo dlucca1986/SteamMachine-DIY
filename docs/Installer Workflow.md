@@ -4,7 +4,7 @@
 [![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
 [![Drivers](https://img.shields.io/badge/Drivers-Full%20Open--Source-orange.svg)](#)
 
-This page outlines the deployment procedure for the framework and the associated systemd services.
+What `install.sh` does, stage by stage.
 
 ---
 
@@ -13,8 +13,8 @@ This page outlines the deployment procedure for the framework and the associated
 ### 1. Hardware & Driver Audit
 The installer identifies the GPU via `lspci` (scanning both `VGA compatible controller` and `3D controller` entries, covering NVIDIA multi-GPU setups where the discrete card appears as a 3D controller) to deploy the Vulkan stack (32/64-bit) required for Proton compatibility:
 
-* **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`.
-* **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva-mesa-driver`, `lib32-libva-mesa-driver`, `mesa`, `lib32-mesa`.
+* **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `intel-media-driver`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`. For VAAPI, 64-bit processes pick the maintained `intel-media-driver` (iHD) automatically; the legacy `libva-intel-driver` (i965) covers pre-Gen8 GPUs and 32-bit processes.
+* **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `mesa`, `lib32-mesa` (VAAPI is built into `mesa` since 1:24.2.7).
 * **NVIDIA (Proprietary):** If the `nvidia` kernel module package is already installed, installs `nvidia-utils`, `lib32-nvidia-utils`.
 * **NVIDIA (NVK/Nouveau):** If no proprietary driver is detected, installs `mesa`, `lib32-mesa` for the open-source Vulkan ICD.
 * **Unrecognized GPU:** If no known vendor is detected, driver-specific packages are skipped and a warning is printed. The base stack is still installed.
@@ -23,7 +23,7 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 Configures system access and installs the software stack:
 
 * **Full System Upgrade**: Before installing any package, the installer runs `pacman -Syu` to synchronize the package databases and upgrade all existing packages. This ensures a consistent system state before the framework is deployed.
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `mesa-utils`, `pciutils`, `procps-ng`, `gcc`.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`.
 * **Hardware Groups:** Automatically manages user membership to ensure hardware access and system administration rights. Adds user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`. The `tty` group is required for `notify()` to write to `/dev/tty1`.
 
 ### 3. SSOT Deployment & Filesystem Policy

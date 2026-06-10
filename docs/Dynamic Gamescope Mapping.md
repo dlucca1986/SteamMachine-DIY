@@ -3,7 +3,7 @@
 [![Configuration](https://img.shields.io/badge/Logic-Dynamic%20YAML-blue.svg)](#)
 [![Engine](https://img.shields.io/badge/Engine-DGM%20Injection-orange.svg)](#)
 
-This page outlines the configuration system for managing global settings and per-game profiles via YAML.
+How YAML configuration becomes Gamescope arguments: global config, per-game overrides, and templates.
 
 ---
 

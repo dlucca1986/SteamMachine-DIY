@@ -10,7 +10,7 @@ Technical overview of the Backup & Recovery utility. This tool manages the snaps
 
 ## 🛠️ Integrated Tools
 
-The restoration suite consists of three main components working in harmony:
+Three components:
 1. **`backup.py`**: Handles archiving of configuration files and system services.
 2. **`restore.py`**: Handles extraction, symbolic link reconstruction, and permission management.
 3. **Control Center**: The graphical interface to manage these tasks easily.

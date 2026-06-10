@@ -3,7 +3,7 @@
 [![Session](https://img.shields.io/badge/Logic-Atomic%20State-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-This page outlines the core framework components, including configuration, session management, and compatibility layers.
+Core components, filesystem layout, and the SteamOS compatibility shim layer.
 
 ---
 
