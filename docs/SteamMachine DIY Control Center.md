@@ -15,7 +15,7 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
 * **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
 * **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note.
-* **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
+* **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
 Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
@@ -93,7 +93,7 @@ Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_st
 | Tab | Action | Method | Logic |
 | :--- | :--- | :--- | :--- |
 | **0** | Load Logs | `load_logs()` | `get_journal_cmd(tag)` → `journalctl -t` (12h, 300 entries); `ALL`/`STEAM` also merge gamescope logs (last 1h, `short-iso`) |
-| **0** | Export Log | `export_support_log()` | `QFileDialog` + `Path.write_text` |
+| **0** | Export Report | `export_support_log()` | `QFileDialog` → `_build_support_report()` off-thread (service + preflight + raw logs) → `Path.write_text` |
 | **1** | Validate Config | `validate_config()` | `health.run_preflight()` off-thread → colour-coded report |
 | **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
 | **1** | Backup | `run_backup()` | `pkexec python3 backup.py` in `threading.Thread` |

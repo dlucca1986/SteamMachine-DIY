@@ -16,6 +16,7 @@ import re
 import subprocess  # nosec B404
 import sys
 import threading
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
@@ -61,9 +62,8 @@ from utils import (
 from editors import YAMLEditor, YAMLSyntaxHighlighter
 from journal import (
     fetch_gamescope_logs,
+    fetch_tagged_entries,
     filter_game_journal_lines,
-    get_journal_cmd,
-    parse_export_format,
     parse_game_logs,
 )
 from health import get_service_status, run_preflight
@@ -105,6 +105,53 @@ yaml_parser.indent(
     offset=_YAML_INDENT_OFFSET,
 )
 yaml_parser.width = _YAML_WIDTH
+
+
+# ---------------------------------------------------------------------------
+# Support report — pure text assembly, no Qt (runs in a worker thread)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_support_logs() -> list[str]:
+    """Raw ALL-tag log lines (+ gamescope) for the report; never raises."""
+    launches: set[str] = set()
+    try:
+        ents = fetch_tagged_entries("ALL", launches)
+        ents.extend(fetch_gamescope_logs(launches))
+    except (subprocess.CalledProcessError, OSError) as err:
+        return [f"(log retrieval failed: {err})"]
+    if not ents:
+        return ["(no project log entries in this window)"]
+    ents.sort(key=lambda x: x[0])
+    return [e[1] for e in ents]
+
+
+def _build_support_report() -> str:
+    """Assemble the full diagnostic report: system, service, preflight, logs.
+
+    Logs are re-fetched raw with the ALL tag set — independent of the
+    Diagnostics filter and without the display-side dedup collapse, so
+    the file is complete and machine-greppable.
+    """
+    status = get_service_status()
+    lines = [
+        "=== SteamMachine-DIY Support Report ===",
+        f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"Kernel: {os.uname().release}",
+        "",
+        "--- Service ---",
+        f"steamos_diy: {status.active} ({status.sub}) | "
+        f"restarts: {status.restarts} | last exit: {status.exit_code}",
+        "",
+        "--- Preflight ---",
+    ]
+    for res in run_preflight():
+        mark = "PASS" if res.ok else "FAIL"
+        lines.append(f"{mark} {res.name} - {res.detail}")
+
+    lines.extend(["", "--- Logs (last 12h, all tags + gamescope) ---"])
+    lines.extend(_fetch_support_logs())
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +296,7 @@ class SDYControlCenter(QMainWindow):
         footer = QHBoxLayout()
         self.copy_btn = QPushButton("📋 Copy to Clipboard")
         self.copy_btn.clicked.connect(self.copy_logs)
-        self.support_btn = QPushButton("🛠️ Export Support Log")
+        self.support_btn = QPushButton("🛠️ Export Support Report")
         self.support_btn.clicked.connect(self.export_support_log)
         footer.addWidget(self.copy_btn)
         footer.addWidget(self.support_btn)
@@ -711,17 +758,10 @@ class SDYControlCenter(QMainWindow):
         def worker() -> None:
             launches: set[str] = set()
             try:
-                res = subprocess.run(  # nosec B603
-                    get_journal_cmd(tag),
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                ents = parse_export_format(res.stdout, launches)
+                ents = fetch_tagged_entries(tag, launches)
                 if tag in ("ALL", "STEAM"):
                     ents.extend(fetch_gamescope_logs(launches))
-                if ents:
-                    ents.sort(key=lambda x: x[0])
+                ents.sort(key=lambda x: x[0])
                 self.logs_ready.emit(ents, tag)
             except (subprocess.CalledProcessError, OSError) as err:
                 self.logs_ready.emit([], f"ERROR:{err}")
@@ -801,17 +841,31 @@ class SDYControlCenter(QMainWindow):
             )
 
     def export_support_log(self):
-        """Export the gamescope support log to a user-chosen file."""
+        """Save a full support report (service, preflight, raw logs).
+
+        Unlike the clipboard copy, this does not export the on-screen
+        view: the report is rebuilt from scratch in a worker thread so
+        it is complete regardless of the active filter.
+        """
+        default = f"sdy_support_{datetime.now():%Y%m%d_%H%M%S}.log"
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Save Log", "sdy_support.log"
+            self, "Save Support Report", default
         )
-        if dest:
+        if not dest:
+            return
+
+        def worker() -> None:
             try:
                 Path(dest).write_text(
-                    self.log_display.toPlainText(), encoding="utf-8"
+                    _build_support_report(), encoding="utf-8"
+                )
+                self.process_finished.emit(
+                    "Support Report", f"Saved: {dest}", False
                 )
             except OSError as err:
-                QMessageBox.critical(self, "Save Error", str(err))
+                self.process_finished.emit("Save Error", str(err), True)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ── Async result handlers ─────────────────────────────────────────────
 

@@ -28,6 +28,7 @@ from utils import (
     fix_ownership,
     get_backup_mapping,
     get_real_user,
+    get_ssot_num,
     jlog,
     verify_archive,
 )
@@ -70,6 +71,9 @@ _ARCHIVE_TS_FORMAT: str = "%Y%m%d_%H%M%S"
 
 # Mode for the embedded restore-script tar entry
 _RESTORE_SCRIPT_MODE: int = 0o755
+
+# Archives kept after pruning when BACKUP_KEEP is missing from the SSoT
+_BACKUP_KEEP_DEFAULT: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +209,31 @@ def _cleanup_tmp(tmp: Path) -> None:
         jlog("SYSTEM", f"BACKUP_TMP_CLEANUP_FAIL: {err}", level="WARN")
 
 
+def _prune_old_archives(backup_dir: Path) -> None:
+    """Keep the newest BACKUP_KEEP archives; delete the older ones.
+
+    BACKUP_KEEP <= 0 disables pruning entirely (keep everything). The
+    timestamped naming makes lexicographic order chronological, and the
+    glob cannot match in-flight *.tmp files.
+    """
+    keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
+    if keep <= 0:
+        return
+    archives = sorted(
+        backup_dir.glob(f"{_ARCHIVE_PREFIX}*{_ARCHIVE_SUFFIX}")
+    )
+    for old in archives[:-keep]:
+        try:
+            old.unlink()
+            jlog("SYSTEM", f"BACKUP_PRUNED: {old.name}", level="INFO")
+        except OSError as err:
+            jlog(
+                "SYSTEM",
+                f"BACKUP_PRUNE_FAIL: {old.name} - {err}",
+                level="WARN",
+            )
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -251,6 +280,7 @@ def run_backup() -> None:
 
     fix_ownership(final_path, user)
     jlog("SYSTEM", f"BACKUP_SUCCESS: {final_path.name}", level="INFO")
+    _prune_old_archives(backup_dir)
 
 
 if __name__ == "__main__":
