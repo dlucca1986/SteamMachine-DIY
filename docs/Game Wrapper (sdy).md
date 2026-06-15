@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
-[![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
 
 How `sdy` finds the right profile and launches the game.
 
@@ -70,9 +68,6 @@ To verify if `sdy` has correctly identified your game and applied the right conf
 | `GAME_LAUNCH: <stem> (AppID: <id>)` | INFO | Emitted just before `os.execvpe`; confirms the resolved stem and AppID. |
 | `EXECUTION_FAILED: <err>` | ERROR | Binary not found or `execvpe` failed; process exits with code 1. |
 | `SCAN_ERROR: <dir> - <err>` | DEBUG | `games.d/` directory could not be scanned (e.g. missing directory). |
-
-> [!TIP]
-> If no profile is found, `sdy` proceeds silently using only the global `config.yaml` values — no "profile not found" message is logged.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

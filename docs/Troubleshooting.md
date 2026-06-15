@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Log-System](https://img.shields.io/badge/Logs-Systemd%20Journal-blue.svg)](#)
-[![Status](https://img.shields.io/badge/Status-Diagnostic%20Active-success.svg)](#)
 
 
 Log tags, diagnostic commands, and handy shell aliases.

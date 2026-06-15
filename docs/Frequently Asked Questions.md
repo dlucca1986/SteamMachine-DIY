@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Support](https://img.shields.io/badge/Support-Documentation-blue.svg)](#)
-[![Status](https://img.shields.io/badge/Status-Active-success.svg)](#)
 
 Common questions about the architecture, gaming setup, and maintenance.
 

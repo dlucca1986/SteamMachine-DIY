@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Logic](https://img.shields.io/badge/Logic-Selective%20State%20Capture-blue.svg)](#)
-[![Integrity](https://img.shields.io/badge/Integrity-Atomic%20Restoration-orange.svg)](#)
 
 
 Technical overview of the Backup & Recovery utility. This tool manages the snapshot and restoration of configuration files, game profiles, and system links.

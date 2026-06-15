@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
-[![Session](https://img.shields.io/badge/Session-PAM%20Authenticated-blue.svg)](#)
 
 The DM-less boot: systemd service, TTY1 handover, and boot-time tuning.
 
