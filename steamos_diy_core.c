@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,9 +36,14 @@ void c_notify(const char *status, int clear) {
         int len = snprintf(buf, sizeof(buf),
                            "\033[?25l\033[H\033[2J\033[3J\n \033[1m◢◤ SteamOs_Diy\033[0m | %s\n",
                            status);
-        // snprintf returns the would-be length: clamp so an oversized
-        // status never makes write() read past the buffer.
-        if (len > (int)sizeof(buf)) len = sizeof(buf);
+        // snprintf returns the would-be length (or <0 on encoding error):
+        // clamp so an oversized status never makes write() read past the
+        // buffer, and never pass a negative length to write().
+        if (len < 0) {
+            close(fd);
+            return;
+        }
+        if (len >= (int)sizeof(buf)) len = sizeof(buf) - 1;
         write(fd, buf, len);
     }
     close(fd);
@@ -85,7 +91,13 @@ void c_sd_notify_ready() {
     } else {
         strncpy(addr.sun_path, sock_path, sizeof(addr.sun_path) - 1);
     }
+    // Abstract names are length-delimited: the address length must cover
+    // exactly the bytes in use, or the kernel treats the NUL padding as
+    // part of the name and the datagram goes to a non-existent socket.
+    // The same formula is also valid for filesystem paths.
+    socklen_t addrlen = offsetof(struct sockaddr_un, sun_path) + strlen(sock_path);
+    if (addrlen > sizeof(addr)) addrlen = sizeof(addr);
     const char *msg = "READY=1";
-    sendto(fd, msg, 7, 0, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un));
+    sendto(fd, msg, 7, 0, (const struct sockaddr *)&addr, addrlen);
     close(fd);
 }

@@ -4,7 +4,7 @@
 [![Status](https://img.shields.io/badge/Status-Diagnostic%20Active-success.svg)](#)
 
 
-This page outlines the monitoring and diagnostic procedures for the **SteamMachine-DIY** architecture, including log filtering, system utilities, and CLI aliases.
+Log tags, diagnostic commands, and handy shell aliases.
 
 ---
 
@@ -25,10 +25,7 @@ The framework uses a unified tagging system. Use `journalctl` to filter logs and
 | Command | Purpose |
 | :--- | :--- |
 | `journalctl -u steamos_diy.service -f` | Live logs from the session launcher (session_launch.py). |
-| `journalctl -t CORE -t STEAM -t SYSTEM` | Full project log view across all components and tags. |
-| `journalctl -t SYSTEM` | Backup/restore operations and shim intercepts (run outside the service cgroup). |
-| `journalctl -t CORE` | Crash recovery, switch requests, binary errors. |
-| `journalctl -t STEAM` | Gamescope launch args and game execution events. |
+| `journalctl -t CORE -t STEAM -t SYSTEM` | Full project log view — single tags can be filtered individually (see the table above). |
 | `sudo fuser -v /dev/dri/card*` | Identify which process is currently locking the GPU. |
 | `cat /sys/class/drm/*/modes` | List all resolutions natively detected by the Kernel (DRM). |
 | `vulkaninfo --summary` | Verify that the Vulkan stack (Mesa/NVK) is operational. |

@@ -15,7 +15,7 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
 * **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
 * **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note.
-* **Export**: Copy to clipboard (`copy_logs()`), or save to a user-chosen file (`export_support_log()`).
+* **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
 Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
@@ -26,6 +26,7 @@ Buttons in order:
 | :--- | :--- |
 | **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `spawn_native`. |
 | **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
+| **Validate Configuration** | Runs `health.run_preflight()` off-thread and shows a colour-coded report (config presence, path resolution, YAML syntax, group membership, C-Core, session state). See [Configuration Health](#-configuration-health-healthpy). |
 | **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
@@ -38,7 +39,7 @@ Text editor for YAML configuration files with real-time validation.
 
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
-* **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser, converting tabs to two spaces and fixing indentation while preserving comments and quoting.
+* **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser — converting tabs to two spaces, fixing indentation and normalising spacing while preserving comments and quoting. The reformat is applied as a **single undoable edit** (one `Ctrl+Z` reverts it) and the scroll position is preserved; the outcome is reported in the status bar (`✨ YAML formatted` / `Already clean` / `Nothing to format` for a comments-only document / `Syntax error — see highlight`). It only reformats documents that already parse — broken YAML surfaces as a syntax error instead, and string *values* (e.g. the content inside each `flags` entry) are left verbatim.
 * **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file.
 * **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
 
@@ -54,17 +55,51 @@ Per-game YAML profile editor backed by journal-based game discovery.
 
 ---
 
+## 🩺 Configuration Health (`health.py`)
+
+> A Qt-free backend module — like `journal.py`, it is pure functions with no project-module side effects, testable in isolation and ready for a future `sdy doctor` CLI. It powers two surfaces: the **Validate Configuration** button and the status-bar service strip.
+
+### Preflight (`run_preflight`)
+The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight()` off-thread and renders a colour-coded pass/fail report via the `preflight_ready` signal. Each check returns a `CheckResult(name, ok, detail)`:
+
+| Check | Verifies |
+| :--- | :--- |
+| **SSoT config** | `/etc/default/steamos_diy.conf` exists |
+| **Binary `bin_*`** | each handler (`bin_gs` / `bin_steam` / `bin_plasma` / `bin_dbus`) resolves to an executable |
+| **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped |
+| **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
+| **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
+| **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
+| **C-Core** | `libcore.so` is loadable |
+| **Session state** | the `next_session` directory is writable |
+
+`run_preflight()` calls `clear_ssot_cache()` first, so re-running the doctor after editing the config reflects the **current** on-disk state, not cached values.
+
+> **Scope:** the preflight validates *presence, path resolution and YAML syntax*, plus the two field types the runtime does not guard. It deliberately does **not** perform full schema/semantic validation (unexpected keys, `LOG_LEVEL` values, timing sanity) — the runtime already degrades those gracefully.
+
+### Service status strip
+A permanent label in the window status bar reports `steamos_diy.service`, refreshed every **4 s** by a `QTimer` that fetches `get_service_status()` off-thread (`service_status_ready` signal):
+
+```
+● steamos_diy: <active> (<sub>) · restarts: <N> · last exit: <code>
+```
+
+Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_status()` reads `systemctl show` (no root needed) and `parse_service_status()` degrades missing or non-numeric fields to safe placeholders. **Note:** `restarts` (`NRestarts`) increments on every exit-75 session switch, so a high count is normal — `ActiveState=failed` is the real alarm.
+
+---
+
 ## 🛠️ Method Mapping Table
 
 | Tab | Action | Method | Logic |
 | :--- | :--- | :--- | :--- |
 | **0** | Load Logs | `load_logs()` | `get_journal_cmd(tag)` → `journalctl -t` (12h, 300 entries); `ALL`/`STEAM` also merge gamescope logs (last 1h, `short-iso`) |
-| **0** | Export Log | `export_support_log()` | `QFileDialog` + `Path.write_text` |
+| **0** | Export Report | `export_support_log()` | `QFileDialog` → `_build_support_report()` off-thread (service + preflight + raw logs) → `Path.write_text` |
+| **1** | Validate Config | `validate_config()` | `health.run_preflight()` off-thread → colour-coded report |
 | **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
 | **1** | Backup | `run_backup()` | `pkexec python3 backup.py` in `threading.Thread` |
 | **1** | Restore | `run_restore()` | `QFileDialog` + `pkexec python3 restore.py <path>` in `threading.Thread` |
 | **2** | Save Config | `_atomic_save()` | YAML validation → `write_atomic()` (C-Core, fdatasync + rename) |
-| **2** | Beautify | `beautify_yaml()` | `ruamel.yaml` round-trip (tabs → spaces, indent fix, comments preserved) |
+| **2** | Beautify | `beautify_yaml()` | `ruamel.yaml` round-trip (indent/spacing fix, comments preserved); single undoable edit, scroll kept, status-bar feedback |
 | **2** | View Template | `toggle_template("global")` | Loads/restores `.example.yaml`; disables save while active |
 | **3** | Scan Games | `refresh_detected_games()` | `journalctl --since "24 hours ago"` → filter → last 2000 game lines |
 | **3** | Save Profile | `save_game_profile()` | `_atomic_save()` → `games.d/<Name>.yaml` |

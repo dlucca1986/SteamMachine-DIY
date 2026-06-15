@@ -3,7 +3,7 @@
 [![Session](https://img.shields.io/badge/Logic-Atomic%20State-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-This page outlines the core framework components, including configuration, session management, and compatibility layers.
+Core components, filesystem layout, and the SteamOS compatibility shim layer.
 
 ---
 
@@ -36,7 +36,7 @@ A module within the launcher that parses `config.yaml`. It dynamically generates
 A wrapper that identifies games via `SteamAppId` or executable name and applies per-game YAML overrides from `games.d/`.
 
 ### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`)
-The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
+The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
 
 ---
 

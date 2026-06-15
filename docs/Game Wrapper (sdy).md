@@ -3,7 +3,7 @@
 [![Code Style: PEP8](https://img.shields.io/badge/Code%20Style-PEP8-brightgreen.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
 
-This page outlines the execution wrapper responsible for process interception and dynamic environment injection.
+How `sdy` finds the right profile and launches the game.
 
 ---
 

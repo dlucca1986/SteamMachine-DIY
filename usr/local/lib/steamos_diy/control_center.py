@@ -16,6 +16,7 @@ import re
 import subprocess  # nosec B404
 import sys
 import threading
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
@@ -61,11 +62,11 @@ from utils import (
 from editors import YAMLEditor, YAMLSyntaxHighlighter
 from journal import (
     fetch_gamescope_logs,
+    fetch_tagged_entries,
     filter_game_journal_lines,
-    get_journal_cmd,
-    parse_export_format,
     parse_game_logs,
 )
+from health import get_service_status, run_preflight
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -107,6 +108,53 @@ yaml_parser.width = _YAML_WIDTH
 
 
 # ---------------------------------------------------------------------------
+# Support report — pure text assembly, no Qt (runs in a worker thread)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_support_logs() -> list[str]:
+    """Raw ALL-tag log lines (+ gamescope) for the report; never raises."""
+    launches: set[str] = set()
+    try:
+        ents = fetch_tagged_entries("ALL", launches)
+        ents.extend(fetch_gamescope_logs(launches))
+    except (subprocess.CalledProcessError, OSError) as err:
+        return [f"(log retrieval failed: {err})"]
+    if not ents:
+        return ["(no project log entries in this window)"]
+    ents.sort(key=lambda x: x[0])
+    return [e[1] for e in ents]
+
+
+def _build_support_report() -> str:
+    """Assemble the full diagnostic report: system, service, preflight, logs.
+
+    Logs are re-fetched raw with the ALL tag set — independent of the
+    Diagnostics filter and without the display-side dedup collapse, so
+    the file is complete and machine-greppable.
+    """
+    status = get_service_status()
+    lines = [
+        "=== SteamMachine-DIY Support Report ===",
+        f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"Kernel: {os.uname().release}",
+        "",
+        "--- Service ---",
+        f"steamos_diy: {status.active} ({status.sub}) | "
+        f"restarts: {status.restarts} | last exit: {status.exit_code}",
+        "",
+        "--- Preflight ---",
+    ]
+    for res in run_preflight():
+        mark = "PASS" if res.ok else "FAIL"
+        lines.append(f"{mark} {res.name} - {res.detail}")
+
+    lines.extend(["", "--- Logs (last 12h, all tags + gamescope) ---"])
+    lines.extend(_fetch_support_logs())
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -118,6 +166,8 @@ class SDYControlCenter(QMainWindow):
     process_finished = pyqtSignal(str, str, bool)  # (title, message, is_error)
     logs_ready = pyqtSignal(list, str)  # (entries, tag)
     games_detected = pyqtSignal(dict)  # {name: appid_or_name}
+    preflight_ready = pyqtSignal(list)  # list[CheckResult]
+    service_status_ready = pyqtSignal(object)  # ServiceStatus
 
     def __init__(self):
         super().__init__()
@@ -166,6 +216,10 @@ class SDYControlCenter(QMainWindow):
         self.game_save_btn = None
         self.game_hl = None
 
+        # Service health strip (status bar)
+        self.service_label = None
+        self._service_timer = None
+
         # Per-tab template view state
         self.view_states = {
             "global": {"is_template": False, "cache": ""},
@@ -178,6 +232,8 @@ class SDYControlCenter(QMainWindow):
         self.process_finished.connect(self._show_completion_message)
         self.logs_ready.connect(self._on_logs_ready)
         self.games_detected.connect(self._update_game_combo_ui)
+        self.preflight_ready.connect(self._on_preflight_ready)
+        self.service_status_ready.connect(self._on_service_status)
 
         # Clear error highlight on any user edit
         self.global_editor.textChanged.connect(
@@ -186,6 +242,9 @@ class SDYControlCenter(QMainWindow):
         self.game_editor.textChanged.connect(
             lambda: self.game_editor.setExtraSelections([])
         )
+
+        # Service health strip + periodic refresh
+        self._setup_service_strip()
 
     # ── Setup ──────────────────────────────────────────────────────────────
 
@@ -206,6 +265,15 @@ class SDYControlCenter(QMainWindow):
         """Reload logs when the user switches to the diagnostics tab."""
         if index == self.tabs.indexOf(self.diag_tab):
             self.load_logs()
+
+    def _setup_service_strip(self):
+        """Mount the service-health label in the status bar and poll it."""
+        self.service_label = QLabel("steamos_diy: …")
+        self.statusBar().addPermanentWidget(self.service_label)
+        self._service_timer = QTimer(self)
+        self._service_timer.timeout.connect(self._refresh_service_status)
+        self._service_timer.start(4000)
+        self._refresh_service_status()
 
     # ── Diagnostics tab ────────────────────────────────────────────────────
 
@@ -228,7 +296,7 @@ class SDYControlCenter(QMainWindow):
         footer = QHBoxLayout()
         self.copy_btn = QPushButton("📋 Copy to Clipboard")
         self.copy_btn.clicked.connect(self.copy_logs)
-        self.support_btn = QPushButton("🛠️ Export Support Log")
+        self.support_btn = QPushButton("🛠️ Export Support Report")
         self.support_btn.clicked.connect(self.export_support_log)
         footer.addWidget(self.copy_btn)
         footer.addWidget(self.support_btn)
@@ -258,6 +326,7 @@ class SDYControlCenter(QMainWindow):
                 ),
             ),
             ("📝 Edit System Config (SSoT)", self.edit_ssot_privileged),
+            ("🩺 Validate Configuration", self.validate_config),
             ("🧹 Clean System Logs (Vacuum)", self.cleanup_logs_privileged),
             ("📦 Create Full System Backup", self.run_backup),
             ("🔄 Restore from Archive", self.run_restore),
@@ -308,6 +377,36 @@ class SDYControlCenter(QMainWindow):
             err_title="Error",
             err_msg="Authentication or vacuum failed.",
         )
+
+    def validate_config(self):
+        """Run preflight checks in a daemon thread; emit preflight_ready."""
+
+        def worker() -> None:
+            self.preflight_ready.emit(run_preflight())
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_preflight_ready(self, results):
+        """Render the preflight report as a colored message box."""
+        rows = []
+        for res in results:
+            ico, col = (
+                ("✅", "#2ecc71") if res.ok else ("❌", "#e74c3c")
+            )
+            rows.append(
+                f"<span style='color:{col};'>{ico} <b>{res.name}</b></span>"
+                f" — {res.detail}"
+            )
+        box = QMessageBox(self)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText("<br>".join(rows))
+        if all(r.ok for r in results):
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle("Preflight: PASSED")
+        else:
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Preflight: ISSUES FOUND")
+        box.exec()
 
     # ── Global Options tab ─────────────────────────────────────────────────
 
@@ -402,17 +501,33 @@ class SDYControlCenter(QMainWindow):
             return
         try:
             data = yaml_parser.load(raw.replace("\t", "  "))
+            # A comments-only document loads as None and would dump as
+            # "null", wiping the user's comments — leave it untouched.
+            if data is None:
+                self.statusBar().showMessage("Nothing to format", 2000)
+                return
             stream = StringIO()
             yaml_parser.dump(data, stream)
             clean = stream.getvalue()
         except YAMLError as err:
             self._highlight_yaml_error(editor, err)
+            self.statusBar().showMessage("Syntax error — see highlight", 3000)
             return
         if raw.strip() == clean.strip():
+            self.statusBar().showMessage("Already clean", 2000)
             return
-        editor.setPlainText(clean)
+        # Single undoable edit — setPlainText would wipe the undo history;
+        # the saved scroll offset keeps the view from jumping to the top.
+        scroll = editor.verticalScrollBar().value()
+        cursor = editor.textCursor()
+        cursor.beginEditBlock()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText(clean)
+        cursor.endEditBlock()
+        editor.verticalScrollBar().setValue(scroll)
         hl = self.global_hl if editor is self.global_editor else self.game_hl
         hl.rehighlight()
+        self.statusBar().showMessage("✨ YAML formatted", 2000)
 
     def toggle_template(self, context):
         """Toggle between live config and read-only template view.
@@ -643,17 +758,10 @@ class SDYControlCenter(QMainWindow):
         def worker() -> None:
             launches: set[str] = set()
             try:
-                res = subprocess.run(  # nosec B603
-                    get_journal_cmd(tag),
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                ents = parse_export_format(res.stdout, launches)
+                ents = fetch_tagged_entries(tag, launches)
                 if tag in ("ALL", "STEAM"):
                     ents.extend(fetch_gamescope_logs(launches))
-                if ents:
-                    ents.sort(key=lambda x: x[0])
+                ents.sort(key=lambda x: x[0])
                 self.logs_ready.emit(ents, tag)
             except (subprocess.CalledProcessError, OSError) as err:
                 self.logs_ready.emit([], f"ERROR:{err}")
@@ -733,17 +841,31 @@ class SDYControlCenter(QMainWindow):
             )
 
     def export_support_log(self):
-        """Export the gamescope support log to a user-chosen file."""
+        """Save a full support report (service, preflight, raw logs).
+
+        Unlike the clipboard copy, this does not export the on-screen
+        view: the report is rebuilt from scratch in a worker thread so
+        it is complete regardless of the active filter.
+        """
+        default = f"sdy_support_{datetime.now():%Y%m%d_%H%M%S}.log"
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Save Log", "sdy_support.log"
+            self, "Save Support Report", default
         )
-        if dest:
+        if not dest:
+            return
+
+        def worker() -> None:
             try:
                 Path(dest).write_text(
-                    self.log_display.toPlainText(), encoding="utf-8"
+                    _build_support_report(), encoding="utf-8"
+                )
+                self.process_finished.emit(
+                    "Support Report", f"Saved: {dest}", False
                 )
             except OSError as err:
-                QMessageBox.critical(self, "Save Error", str(err))
+                self.process_finished.emit("Save Error", str(err), True)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ── Async result handlers ─────────────────────────────────────────────
 
@@ -752,6 +874,25 @@ class SDYControlCenter(QMainWindow):
             QMessageBox.warning(self, title, message)
         else:
             QMessageBox.information(self, title, message)
+
+    def _refresh_service_status(self):
+        """Fetch service status off-thread; emit service_status_ready."""
+
+        def worker() -> None:
+            self.service_status_ready.emit(get_service_status())
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_service_status(self, status):
+        """Update the status-bar strip from a ServiceStatus snapshot."""
+        col = {"active": "#2ecc71", "failed": "#e74c3c"}.get(
+            status.active, "#95a5a6"
+        )
+        self.service_label.setText(
+            f"<span style='color:{col};'>●</span> steamos_diy: "
+            f"{status.active} ({status.sub}) · restarts: "
+            f"{status.restarts} · last exit: {status.exit_code}"
+        )
 
     # ── Privileged operations ─────────────────────────────────────────────
 

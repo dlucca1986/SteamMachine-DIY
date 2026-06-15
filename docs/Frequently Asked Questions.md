@@ -3,7 +3,7 @@
 [![Support](https://img.shields.io/badge/Support-Documentation-blue.svg)](#)
 [![Status](https://img.shields.io/badge/Status-Active-success.svg)](#)
 
-This page outlines common technical inquiries regarding the SteamMachine-DIY architecture, philosophy, and implementation.
+Common questions about the architecture, gaming setup, and maintenance.
 
 ---
 

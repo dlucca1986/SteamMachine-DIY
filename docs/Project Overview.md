@@ -4,7 +4,7 @@
 [![Language: Python](https://img.shields.io/badge/Language-Python-3776AB.svg?logo=python&logoColor=white)](#)
 [![Drivers](https://img.shields.io/badge/Drivers-AMD%20%7C%20Intel%20%7C%20NVIDIA-orange.svg)](#)
 
-This page outlines the modular framework for configuring Arch Linux as a dedicated gaming system.
+System requirements, main features, and the packages involved.
 
 ---
 
@@ -16,8 +16,8 @@ This page outlines the modular framework for configuring Arch Linux as a dedicat
     * **Intel**: ANV
     * **NVIDIA (NVK/Nouveau)**: Mesa open-source Vulkan ICD
     * **NVIDIA (Proprietary)**: `nvidia-utils` deployed automatically if the `nvidia` module is detected
-    * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
-    * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
+* **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
+* **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 
 > [!IMPORTANT]
 >
@@ -69,13 +69,7 @@ Configuration is split into system-level (`/etc/default/steamos_diy.conf`) and u
 
 ### ➕ Optional Packages
 
-* **[Goverlay](https://github.com/benjamimgois/goverlay)**: Graphical interface for MangoHud and vkBasalt.
-* **[LACT](https://github.com/ilya-zlobintsev/LACT)**: Control your AMD, Nvidia, or Intel GPU.
-* **[Bottles](https://github.com/bottlesdevs/Bottles)**: Run Windows software and games.
-* **[ProtonUp-Qt](https://davidotek.github.io/protonup-qt/)**: Manage Proton-GE and Wine-GE versions.
-* **[Lutris](https://lutris.net/)**: Central interface for all your game libraries.
-* **[Ludusavi](https://github.com/mtkennerly/ludusavi)**: Back up PC game save data.
-* **[Protontricks](https://github.com/matoking/protontricks)**: Run Winetricks commands for Steam Play/Proton games.
+Recommended companion tools (GPU control, launchers, MangoHud GUIs, save-game backup) are collected in [Useful Links & Resources](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Useful-Links-&-Resources).
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

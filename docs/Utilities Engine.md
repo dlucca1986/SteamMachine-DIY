@@ -3,7 +3,7 @@
 [![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
 [![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
-This page outlines the shared utility module (`utils.py`) and its integration with the native `libcore.so`.
+The shared utility module (`utils.py`) and its integration with the native `libcore.so`.
 
 ---
 
@@ -26,10 +26,12 @@ Files persisted via `write_atomic()` follow a three-step protocol executed entir
 
 The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves.
 
-### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`)
+### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
 `get_ssot_var(key)` reads a value from `/etc/default/steamos_diy.conf` on the **first call** for that key, using a pure-Python line-by-line `key=value` parser (with quote-stripping via `_strip_quotes`), and stores the result in the module-level `_SSOT_CACHE` dict. Subsequent calls return the cached value without disk I/O. Each resolved value is also written into `os.environ` so child processes inherit it.
 
 `get_ssot_num(key, default)` wraps `get_ssot_var` for the timing parameters (`VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising an unguarded `ValueError` that would otherwise abort the session boot loop.
+
+`clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but a long-lived tool — the Control Center doctor (`health.run_preflight`) — must re-validate the *current* on-disk config after the user edits it, instead of seeing stale cached values.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
 `load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error). Never raises.
@@ -81,6 +83,7 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | `backup.py` | `BACKUP_SCRIPT_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
 | `restore.py` | `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
 | `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `spawn_native`, `write_atomic` |
+| `health.py` | `CORE_LIB_DIR`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `clear_ssot_cache`, `get_ssot_var` |
 | Compatibility shims | `jlog`, `run_shim` |
 
 ---

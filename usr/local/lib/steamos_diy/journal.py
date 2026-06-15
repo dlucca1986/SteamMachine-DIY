@@ -201,6 +201,24 @@ def _finalize_export_entry(
     return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")
 
 
+def fetch_tagged_entries(
+    tag: str, launches: set[str]
+) -> list[tuple[datetime, str]]:
+    """Run journalctl for *tag* and parse into (timestamp, line) entries.
+
+    Shared by the Diagnostics view and the support-report export so the
+    two can never drift on how project logs are fetched. Raises
+    CalledProcessError/OSError — error handling is the caller's concern.
+    """
+    res = subprocess.run(  # nosec B603
+        get_journal_cmd(tag),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return parse_export_format(res.stdout, launches)
+
+
 # ---------------------------------------------------------------------------
 # Gamescope log parsing
 # ---------------------------------------------------------------------------

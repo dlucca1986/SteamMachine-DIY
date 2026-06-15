@@ -3,7 +3,7 @@
 [![Logic](https://img.shields.io/badge/Logic-Systemd%20Service%20Architecture-blue.svg)](#)
 [![Session](https://img.shields.io/badge/Session-PAM%20Authenticated-blue.svg)](#)
 
-This page outlines the DM-less boot sequence and the direct GPU session handover implementation.
+The DM-less boot: systemd service, TTY1 handover, and boot-time tuning.
 
 ---
 
@@ -43,7 +43,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 >
 > Modern Plasma 6.x environments may use `plasmalogin.service`.
 >
-> The SteamMachine-DIY installer (v1.3.4+) automatically detects and disables this to ensure framework priority.
+> The installer automatically detects and disables it.
 >
 > Please refer to the **[Arch Wiki](https://wiki.archlinux.org/title/Plasma_Login_Manager)** for technical details.
 
