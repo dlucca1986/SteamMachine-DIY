@@ -26,7 +26,7 @@ Buttons in order:
 | :--- | :--- |
 | **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `spawn_native`. |
 | **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
-| **Validate Configuration** | Runs `health.run_preflight()` off-thread and shows a colour-coded report (config presence, path resolution, YAML syntax, group membership, C-Core, session state). See [Configuration Health](#-configuration-health-healthpy). |
+| **Validate Configuration** | Runs `health.run_preflight()` off-thread and shows a colour-coded report (config presence, path resolution, YAML syntax, gamescope flag validity, group membership, C-Core, session state). See [Configuration Health](#-configuration-health-healthpy). |
 | **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
@@ -69,6 +69,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped |
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
+| **Gamescope flags** | every option token in `config flags` is recognised by the installed `gamescope --help` — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
 | **C-Core** | `libcore.so` is loadable |
 | **Session state** | the `next_session` directory is writable |
