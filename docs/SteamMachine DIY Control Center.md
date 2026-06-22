@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 PyQt6 dashboard for system management, YAML configuration editing, and log analysis.
@@ -57,7 +57,7 @@ Per-game YAML profile editor backed by journal-based game discovery.
 
 ## 🩺 Configuration Health (`health.py`)
 
-> A Qt-free backend module — like `journal.py`, it is pure functions with no project-module side effects, testable in isolation and ready for a future `sdy doctor` CLI. It powers two surfaces: the **Validate Configuration** button and the status-bar service strip.
+> A Qt-free backend module — like `journal.py`, it is pure functions with no project-module side effects, testable in isolation. It powers two surfaces: the **Validate Configuration** button and the status-bar service strip.
 
 ### Preflight (`run_preflight`)
 The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight()` off-thread and renders a colour-coded pass/fail report via the `preflight_ready` signal. Each check returns a `CheckResult(name, ok, detail)`:

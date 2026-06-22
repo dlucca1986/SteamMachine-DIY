@@ -1,3 +1,6 @@
+[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 🔗 Useful Links & Resources
 
 A curated list of tools, guides, and communities to help you get the most out of your DIY Steam Machine.

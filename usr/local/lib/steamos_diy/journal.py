@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      2.1.1
+# VERSION:      2.1.2
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -56,7 +56,7 @@ def get_journal_cmd(tag: str) -> list[str]:
         "export",
     ]
     tag_args = {
-        "ALL": ["-t", "CORE", "-t", "STEAM", "-t", "SYSTEM", "-t", "DEBUG"],
+        "ALL": ["-t", "CORE", "-t", "STEAM", "-t", "SYSTEM"],
         "CORE": ["-t", "CORE"],
         "STEAM": ["-t", "STEAM"],
         "SYSTEM": ["-t", "SYSTEM"],
