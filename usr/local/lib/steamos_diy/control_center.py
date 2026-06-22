@@ -11,6 +11,8 @@
 # =============================================================================
 """
 
+# pylint: disable=too-many-lines  # cohesive UI god-object, splitting hurts
+
 import os
 import re
 import subprocess  # nosec B404
@@ -31,6 +33,8 @@ from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
+    QKeySequence,
+    QShortcut,
     QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
@@ -39,6 +43,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -163,6 +168,8 @@ def _build_support_report() -> str:
 class SDYControlCenter(QMainWindow):
     """Main application window: diagnostics, maintenance, YAML editors."""
 
+    # pylint: disable=too-many-public-methods  # Qt slots + closeEvent override
+
     process_finished = pyqtSignal(str, str, bool)  # (title, message, is_error)
     logs_ready = pyqtSignal(list, str)  # (entries, tag)
     games_detected = pyqtSignal(dict)  # {name: appid_or_name}
@@ -199,8 +206,10 @@ class SDYControlCenter(QMainWindow):
         # Diagnostics tab widgets
         self.log_display = None
         self.tag_filter = None
+        self.log_search = None
         self.copy_btn = None
         self.support_btn = None
+        self._log_text = ""  # last fetched logs, cached for live filtering
 
         # Global config tab widgets
         self.global_editor = None
@@ -241,6 +250,11 @@ class SDYControlCenter(QMainWindow):
         )
         self.game_editor.textChanged.connect(
             lambda: self.game_editor.setExtraSelections([])
+        )
+
+        # Ctrl+S saves the editor on the active tab
+        QShortcut(
+            QKeySequence.StandardKey.Save, self, self._save_current_tab
         )
 
         # Service health strip + periodic refresh
@@ -285,9 +299,13 @@ class SDYControlCenter(QMainWindow):
         self.tag_filter = QComboBox()
         self.tag_filter.addItems(["ALL", "CORE", "STEAM", "SYSTEM"])
         self.tag_filter.currentTextChanged.connect(self.load_logs)
+        self.log_search = QLineEdit()
+        self.log_search.setPlaceholderText("🔍 Filter logs…")
+        self.log_search.setClearButtonEnabled(True)
+        self.log_search.textChanged.connect(self._apply_log_filter)
         header.addWidget(QLabel("<b>Component Filter:</b>"))
         header.addWidget(self.tag_filter)
-        header.addStretch()
+        header.addWidget(self.log_search, 1)
         layout.addLayout(header)
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
@@ -582,6 +600,7 @@ class SDYControlCenter(QMainWindow):
         state["is_template"] = True
         save_btn.setEnabled(False)
         hl.rehighlight()
+        editor.document().setModified(False)
 
     def _exit_template_mode(self, state, widgets):
         editor, save_btn, tmp_btn, hl = widgets
@@ -590,6 +609,7 @@ class SDYControlCenter(QMainWindow):
         state["is_template"] = False
         save_btn.setEnabled(True)
         hl.rehighlight()
+        editor.document().setModified(False)
 
     def _atomic_save(self, path, content, editor):
         """Validate YAML and persist via the C-Core atomic-write path."""
@@ -599,6 +619,7 @@ class SDYControlCenter(QMainWindow):
             p_obj = Path(path)
             p_obj.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(p_obj, content)
+            editor.document().setModified(False)
             QMessageBox.information(self, "Success", "Configuration saved!")
         except YAMLError as exc:
             self._highlight_yaml_error(editor, exc)
@@ -634,6 +655,7 @@ class SDYControlCenter(QMainWindow):
             self.global_editor.setPlainText(path.read_text(encoding="utf-8"))
             if self.global_hl:
                 self.global_hl.rehighlight()
+            self.global_editor.document().setModified(False)
 
     def save_global_config(self):
         """Atomically save the global YAML editor content to disk."""
@@ -659,6 +681,7 @@ class SDYControlCenter(QMainWindow):
             self.game_editor.setPlainText(scaffold)
         if self.game_hl:
             self.game_hl.rehighlight()
+        self.game_editor.document().setModified(False)
 
     def _scaffold_game_profile(self, raw, name):
         """Build default YAML profile; includes SDY_ID header if AppID present.
@@ -684,6 +707,61 @@ class SDYControlCenter(QMainWindow):
         self._atomic_save(
             str(path), self.game_editor.toPlainText(), self.game_editor
         )
+
+    # ── Unsaved-changes guard ──────────────────────────────────────────────
+
+    def _save_current_tab(self):
+        """Ctrl+S — save the editor on the active tab (skips template view)."""
+        idx = self.tabs.currentIndex()
+        if idx == self.tabs.indexOf(self.global_tab) and not self.view_states[
+            "global"
+        ]["is_template"]:
+            self.save_global_config()
+        elif idx == self.tabs.indexOf(self.games_tab) and not self.view_states[
+            "games"
+        ]["is_template"]:
+            self.save_game_profile()
+
+    def _dirty_editors(self):
+        """Return the save callables of editors holding unsaved changes.
+
+        Template views are skipped — they are read-only previews, and their
+        modified flag is cleared on entry/exit so they never read as dirty.
+        """
+        dirty = []
+        if (
+            not self.view_states["global"]["is_template"]
+            and self.global_editor.document().isModified()
+        ):
+            dirty.append(self.save_global_config)
+        if (
+            not self.view_states["games"]["is_template"]
+            and self.game_editor.document().isModified()
+        ):
+            dirty.append(self.save_game_profile)
+        return dirty
+
+    def closeEvent(self, event):  # pylint: disable=invalid-name
+        """Qt override: warn before discarding unsaved editor changes."""
+        dirty = self._dirty_editors()
+        if not dirty:
+            event.accept()
+            return
+        reply = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            "You have unsaved changes in the editor. Save before closing?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if reply == QMessageBox.StandardButton.Cancel:
+            event.ignore()
+            return
+        if reply == QMessageBox.StandardButton.Save:
+            for save in dirty:
+                save()
+        event.accept()
 
     # ── Game discovery (background thread) ─────────────────────────────────
 
@@ -776,9 +854,16 @@ class SDYControlCenter(QMainWindow):
             return
 
         if ents:
-            self._display_colored_logs("\n".join(e[1] for e in ents))
+            self._log_text = "\n".join(e[1] for e in ents)
+            self._display_colored_logs(self._log_text)
         else:
+            self._log_text = ""
             self.log_display.setPlainText(f"No {tag} activity.")
+
+    def _apply_log_filter(self):
+        """Re-render the cached logs honouring the search box (live filter)."""
+        if self._log_text:
+            self._display_colored_logs(self._log_text)
 
     def _apply_log_style(self, line):
         for tag, (ico, col) in self.log_styles.items():
@@ -809,7 +894,8 @@ class SDYControlCenter(QMainWindow):
 
     def _display_colored_logs(self, logs):
         self.log_display.clear()
-        lines, last, count = logs.strip().split("\n"), None, 1
+        query = self.log_search.text().strip().lower()
+        lines, last, count, shown = logs.strip().split("\n"), None, 1, 0
 
         def flush(c):
             if c > 1:
@@ -819,6 +905,8 @@ class SDYControlCenter(QMainWindow):
                 )
 
         for line in lines:
+            if query and query not in line.lower():
+                continue
             m = _LOG_TIMESTAMP_RE.search(line)
             pure = m.group(1) if m else line
             if pure == last:
@@ -827,7 +915,12 @@ class SDYControlCenter(QMainWindow):
             flush(count)
             count, last = 1, pure
             self.log_display.append(self._apply_log_style(line))
+            shown += 1
         flush(count)
+        if query and shown == 0:
+            self.log_display.append(
+                "<i style='color:#7f8c8d;'>No lines match the filter.</i>"
+            )
 
     def copy_logs(self):
         """Copy the log display content to the system clipboard."""
