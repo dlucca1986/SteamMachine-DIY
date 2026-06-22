@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Session](https://img.shields.io/badge/Logic-Atomic%20State-orange.svg)](#)
-[![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
 Core components, filesystem layout, and the SteamOS compatibility shim layer.
 
@@ -12,7 +10,7 @@ Core components, filesystem layout, and the SteamOS compatibility shim layer.
 ### 0. Core Engine (`utils.py`)
 Centralizes shared functions used across the framework:
 
-* **Atomic I/O**: Implements hardware-safe file writes.
+* **Atomic I/O**: Implements power-loss-safe atomic file writes (tmp → `fdatasync` → `rename`).
 
 * **Logging**: Provides standardized logging interfaces (`jlog`).
 
@@ -37,6 +35,12 @@ A wrapper that identifies games via `SteamAppId` or executable name and applies 
 
 ### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`)
 The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
+
+### 7. Health & Preflight (`health.py`)
+A Qt-free backend module — like `journal.py`, pure functions testable in isolation — powering the Control Center's diagnostics. `run_preflight()` returns a list of `CheckResult`s that validate the configuration *before* it can cause a black-screen boot: SSoT presence, binary handlers, SSoT path resolution, YAML syntax, `flags`/`post_start_cmds` types, gamescope flag validity (checked against `gamescope --help`), group membership, C-Core loadability, and session-state writability. `get_service_status()` snapshots `steamos_diy.service` via `systemctl show`. See [Control Center](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center).
+
+### 8. Backup & Restore (`backup.py`, `restore.py`)
+CLI utilities (`sdy-backup` / `sdy-restore`) for surgical capture and recovery of the framework's config, game profiles, and SteamOS compatibility symlinks. Both consume the same `utils.get_backup_mapping()`, so the archive layout can never drift between them; restore enforces a path allow-list plus traversal and symlink guards. See [Backup & Recovery](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Backup-&-Recovery).
 
 ---
 

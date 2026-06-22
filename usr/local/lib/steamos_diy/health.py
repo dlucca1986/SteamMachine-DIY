@@ -15,6 +15,8 @@
 import ctypes
 import grp
 import os
+import re
+import shlex
 import subprocess  # nosec B404
 from pathlib import Path
 from typing import NamedTuple
@@ -52,6 +54,13 @@ _LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
 
 _LIBCORE_PATH: str = f"{CORE_LIB_DIR}/libcore.so"
 _SERVICE_UNIT: str = "steamos_diy.service"
+
+# Leading option token(s) of a `gamescope --help` line, e.g.
+# "-W, --output-width ..." or "--rt ..." — captures short and long form.
+_GS_HELP_OPT = re.compile(r"^(--?[A-Za-z][\w-]*)(?:,\s*(--[\w-]+))?")
+
+# A config flag token is an option, not a negative-number value ("-1").
+_FLAG_TOKEN = re.compile(r"^--?[A-Za-z]")
 
 
 class CheckResult(NamedTuple):
@@ -170,6 +179,82 @@ def _check_config_types() -> list[CheckResult]:
     return results
 
 
+def _gamescope_options(gs_bin: str) -> set[str] | None:
+    """Parse `gamescope --help` into the set of recognised option tokens.
+
+    Returns None when gamescope cannot be run or its help yields nothing,
+    so the caller skips the check instead of reporting a false failure
+    (binary presence is already covered by _check_binaries).
+    """
+    try:
+        res = subprocess.run(  # nosec B603
+            [gs_bin, "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    opts: set[str] = set()
+    for line in (res.stdout + res.stderr).splitlines():
+        match = _GS_HELP_OPT.match(line.strip())
+        if match:
+            opts.update(tok for tok in match.groups() if tok)
+    return opts or None
+
+
+def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
+    """Option tokens in *flags* the installed gamescope does not know.
+
+    Mirrors the runtime (`shlex.split` per entry, then extend argv): an
+    entry may bundle a flag with its value ("-W 1280") or several flags;
+    only option tokens are checked — values and negative numbers ignored.
+    Order-preserving and de-duplicated.
+    """
+    unknown: list[str] = []
+    seen: set[str] = set()
+    for entry in flags:
+        try:
+            tokens = shlex.split(str(entry))
+        except ValueError:
+            tokens = str(entry).split()
+        for tok in tokens:
+            if (
+                _FLAG_TOKEN.match(tok)
+                and tok not in supported
+                and tok not in seen
+            ):
+                seen.add(tok)
+                unknown.append(tok)
+    return unknown
+
+
+def _check_gamescope_flags() -> CheckResult:
+    """Validate global-config 'flags' against the installed gamescope.
+
+    A flag the running gamescope does not recognise makes it exit at
+    launch — the session never starts, systemd retries, and TTY1 goes
+    black with no hint. Catching a typo, or a flag dropped/renamed across
+    gamescope versions, here before boot is the whole point. Scope is the
+    global config (the flags always passed); per-game profiles keep to
+    their own launch path.
+    """
+    data = _load_user_config()
+    flags = data.get("flags") if data else None
+    if not isinstance(flags, list) or not flags:
+        return CheckResult("Gamescope flags", True, "none set")
+    gs_bin = get_ssot_var("bin_gs", "/usr/bin/gamescope")
+    supported = _gamescope_options(gs_bin)
+    if supported is None:
+        return CheckResult("Gamescope flags", True, "gamescope unavailable")
+    unknown = _collect_unknown_flags(flags, supported)
+    if unknown:
+        detail = f"unrecognised: {', '.join(unknown)}"
+        return CheckResult("Gamescope flags", False, detail)
+    return CheckResult("Gamescope flags", True, "all recognised")
+
+
 def _check_binaries() -> list[CheckResult]:
     """Verify each SSoT binary handler resolves to an executable file."""
     results: list[CheckResult] = []
@@ -223,6 +308,7 @@ def run_preflight() -> list[CheckResult]:
     results.append(_check_user_config())
     results.extend(_check_game_profiles())
     results.extend(_check_config_types())
+    results.append(_check_gamescope_flags())
     results.append(_check_groups())
     results.append(_check_core())
     results.append(_check_state())

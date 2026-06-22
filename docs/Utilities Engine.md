@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Logic](https://img.shields.io/badge/Logic-C--Core%20Bindings-orange.svg)](#)
-[![Framework](https://img.shields.io/badge/Framework-SSoT%20Architecture-blue.svg)](#)
 
 The shared utility module (`utils.py`) and its integration with the native `libcore.so`.
 

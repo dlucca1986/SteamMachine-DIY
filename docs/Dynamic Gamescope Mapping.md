@@ -1,7 +1,5 @@
 [![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Configuration](https://img.shields.io/badge/Logic-Dynamic%20YAML-blue.svg)](#)
-[![Engine](https://img.shields.io/badge/Engine-DGM%20Injection-orange.svg)](#)
 
 How YAML configuration becomes Gamescope arguments: global config, per-game overrides, and templates.
 
@@ -30,7 +28,7 @@ This is a **YAML List** that defines how Gamescope should render the session.
 * **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay embedded directly into the Gamescope compositor).
 
 > [!NOTE]
-> When `--mangoapp` is active, MangoHud reads its configuration from `~/.config/MangoHud/MangoHud.conf` and `~/.config/MangoHud/presets.conf`. These files must be created manually to customize the overlay display.
+> When `--mangoapp` is active, the overlay reads its configuration from `~/.config/MangoHud/presets.conf` — **not** `MangoHud.conf`, which only applies when `mangohud` is used as a per-game `GAME_WRAPPER`. Create `presets.conf` manually to customise the overlay; if you use both modes, keep the two files in sync.
 
 #### ⚠️ Essential Syntax Rule
 In YAML, parameters and values must be enclosed in the **same set of quotes** to be parsed correctly by the launcher.
