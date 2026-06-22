@@ -5,10 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — Control Center Health Tooling
+## [2.1.2] — 2026-06-22 — Control Center Health Tooling
 
 ### Added
-- `health.py`: new Qt-free backend module (mirrors `journal.py` — pure functions, testable in isolation, ready for a future `sdy doctor` CLI) exposing config-validation and service-status helpers.
+- `health.py`: new Qt-free backend module (mirrors `journal.py` — pure functions, testable in isolation) exposing config-validation and service-status helpers.
   - `run_preflight()` returns a list of `CheckResult`s covering: SSoT config presence; binary handlers (`bin_gs`/`bin_steam`/`bin_plasma`/`bin_dbus`) resolving to executables; the declared SSoT paths (`user_config`, `games_conf_dir`) actually existing; YAML syntax of the global config and every game profile (reporting the offending line); session-critical group membership (`tty`/`video`/`render`/`input`); C-Core loadability; and a writable session-state directory.
   - It also flags the two top-level config fields the launcher iterates directly (`flags`, `post_start_cmds`) when mistyped as a scalar instead of a list — runtime would otherwise walk a string character-by-character into junk argv. Absent or null fields are correctly treated as empty and skipped. Full schema/semantic validation is deliberately out of scope (the runtime already degrades unexpected keys and bad `LOG_LEVEL`/timing values gracefully).
   - `get_service_status()` / `parse_service_status()` snapshot `steamos_diy.service` via `systemctl show` (no root) into a `ServiceStatus`, degrading missing or non-numeric fields to safe placeholders.
@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `backup.py`: automatic archive rotation — after every successful backup, archives beyond the `BACKUP_KEEP` count (new SSoT key, default `5`; `0` disables pruning) are deleted oldest-first, so `~/.config/steamos_diy/backups/` never grows unbounded. The timestamped naming makes lexicographic order chronological and in-flight `.tmp` files are never matched. Removals are logged as `BACKUP_PRUNED`.
 - `utils.py`: `clear_ssot_cache()` drops the in-process `_SSOT_CACHE` so long-lived tools (the Control Center doctor) re-validate the *current* on-disk config after an edit instead of returning cached values. `run_preflight()` calls it first, so re-running the doctor after fixing the config no longer requires restarting the Control Center.
 - `health.py`: new preflight check **Gamescope flags** — validates the global-config `flags` against the installed `gamescope --help`, flagging any option the running gamescope does not recognise. An unknown or mistyped flag makes gamescope exit at launch, so the session never starts and TTY1 goes black with no hint; catching it before boot is the point. Mirrors the runtime split (`shlex.split` per entry), checks only option tokens (values and negative numbers ignored), and skips itself cleanly when `gamescope --help` can't be run.
+- `control_center.py`: **log filter box** in the Diagnostics tab — a search field live-filters the displayed log to lines containing the query (case-insensitive), re-rendering from the cached fetch without re-querying journalctl. Empty query restores the normal deduplicated view; a no-match query shows a hint.
+- `control_center.py`: **unsaved-changes guard** — closing the window with unedited-but-unsaved YAML now prompts Save / Discard / Cancel instead of silently dropping the edits, and **Ctrl+S** saves the editor on the active tab (Global Options or Game Overrides; ignored in template view). The editor's modified flag is cleared on load, template toggle and save, so the guard only trips on genuine pending edits.
 
 ### Changed
 - `control_center.py`: **Export Support Report** (formerly *Export Support Log*) now produces a real diagnostic bundle instead of dumping the on-screen view. The file contains kernel, `steamos_diy.service` status, the full preflight report and the raw last-12h logs (all tags + gamescope), re-fetched independently of the active Diagnostics filter and without the display-side dedup collapse — complete and greppable for issue reports. Default filename is timestamped; the report is built in a worker thread (`_build_support_report`). The journal fetch is shared with the Diagnostics view via the new `journal.fetch_tagged_entries`, so the two paths cannot drift.
@@ -30,7 +32,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 - `control_center.py`: `beautify_yaml` no longer destroys a comments-only document. ruamel loads such a document as `None` and would round-trip it to a literal `null`, wiping the user's comments from the editor; it is now left untouched ("Nothing to format").
-- `steamos_diy_core.c`: `c_notify` clamped the `snprintf` would-be length to `sizeof(buf)` instead of `sizeof(buf) - 1`, sending the trailing NUL byte to the TTY; a negative return (encoding error) would also have reached `write()` as a huge unsigned length. Both paths are now guarded — the build is clean under `-Wconversion`.
+- `steamos_diy_core.c`: `c_notify` clamped the `snprintf` would-be length to `sizeof(buf)` instead of `sizeof(buf) - 1`, sending the trailing NUL byte to the TTY; a negative return (encoding error) would also have reached `write()` as a huge unsigned length. Both paths are now guarded — the build is clean under `-Wall -Wextra`.
 - `steamos_diy_core.c`: `c_sd_notify_ready` passed `sizeof(struct sockaddr_un)` as the address length, which breaks abstract-socket addressing (`@` prefix): abstract names are length-delimited, so the kernel treated the NUL padding as part of the name and `READY=1` went to a non-existent socket. The length is now computed as `offsetof(sun_path) + strlen(path)`, valid for both abstract and filesystem sockets.
 
 ### Documentation

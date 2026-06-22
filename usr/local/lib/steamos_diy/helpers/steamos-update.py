@@ -3,7 +3,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - SteamOS Update Shim
-# VERSION:      2.1.1
+# VERSION:      2.1.2
 # DESCRIPTION:  Self-sufficient shim for SteamOS OTA update infrastructure.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

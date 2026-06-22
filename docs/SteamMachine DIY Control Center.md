@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.1-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 PyQt6 dashboard for system management, YAML configuration editing, and log analysis.
@@ -12,7 +12,8 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
 * **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
-* **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note.
+* **Filter box**: A search field live-filters the displayed log (`_apply_log_filter()`) to lines containing the typed text (case-insensitive), re-rendering from the cached fetch — no extra `journalctl` call. Clearing it restores the normal view; a query with no hits shows a *"No lines match the filter."* hint.
+* **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note (the active filter takes priority — filtered-out lines are skipped first).
 * **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
@@ -38,7 +39,8 @@ Text editor for YAML configuration files with real-time validation.
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser — converting tabs to two spaces, fixing indentation and normalising spacing while preserving comments and quoting. The reformat is applied as a **single undoable edit** (one `Ctrl+Z` reverts it) and the scroll position is preserved; the outcome is reported in the status bar (`✨ YAML formatted` / `Already clean` / `Nothing to format` for a comments-only document / `Syntax error — see highlight`). It only reformats documents that already parse — broken YAML surfaces as a syntax error instead, and string *values* (e.g. the content inside each `flags` entry) are left verbatim.
-* **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file.
+* **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file. **Ctrl+S** saves the editor on the active tab (`_save_current_tab()`).
+* **Unsaved-changes guard**: closing the window with pending edits in either YAML editor prompts Save / Discard / Cancel (`closeEvent` → `_dirty_editors()`) instead of dropping them silently. The editor's modified flag is cleared on load, template toggle and save, so the prompt only appears for genuine unsaved edits — and template previews never count as dirty.
 * **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
 
 ### 4. Game Overrides (Tab Index 3)
@@ -55,7 +57,7 @@ Per-game YAML profile editor backed by journal-based game discovery.
 
 ## 🩺 Configuration Health (`health.py`)
 
-> A Qt-free backend module — like `journal.py`, it is pure functions with no project-module side effects, testable in isolation and ready for a future `sdy doctor` CLI. It powers two surfaces: the **Validate Configuration** button and the status-bar service strip.
+> A Qt-free backend module — like `journal.py`, it is pure functions with no project-module side effects, testable in isolation. It powers two surfaces: the **Validate Configuration** button and the status-bar service strip.
 
 ### Preflight (`run_preflight`)
 The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight()` off-thread and renders a colour-coded pass/fail report via the `preflight_ready` signal. Each check returns a `CheckResult(name, ok, detail)`:
@@ -92,6 +94,7 @@ Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_st
 | Tab | Action | Method | Logic |
 | :--- | :--- | :--- | :--- |
 | **0** | Load Logs | `load_logs()` | `get_journal_cmd(tag)` → `journalctl -t` (12h, 300 entries); `ALL`/`STEAM` also merge gamescope logs (last 1h, `short-iso`) |
+| **0** | Filter Logs | `_apply_log_filter()` | Live case-insensitive filter of the cached logs (no re-query) |
 | **0** | Export Report | `export_support_log()` | `QFileDialog` → `_build_support_report()` off-thread (service + preflight + raw logs) → `Path.write_text` |
 | **1** | Validate Config | `validate_config()` | `health.run_preflight()` off-thread → colour-coded report |
 | **1** | Clean Logs | `cleanup_logs_privileged()` | `pkexec journalctl --rotate --vacuum-time=1s` (single invocation) |
@@ -102,6 +105,8 @@ Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_st
 | **2** | View Template | `toggle_template("global")` | Loads/restores `.example.yaml`; disables save while active |
 | **3** | Scan Games | `refresh_detected_games()` | `journalctl --since "24 hours ago"` → filter → last 2000 game lines |
 | **3** | Save Profile | `save_game_profile()` | `_atomic_save()` → `games.d/<Name>.yaml` |
+| **2/3** | Save (Ctrl+S) | `_save_current_tab()` | Saves the active tab's editor (skips template view) |
+| **2/3** | Close guard | `closeEvent()` | `_dirty_editors()` → Save / Discard / Cancel prompt on pending edits |
 
 ---
 
