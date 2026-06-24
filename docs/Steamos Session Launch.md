@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.3-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 The supervisor behind session transitions: lifecycle, watchdog, signals and exit codes.
@@ -16,7 +16,7 @@ Execution arguments are generated from a **YAML configuration**.
 #### **Transformation Logic**
 The `_build_gamescope_args()` function constructs the execution string:
 * **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command.
-* **Environment Overrides**: Injects custom variables from `env_vars` (e.g., `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"`) into the session environment. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
+* **Environment Overrides**: First applies `GAME_MODE_ENV` — a fixed set of session capabilities advertised to Steam (see *Session Capabilities* below) — then injects the user's `env_vars`, which are applied afterwards and therefore keep the last word. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
 * **Safe Execution**: Uses `subprocess.Popen` with argument arrays to prevent shell-injection vulnerabilities.
 
 ### 3. Atomic State Management
@@ -38,14 +38,33 @@ Gamescope is launched with two hardcoded flags, followed by the user-defined YAM
 
 ```python
 gs_args = [gs_bin, "-e", "-f"]          # hardcoded: embedded + fullscreen
+apply_env_map(GAME_MODE_ENV)            # session capabilities (see below)
+apply_env_map(cfg.get("env_vars"))      # user env_vars — applied last, win
 # ... flags from config.yaml appended here ...
-gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3"])
+gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
 ```
 
 * **`-e`**: Runs Gamescope in embedded mode, integrating with the existing DRM/KMS session rather than creating a new display server.
 * **`-f`**: Forces fullscreen output.
 * **`-gamepadui`**: Launches Steam in Big Picture / Gamepad UI mode — the controller-friendly interface optimised for TV/couch use.
 * **`-steamos3`**: Activates SteamOS-specific features, including system update channels and controller mapping.
+* **`-steamdeck`**: Unlocks the full Quick Access side menu and its live controls (scaling, frame limit, etc.). Additive to `-gamepadui`, not a replacement.
+
+---
+
+## 🧩 Session Capabilities (`GAME_MODE_ENV`)
+Before the user's `env_vars`, the launcher applies a fixed map of **compositor/Mesa capabilities** so Steam's Game Mode exposes the matching Quick Access controls on **any GPU**. The user never needs to set these:
+
+| Capability env | Steam control unlocked |
+| :--- | :--- |
+| `STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT`, `STEAM_GAMESCOPE_NIS_SUPPORTED` | Scaling Filter (FSR / NIS) |
+| `STEAM_GAMESCOPE_HAS_TEARING_SUPPORT`, `STEAM_GAMESCOPE_TEARING_SUPPORTED` | Disable Vertical Sync (tearing) |
+| `STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER` | Frame Limit |
+| `vk_xwayland_wait_ready=false` | Lower input latency (session tweak, no Steam control) |
+| `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0` | Keep SDL games up on focus loss (session tweak) |
+| `ENABLE_GAMESCOPE_WSI=1`, `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3`, `WINEDLLOVERRIDES=dxgi=n` | Proton/vkd3d session defaults (session tweak, no Steam control) |
+
+These are **panel-independent** — the control is always safe to expose; only its *benefit* depends on hardware. **Display-dependent** capabilities — VRR (`STEAM_GAMESCOPE_VRR_SUPPORTED`) and HDR (`STEAM_GAMESCOPE_HDR_SUPPORTED`) — are deliberately left out: declare them in your own `env_vars` **only when your monitor supports them**, otherwise Steam shows controls that do nothing. Since user `env_vars` are applied after `GAME_MODE_ENV`, they can override any of these defaults.
 
 ---
 

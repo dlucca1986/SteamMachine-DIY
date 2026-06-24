@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Health & Preflight Backend
-# VERSION:      2.1.2
+# VERSION:      2.1.3
 # DESCRIPTION:  Pure config-validation and service-status helpers.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)

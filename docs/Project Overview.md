@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.2-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.3-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 System requirements, main features, and the packages involved.
@@ -57,7 +57,7 @@ Configuration is split into system-level (`/etc/default/steamos_diy.conf`) and u
 
 ### 📦 Essential Core Packages
 * 🚀 **Gamescope**: Valve's micro-compositor for Wayland.
-* 🎮 **Steam**: Running in `-gamepadui` mode.
+* 🎮 **Steam**: Running in Game Mode (`-gamepadui -steamos3 -steamdeck`).
 * 📊 **MangoHud**: Vulkan/OpenGL performance overlay.
 * ⚡ **GameMode**: Feral Interactive’s system optimizer.
 * 🖥️ **PyQt6**: Powers the **Control Center** dashboard.
