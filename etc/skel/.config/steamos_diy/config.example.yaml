@@ -43,7 +43,6 @@ flags:
 
   # --- UX polish (universal, panel-independent) ---
   - "--hide-cursor-delay 3000"   # Hide the mouse cursor after 3s idle
-  - "--fade-out-duration 200"    # Smooth fade when the session ends
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level

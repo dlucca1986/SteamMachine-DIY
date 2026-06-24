@@ -83,7 +83,6 @@ flags:
   - "--rt"
   - "--immediate-flips"
   - "--hide-cursor-delay 3000"
-  - "--fade-out-duration 200"
   - "--adaptive-sync"
   - "--mangoapp"
 
