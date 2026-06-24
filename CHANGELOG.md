@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- `session_launch.py`: `GAME_MODE_ENV` — a fixed map of session environment variables applied before the user's `env_vars`, advertising compositor/Mesa capabilities to Steam so Game Mode exposes the matching Quick Access controls on any GPU. Covers FSR/NIS scaling filters (`STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT`, `STEAM_GAMESCOPE_NIS_SUPPORTED`), tearing / "Disable Vertical Sync" (`STEAM_GAMESCOPE_HAS_TEARING_SUPPORT`, `STEAM_GAMESCOPE_TEARING_SUPPORTED`), the dynamic FPS limiter (`STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER`), plus latency (`vk_xwayland_wait_ready=false`) and embedded-session correctness (`SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0`). All are panel-independent; the user's `env_vars` are applied afterwards and win. Display-dependent capabilities (VRR/HDR) deliberately stay in the user config. Mirrors the official SteamOS session.
+- `session_launch.py`: `-steamdeck` added to the Steam launch flags (`-gamepadui -steamos3 -steamdeck`), unlocking the full Quick Access side menu and its live controls. Additive to `-gamepadui`, not a replacement.
+- `config.yaml` (skel default): ships `--hide-cursor-delay 3000` and `--fade-out-duration 200` — universal UX polish (idle cursor hide + smooth session-end fade).
+
+### Changed
+- `config.example.yaml`: documented the new model — universal capabilities are now provided automatically by the launcher (no need to set them); a per-display opt-in section shows VRR/HDR/`PROTON_ENABLE_HDR` to enable only when the panel supports it; added the UX-polish flags.
+- `docs/`: aligned *Steamos Session Launch* (capabilities table, `-steamdeck`), *Dynamic Gamescope Mapping* (env-var guidance, template) and *Project Overview* with the above. Clarified that `-F fsr` is vendor-agnostic (runs on any GPU), not AMD-only.
+
+---
+
 ## [2.1.2] — 2026-06-22 — Control Center Health Tooling
 
 ### Added

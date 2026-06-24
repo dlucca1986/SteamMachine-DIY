@@ -46,6 +46,26 @@ STATUS_MAP: dict[str, str] = {
     "desktop": "Starting Desktop Mode...",
 }
 
+# Applied before the user's env_vars (which keep the last word). All
+# compositor- or Mesa-level and panel-independent: gamescope capabilities
+# advertised to Steam so Game Mode exposes the matching controls, plus
+# universal latency/session tweaks. Display-dependent capabilities (VRR,
+# HDR) deliberately stay out — they belong in the user's config, where the
+# hardware is actually known.
+GAME_MODE_ENV: dict[str, str] = {
+    # Scaling filters (FSR/NIS) — vendor-agnostic shaders
+    "STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT": "1",
+    "STEAM_GAMESCOPE_NIS_SUPPORTED": "1",
+    # Tearing controls — compositor capability, user opts in per game
+    "STEAM_GAMESCOPE_HAS_TEARING_SUPPORT": "1",
+    "STEAM_GAMESCOPE_TEARING_SUPPORTED": "1",
+    # In-Steam dynamic FPS limiter (Mesa fifo-based integration)
+    "STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER": "1",
+    # Latency + embedded-session correctness
+    "vk_xwayland_wait_ready": "false",
+    "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
+}
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -53,16 +73,21 @@ STATUS_MAP: dict[str, str] = {
 
 
 def _build_gamescope_args(cfg: dict) -> list[str]:
-    """Build gamescope+steam argv, applying user_config env_vars and flags."""
+    """Build gamescope+steam argv: session capabilities, then user config.
+
+    GAME_MODE_ENV is applied first so the user's env_vars retain the last
+    word; user flags are appended to the gamescope argv.
+    """
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
     gs_args = [gs_bin, "-e", "-f"]
 
+    apply_env_map(GAME_MODE_ENV)
     apply_env_map(cfg.get("env_vars"))
     for flag in cfg.get("flags") or []:
         gs_args.extend(shlex.split(str(flag)))
 
     steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
-    gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3"])
+    gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
 
     jlog("STEAM", f"LAUNCH_ARGS: {' '.join(gs_args)}")
     return gs_args

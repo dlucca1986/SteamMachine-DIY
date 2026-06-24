@@ -10,12 +10,19 @@
 
 # --- GLOBAL ENVIRONMENT VARIABLES ---
 # These apply to ALL games unless overridden by a specific game profile.
+#
+# NOTE: universal session capabilities (FSR/NIS scaling, tearing, dynamic
+# FPS limiter, latency tweaks) are provided automatically by the launcher.
+# You do NOT need to set them here. Only declare DISPLAY-dependent features
+# that match YOUR hardware, or Steam shows controls that do nothing.
 env_vars:
-  # Enable hardware features (recognized by Steam UI)
-  STEAM_GAMESCOPE_VRR_SUPPORTED: "1"
+  # --- Per-display capabilities (opt-in — only if your panel supports it) ---
+  # STEAM_GAMESCOPE_VRR_SUPPORTED: "1"   # VRR / FreeSync / G-Sync panels
+  # STEAM_GAMESCOPE_HDR_SUPPORTED: "1"   # HDR panels (pair with --hdr-enabled)
+  # PROTON_ENABLE_HDR: "1"               # Let Proton games output HDR
 
-  # Default performance wrapper applied to all games via sdy (e.g., gamemoderun)
-  # Note: MangoHud integration in Gamescope mode uses the --mangoapp flag, not GAME_WRAPPER
+  # Default performance wrapper applied to all games via sdy (e.g. gamemoderun)
+  # Note: MangoHud in Gamescope mode uses the --mangoapp flag, not GAME_WRAPPER
   GAME_WRAPPER: "gamemoderun"
 
   # Default extra arguments (usually empty for global defaults)
@@ -33,6 +40,10 @@ flags:
   - "--sharpness 5"          # Sharpness (Value between 0-20)
   - "--rt"                   # Enable Realtime scheduling
   - "--immediate-flips"      # Minimize latency (Low latency/Tearing)
+
+  # --- UX polish (universal, panel-independent) ---
+  - "--hide-cursor-delay 3000"   # Hide the mouse cursor after 3s idle
+  - "--fade-out-duration 200"    # Smooth fade when the session ends
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
