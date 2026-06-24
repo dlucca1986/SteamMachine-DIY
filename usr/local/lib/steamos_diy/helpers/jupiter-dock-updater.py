@@ -3,7 +3,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Jupiter Dock Updater Shim
-# VERSION:      2.1.2
+# VERSION:      2.1.3
 # DESCRIPTION:  Self-sufficient shim for SteamOS Dock firmware updates.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
