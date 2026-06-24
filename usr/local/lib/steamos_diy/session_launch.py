@@ -64,6 +64,10 @@ GAME_MODE_ENV: dict[str, str] = {
     # Latency + embedded-session correctness
     "vk_xwayland_wait_ready": "false",
     "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
+    # Proton / vkd3d session defaults (from Valve's gamescope-session)
+    "ENABLE_GAMESCOPE_WSI": "1",
+    "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
+    "WINEDLLOVERRIDES": "dxgi=n",
 }
 
 
