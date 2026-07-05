@@ -220,16 +220,25 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
 
 
 def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
-    """Parse *path* as YAML; return {} on any error."""
+    """Parse *path* as a YAML mapping; return {} on error or wrong shape."""
     if not path or not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            return _yaml_reader.load(fh) or {}
+            data = _yaml_reader.load(fh)
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="DEBUG")
+        return {}
     except YAMLError as err:
         jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
+        return {}
+    if isinstance(data, dict):
+        return data
+    if data is not None:
+        # Valid YAML but wrong shape (list/scalar root): callers do
+        # cfg.get(...) on the result, so returning it as-is would crash
+        # the session at boot. Degrade to {} and warn loudly.
+        jlog("CORE", f"YAML_NOT_MAPPING: {path}", level="WARN")
     return {}
 
 

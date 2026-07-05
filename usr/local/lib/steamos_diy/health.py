@@ -156,6 +156,32 @@ def _load_user_config() -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _check_config_root() -> list[CheckResult]:
+    """Flag a global config whose YAML root is not a mapping.
+
+    _check_user_config covers existence and syntax, but a valid document
+    with a list/scalar root passes both while the runtime degrades it to
+    an empty config (load_yaml_safe). Missing file and parse errors stay
+    out — they are already reported upstream. An empty document is fine.
+    """
+    user_config = get_ssot_var("user_config")
+    if not user_config or not os.path.isfile(user_config):
+        return []
+    try:
+        with open(user_config, "r", encoding="utf-8") as fh:
+            data = _yaml_probe.load(fh)
+    except (OSError, YAMLError):
+        return []
+    if data is None or isinstance(data, dict):
+        return []
+    kind = type(data).__name__
+    return [
+        CheckResult(
+            "config root", False, f"must be a mapping, got {kind}"
+        )
+    ]
+
+
 def _check_config_types() -> list[CheckResult]:
     """Flag list-typed global-config fields mistyped as a scalar.
 
@@ -306,6 +332,7 @@ def run_preflight() -> list[CheckResult]:
     results = [_check_ssot()]
     results.extend(_check_binaries())
     results.append(_check_user_config())
+    results.extend(_check_config_root())
     results.extend(_check_game_profiles())
     results.extend(_check_config_types())
     results.append(_check_gamescope_flags())
