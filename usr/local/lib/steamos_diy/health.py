@@ -234,8 +234,9 @@ def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
     """Option tokens in *flags* the installed gamescope does not know.
 
     Mirrors the runtime (`shlex.split` per entry, then extend argv): an
-    entry may bundle a flag with its value ("-W 1280") or several flags;
-    only option tokens are checked — values and negative numbers ignored.
+    entry may bundle a flag with its value ("-W 1280", "--nested-width=1280")
+    or several flags; only option tokens are checked — values and negative
+    numbers ignored, "--flag=value" judged by its flag part alone.
     Order-preserving and de-duplicated.
     """
     unknown: list[str] = []
@@ -246,13 +247,14 @@ def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
         except ValueError:
             tokens = str(entry).split()
         for tok in tokens:
+            base = tok.split("=", 1)[0]
             if (
-                _FLAG_TOKEN.match(tok)
-                and tok not in supported
-                and tok not in seen
+                _FLAG_TOKEN.match(base)
+                and base not in supported
+                and base not in seen
             ):
-                seen.add(tok)
-                unknown.append(tok)
+                seen.add(base)
+                unknown.append(base)
     return unknown
 
 
