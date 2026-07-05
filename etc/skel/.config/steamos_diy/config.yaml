@@ -1,8 +1,8 @@
 # =============================================================================
-# PROJECT:      SteamMachine-DIY - Complete Dynamic Configuration
-# VERSION:      2.1.3 - YAML Architecture
-# DESCRIPTION:  Full Gamescope parameters mapping (Converted from Manifesto).
-# PHILOSOPHY:   KISS (Keep It Simple, Stupid) - Hardcore Libre Mode
+# PROJECT:      SteamMachine-DIY - Global User Configuration
+# VERSION:      2.1.3
+# DESCRIPTION:  Global env vars, gamescope flags and post-start commands.
+# PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         $HOME/.config/steamos_diy/config.yaml
 # LICENSE:      MIT
