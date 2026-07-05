@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Health & Preflight Backend
-# VERSION:      2.1.3
+# VERSION:      2.1.4
 # DESCRIPTION:  Pure config-validation and service-status helpers.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -139,32 +139,53 @@ def _check_game_profiles() -> list[CheckResult]:
     ]
 
 
-def _load_user_config() -> dict | None:
-    """Parse user_config into a dict; None if unreadable or not a mapping.
+# Sentinel for "config missing or unparseable" — distinct from None,
+# which is a legitimate parse result (an empty document).
+_UNREADABLE = object()
 
-    Missing path, parse error and non-mapping root all collapse to None —
-    those failures are _check_user_config's job to report, not this one's.
+
+def _read_user_config() -> object:
+    """Parse user_config once for all the structural checks.
+
+    Returns the parsed root (dict, list, scalar or None) or _UNREADABLE
+    when the file is missing or does not parse — those failures are
+    _check_user_config's job to report, not the structural checks'.
     """
     user_config = get_ssot_var("user_config")
-    if not user_config:
-        return None
+    if not user_config or not os.path.isfile(user_config):
+        return _UNREADABLE
     try:
         with open(user_config, "r", encoding="utf-8") as fh:
-            data = _yaml_probe.load(fh)
+            return _yaml_probe.load(fh)
     except (OSError, YAMLError):
-        return None
-    return data if isinstance(data, dict) else None
+        return _UNREADABLE
 
 
-def _check_config_types() -> list[CheckResult]:
+def _check_config_root(data: object) -> list[CheckResult]:
+    """Flag a global config whose YAML root is not a mapping.
+
+    _check_user_config covers existence and syntax, but a valid document
+    with a list/scalar root passes both while the runtime degrades it to
+    an empty config (load_yaml_safe). An empty document is fine.
+    """
+    if data is _UNREADABLE or data is None or isinstance(data, dict):
+        return []
+    kind = type(data).__name__
+    return [
+        CheckResult(
+            "config root", False, f"must be a mapping, got {kind}"
+        )
+    ]
+
+
+def _check_config_types(data: object) -> list[CheckResult]:
     """Flag list-typed global-config fields mistyped as a scalar.
 
     Presence and syntax are already covered by _check_user_config; this only
     inspects the parsed structure. A field that is absent or null is fine
     (runtime treats it as empty), so only a present, non-list value fails.
     """
-    data = _load_user_config()
-    if data is None:
+    if not isinstance(data, dict):
         return []
 
     results: list[CheckResult] = []
@@ -208,8 +229,9 @@ def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
     """Option tokens in *flags* the installed gamescope does not know.
 
     Mirrors the runtime (`shlex.split` per entry, then extend argv): an
-    entry may bundle a flag with its value ("-W 1280") or several flags;
-    only option tokens are checked — values and negative numbers ignored.
+    entry may bundle a flag with its value ("-W 1280", "--nested-width=1280")
+    or several flags; only option tokens are checked — values and negative
+    numbers ignored, "--flag=value" judged by its flag part alone.
     Order-preserving and de-duplicated.
     """
     unknown: list[str] = []
@@ -220,17 +242,18 @@ def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
         except ValueError:
             tokens = str(entry).split()
         for tok in tokens:
+            base = tok.split("=", 1)[0]
             if (
-                _FLAG_TOKEN.match(tok)
-                and tok not in supported
-                and tok not in seen
+                _FLAG_TOKEN.match(base)
+                and base not in supported
+                and base not in seen
             ):
-                seen.add(tok)
-                unknown.append(tok)
+                seen.add(base)
+                unknown.append(base)
     return unknown
 
 
-def _check_gamescope_flags() -> CheckResult:
+def _check_gamescope_flags(data: object) -> CheckResult:
     """Validate global-config 'flags' against the installed gamescope.
 
     A flag the running gamescope does not recognise makes it exit at
@@ -240,8 +263,7 @@ def _check_gamescope_flags() -> CheckResult:
     global config (the flags always passed); per-game profiles keep to
     their own launch path.
     """
-    data = _load_user_config()
-    flags = data.get("flags") if data else None
+    flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:
         return CheckResult("Gamescope flags", True, "none set")
     gs_bin = get_ssot_var("bin_gs", "/usr/bin/gamescope")
@@ -301,14 +323,17 @@ def run_preflight() -> list[CheckResult]:
 
     Drops the SSoT cache first so re-running the doctor after editing the
     config reflects the current on-disk state, not stale cached values.
+    The global config is parsed once and shared by the structural checks.
     """
     clear_ssot_cache()
     results = [_check_ssot()]
     results.extend(_check_binaries())
     results.append(_check_user_config())
+    user_cfg = _read_user_config()
+    results.extend(_check_config_root(user_cfg))
     results.extend(_check_game_profiles())
-    results.extend(_check_config_types())
-    results.append(_check_gamescope_flags())
+    results.extend(_check_config_types(user_cfg))
+    results.append(_check_gamescope_flags(user_cfg))
     results.append(_check_groups())
     results.append(_check_core())
     results.append(_check_state())

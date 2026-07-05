@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
-# VERSION:      2.1.3
+# VERSION:      2.1.4
 # DESCRIPTION:  Executes games with per-game overrides and global config.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -12,6 +12,7 @@
 """
 
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -43,20 +44,29 @@ _FALLBACK_GAMES_DIR: str = "/etc/steamos_diy/games.d"
 # Headers are always at the top, so reading more would only waste I/O.
 _HEADER_READ_BYTES: int = 1024
 
+# ID declaration line in a profile header (value optionally quoted,
+# inline comment tolerated). Anchored to end-of-line so an AppID can
+# never prefix-match a longer one (searching 220 must not hit
+# "SDY_ID: 2201290").
+_ID_LINE = re.compile(
+    r"(?:STEAM_APPID|SDY_ID):\s*[\"']?(\d+)[\"']?\s*(?:#.*)?$",
+    re.MULTILINE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers — profile resolution
 # ---------------------------------------------------------------------------
 
 
-def _file_header_matches(path: str, search_terms: tuple[str, ...]) -> bool:
-    """Check first _HEADER_READ_BYTES of *path* for any of *search_terms*."""
+def _header_declares_id(path: str, appid: str) -> bool:
+    """Check first _HEADER_READ_BYTES of *path* for an exact-ID header line."""
     try:
         with open(path, "r", encoding="utf-8") as fh:
             header = fh.read(_HEADER_READ_BYTES)
     except OSError:
         return False
-    return any(term in header for term in search_terms)
+    return any(m.group(1) == appid for m in _ID_LINE.finditer(header))
 
 
 def _iter_yaml_files(directory: str):
@@ -78,10 +88,8 @@ def _find_profile_by_id(directory: str, appid: str) -> str | None:
     if not appid or not os.path.isdir(directory):
         return None
 
-    search_terms = (f"STEAM_APPID: {appid}", f"SDY_ID: {appid}")
-
     for entry in _iter_yaml_files(directory):
-        if _file_header_matches(entry.path, search_terms):
+        if _header_declares_id(entry.path, appid):
             return entry.path
 
     return None

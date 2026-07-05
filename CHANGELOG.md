@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.4] — 2026-07-05 — Codebase Review & Hardening
+
+### Changed
+- `backup.py` / `restore.py`: the archive no longer carries executable code. Backup now embeds a plain-data links manifest (`links.txt`, one `link<TAB>target` row per symlink) instead of generating `restore_links.sh`; restore validates every pair against the same path allow-list used for file extraction (both ends must resolve inside it) and recreates the links with `os.symlink` — no shell involved. Archives from previous releases keep working: the legacy script entry is recognised and its `ln -sf` lines are parsed for the same pairs, but the script itself is never executed. This closes the inconsistency where restore carefully validated every extracted file yet ran an embedded shell script as root unvalidated.
+- `restore.py`: file modes from the archive are now applied masked to `0o777`, so a crafted archive can no longer plant setuid/setgid files through a root-run restore.
+
+### Fixed
+- `health.py`: the gamescope-flags preflight treated `--flag=value` tokens as unknown flags (it compared the whole token against `gamescope --help` output); the flag part is now checked alone, so both `--nested-width 1280` and `--nested-width=1280` validate correctly.
+- `control_center.py`: saving a game profile with a `/` in the name could write outside `games.d/`; the save path now applies the same guard as profile loading and reports the rejection in the status bar.
+- `control_center.py`: log lines are HTML-escaped before styling, so a literal `<...>` in a journal payload is displayed instead of being swallowed as markup by the rich-text view.
+- `steamos_diy_core.c`: `c_jlog` serialises the syslog tag switch with a mutex — ctypes releases the GIL during the call, so two Python threads (e.g. main + `post_start_cmds`) could interleave `closelog`/`openlog` and stamp a message with the wrong tag.
+- `sdy.py`: profile lookup by AppID matched the ID as a plain substring, so looking up AppID `220` also matched a profile declaring `SDY_ID: 2201290` — another game's profile (env vars, wrapper) could be applied, with directory scan order deciding the winner. The header scan now uses an end-of-line-anchored declaration match compared for equality; quoted values, CRLF line endings, trailing whitespace and inline comments are all tolerated.
+- `utils.py`: `load_yaml_safe` returned the YAML root whatever its type, so a global config whose root is a list or scalar (e.g. a file starting with `- flags:`) crashed the session launcher at boot — `cfg.get()` on a non-dict raised, systemd retried, and the loop ran until the start limit tripped (black TTY1). It now returns `{}` unless the root is a mapping, logging `YAML_NOT_MAPPING` at WARN so the degradation is visible in the journal.
+- `health.py`: new preflight check **config root** — a global config that is valid YAML but has a non-mapping root previously passed the whole preflight (the syntax check saw valid YAML and the field-type check silently skipped it), so the doctor reported all-green on a config the launcher would degrade to empty. It is now reported as a failure (`must be a mapping, got <type>`). Empty documents, missing files and parse errors stay with their existing checks.
+- `utils.py`: the `get_ssot_var` `@overload` stubs were separated from the implementation by the new cache helpers, tripping type checkers (overload without implementation / redefinition). Runtime was unaffected; mypy is clean again across the package.
+
+### Performance
+- `utils.py`: `get_ssot_var` now fills its cache with a single full parse of the SSoT file on first access; later lookups — including keys absent from the file — never re-read the disk (previously every miss re-scanned the whole file).
+- `health.py`: the preflight parses the global config once and shares the result across the structural checks (root shape, field types, gamescope flags) instead of re-parsing it per check.
+
+### Documentation
+- `Game Wrapper (sdy).md`: AppID discovery wording aligned with the exact-match scan; `SteamMachine DIY Control Center.md`: added the **config root** row to the preflight table and the `--flag=value` note to the gamescope-flags row; `Utilities Engine.md`: documented the mapping-only contract of `load_yaml_safe`, the single-parse SSoT cache, the manifest-based backup contract (`BACKUP_MANIFEST_NAME`) and the missing `get_ssot_num` in the backup.py dependency table; `Backup & Recovery.md`: link-reconstruction and restore-security sections rewritten for the manifest model.
+- Header cleanup in shipped templates: the SSoT template header now reads `SteamMachine-DIY - SSoT` (was `SteamOS-DIY - SSOTH`); `config.yaml` and the example templates drop the legacy header flavor (`Converted from Manifesto`, `Hardcore Libre Mode`, version suffixes).
+
+---
+
 ## [2.1.3] — 2026-06-24 — Game Mode Session Capabilities
 
 ### Added

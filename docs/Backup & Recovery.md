@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.3-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.4-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -32,7 +32,7 @@ The easiest way to manage your data is through the **Maintenance** tab in the Co
    - Restore the SSoT (`/etc/default/steamos_diy.conf`), the systemd service, and the session state file (`next_session`).
    - Restore all core Python scripts (`/usr/local/lib/steamos_diy/`).
    - Restore user config and game profiles (`~/.config/steamos_diy/`).
-   - Reconstruct symbolic links via the embedded `restore_links.sh`.
+   - Reconstruct symbolic links from the embedded `links.txt` manifest.
    - **Fix Permissions**: Re-assigns ownership to your user for home directory files even when run as root.
 
 ---
@@ -53,7 +53,7 @@ The utility targets specific paths to maintain a minimal backup footprint. The m
 > [!IMPORTANT]
 > **Link Reconstruction**
 >
-> During backup, `restore_links.sh` is generated and embedded in the archive. During restore, it is extracted into a private root-only temp directory (`mkdtemp`, mode `0700`, owned by root) and executed from there. This eliminates the TOCTOU window that would exist if the script were written to a world-writable location before being executed.
+> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated with `os.symlink` — the archive never carries executable code. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
 
 ---
 
@@ -78,6 +78,8 @@ The restore tool implements multiple layers of validation before writing anythin
 * **Path traversal protection**: Archive members containing `..` components are rejected before resolution, preventing crafted archives from escaping the allow-list.
 * **Archive content filter**: Hardlinks, symlinks, device nodes, and FIFOs inside the archive are rejected — only regular files and directories are extracted.
 * **Pre-existing symlink guard**: If a symlink already exists at the target path on disk, the write is refused to prevent redirect attacks from a previously planted link.
+* **Permission mask**: File modes from the archive are applied masked to `0o777` — a crafted archive cannot plant setuid/setgid binaries through a root-run restore.
+* **Link manifest validation**: Every `link → target` pair from the manifest (or mined from a legacy script) must resolve inside the allow-list on **both** ends, or it is rejected and logged. No shell is ever involved in link reconstruction.
 
 ## ⚠️ Important Notes
 * **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.

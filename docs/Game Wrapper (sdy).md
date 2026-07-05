@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.3-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.4-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 How `sdy` finds the right profile and launches the game.
@@ -8,7 +8,7 @@ How `sdy` finds the right profile and launches the game.
 ## 🧠 Discovery Logic
 When `sdy %command%` is executed, the script performs a hierarchical lookup for a configuration profile in `~/.config/steamos_diy/games.d/` (first hit wins):
 
-1. **Steam AppID**: If the `SteamAppId` environment variable is set, each YAML file's first 1024 bytes are scanned for `STEAM_APPID: <id>` or `SDY_ID: <id>`.
+1. **Steam AppID**: If the `SteamAppId` environment variable is set, each YAML file's first 1024 bytes are scanned for a `STEAM_APPID: <id>` or `SDY_ID: <id>` declaration line. The declared ID must match **exactly** (searching `220` never hits `2201290`); quoted values and inline comments are tolerated.
 2. **Effective name**: If no ID match is found, `sdy` derives a lookup key from the executable path. If the executable stem is a generic word (`start`, `run`, `launcher`, `launch`, `game`, `main`), the parent directory name is used instead. Then `<games.d>/<eff_name>.yaml` is checked.
 3. **Raw stem fallback**: If the effective-name file is absent, `<games.d>/<stem>.yaml` is tried as a last resort.
 

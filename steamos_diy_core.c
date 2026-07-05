@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,16 +10,22 @@
 #include <sys/un.h>
 
 static char current_tag[64] = "";
+static pthread_mutex_t tag_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // 1. NATIVE LOGGING
 __attribute__((visibility("default")))
 void c_jlog(const char *tag, const char *msg, int priority) {
+    // ctypes releases the GIL during this call, so two Python threads
+    // (e.g. main + post_start_cmds) can race the tag switch; the lock
+    // keeps the closelog/openlog/syslog triple coherent per message.
+    pthread_mutex_lock(&tag_lock);
     if (tag && strcmp(current_tag, tag) != 0) {
         closelog();
         strncpy(current_tag, tag, sizeof(current_tag) - 1);
         openlog(current_tag, LOG_PID, LOG_USER);
     }
     syslog(priority, "%s", msg);
+    pthread_mutex_unlock(&tag_lock);
 }
 
 // 2. TTY NOTIFICATION (low-PSI write via O_NOCTTY)

@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.1.3
+# VERSION:      2.1.4
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -12,13 +12,14 @@
 """
 
 import os
+import shlex
 import subprocess  # nosec B404
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
 
 from utils import (
+    BACKUP_MANIFEST_NAME,
     BACKUP_SCRIPT_NAME,
     SSOT_CONF_PATH,
     check_root,
@@ -222,7 +223,9 @@ def _extract_member(
     if not _ensure_safe_target(target):
         return False
     _write_member(tar, member, target)
-    os.chmod(target, member.mode)
+    # Mask to permission bits only: a crafted archive must not be able
+    # to plant setuid/setgid files through a root-run restore.
+    os.chmod(target, member.mode & 0o777)
     if os.path.realpath(target).startswith(home_real + "/"):
         fix_ownership(target, user)
     return True
@@ -267,54 +270,86 @@ def _extract_payload(
     home_real: str,
     user: str,
 ) -> tarfile.TarInfo | None:
-    """Extract safe members; defer restore_links.sh to a sandbox runner.
+    """Extract safe members; defer the links entry to _restore_links.
 
-    Returns the restore-script TarInfo if present (so the caller can hand
-    it straight to _run_restore_script without a second tar lookup),
-    else None.
+    Returns the links TarInfo (manifest, or legacy restore_links.sh) if
+    present, so the caller can hand it straight to _restore_links
+    without a second tar lookup, else None.
     """
-    script_member: tarfile.TarInfo | None = None
+    links_member: tarfile.TarInfo | None = None
 
     for member in tar.getmembers():
-        if member.name == BACKUP_SCRIPT_NAME:
-            script_member = member
+        if member.name in (BACKUP_MANIFEST_NAME, BACKUP_SCRIPT_NAME):
+            links_member = member
             continue
         _process_member(
             tar, member, mapping, allowed, home_real=home_real, user=user
         )
 
-    return script_member
+    return links_member
 
 
-def _run_restore_script(tar: tarfile.TarFile, member: tarfile.TarInfo) -> None:
-    """Run restore_links.sh from a root-owned 0700 mkdtemp sandbox.
+# ---------------------------------------------------------------------------
+# Internal helpers — symlink reconstruction
+# ---------------------------------------------------------------------------
 
-    Writing to /tmp allowed a race between extraction and exec; mkdtemp
-    with mode 0700 (owned by root) closes that TOCTOU window.
+
+def _iter_link_pairs(name: str, text: str):
+    """Yield (link, target) pairs from the links entry, any format.
+
+    New archives embed a data manifest: one "link<TAB>target" row per
+    line. Legacy archives embed restore_links.sh instead — only its
+    "ln -sf <target> <link>" lines are mined for pairs; the script is
+    parsed, never executed.
     """
-    # mkdtemp returns a 0700 dir owned by the calling user (root here)
-    sandbox = tempfile.mkdtemp(prefix="sdy_restore_")
-    script_path = os.path.join(sandbox, BACKUP_SCRIPT_NAME)
-
-    try:
-        src = tar.extractfile(member)
-        if src is None:
-            return
-        with src, open(script_path, "wb") as dest:
-            dest.write(src.read())
-        os.chmod(script_path, 0o700)
-        subprocess.run([script_path], check=True)  # nosec B603
-    finally:
+    if name == BACKUP_MANIFEST_NAME:
+        for line in text.splitlines():
+            link, sep, target = line.partition("\t")
+            if sep and link and target:
+                yield link, target
+        return
+    for line in text.splitlines():
         try:
-            if os.path.exists(script_path):
-                os.remove(script_path)
-            os.rmdir(sandbox)
-        except OSError as err:
-            jlog(
-                "SYSTEM",
-                f"RESTORE_SANDBOX_CLEANUP_FAIL: {err}",
-                level="WARN",
-            )
+            tokens = shlex.split(line)
+        except ValueError:
+            continue
+        if len(tokens) == 4 and tokens[:2] == ["ln", "-sf"]:
+            yield tokens[3], tokens[2]
+
+
+def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
+    """Recreate one symlink after allow-list validation of both ends."""
+    if not (
+        _is_path_safe(link, allowed) and _is_path_safe(target, allowed)
+    ):
+        jlog(
+            "SYSTEM",
+            f"RESTORE_REJECTED_LINK_PATH: {link} -> {target}",
+            level="WARN",
+        )
+        return
+    try:
+        os.makedirs(os.path.dirname(link), exist_ok=True)
+        if os.path.lexists(link):
+            os.unlink(link)
+        os.symlink(target, link)
+    except OSError as err:
+        jlog("SYSTEM", f"RESTORE_LINK_FAIL: {link} - {err}", level="WARN")
+
+
+def _restore_links(
+    tar: tarfile.TarFile,
+    member: tarfile.TarInfo,
+    allowed: tuple[str, ...],
+) -> None:
+    """Recreate the symlinks recorded in the archive's links entry."""
+    src = tar.extractfile(member)
+    if src is None:
+        return
+    with src:
+        text = src.read().decode("utf-8", errors="replace")
+    for link, target in _iter_link_pairs(member.name, text):
+        _restore_link(link, target, allowed)
 
 
 def _reload_systemd() -> None:
@@ -380,16 +415,16 @@ def _execute_restore(
 ) -> None:
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
-            script_member = _extract_payload(
+            links_member = _extract_payload(
                 tar, mapping, allowed, home_real, user
             )
             jlog("SYSTEM", "RESTORE_PAYLOAD_DONE", level="DEBUG")
-            if script_member is not None:
-                _run_restore_script(tar, script_member)
+            if links_member is not None:
+                _restore_links(tar, links_member, allowed)
                 jlog("SYSTEM", "RESTORE_LINKS_DONE", level="DEBUG")
         _reload_systemd()
         jlog("SYSTEM", "RESTORE_SUCCESS: Environment ready.", level="INFO")
-    except (tarfile.TarError, OSError, subprocess.SubprocessError) as err:
+    except (tarfile.TarError, OSError) as err:
         jlog(
             "SYSTEM",
             f"RESTORE_FATAL: {type(err).__name__}: {err}",

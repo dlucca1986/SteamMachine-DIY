@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.1.3
+# VERSION:      2.1.4
 # DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -13,6 +13,7 @@
 
 # pylint: disable=too-many-lines  # cohesive UI god-object, splitting hurts
 
+import html
 import os
 import re
 import subprocess  # nosec B404
@@ -702,6 +703,12 @@ class SDYControlCenter(QMainWindow):
         raw = self.combo_games.currentText().strip()
         if not raw:
             return
+        if "/" in raw:
+            # Same guard as load_game_file: a "/" would escape games.d/.
+            self.statusBar().showMessage(
+                "Invalid game name — '/' not allowed", 3000
+            )
+            return
         name = raw.split(" (")[0].strip()
         path = self.conf_root / "games.d" / f"{name}.yaml"
         self._atomic_save(
@@ -866,6 +873,10 @@ class SDYControlCenter(QMainWindow):
             self._display_colored_logs(self._log_text)
 
     def _apply_log_style(self, line):
+        # QTextEdit.append renders rich text: escape first so a literal
+        # "<...>" in a log payload displays instead of vanishing as a tag.
+        # The style markers matched below contain no escapable characters.
+        line = html.escape(line, quote=False)
         for tag, (ico, col) in self.log_styles.items():
             if tag in line:
                 return line.replace(

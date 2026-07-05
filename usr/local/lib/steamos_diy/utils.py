@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.3
+# VERSION:      2.1.4
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -54,14 +54,21 @@ NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
 CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
 _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
-# User-side path (relative to home) and embedded restore-script entry name.
+# User-side path (relative to home) and embedded archive-entry names.
 # Centralised here so the archive format contract has a single source of
 # truth — backup and restore can never disagree about what goes where.
+# BACKUP_SCRIPT_NAME survives only so restore can recognise the legacy
+# entry in old archives; new backups embed the data manifest instead.
 USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
+BACKUP_MANIFEST_NAME: str = "links.txt"
 
-# In-process cache for SSoT values — avoids repeated disk reads.
+# In-process cache for SSoT values, filled by one full parse on first
+# access — a missing key then costs a dict miss, not a disk re-read.
+# The loaded flag lives in a mutable cell so clear_ssot_cache can reset
+# it without a `global` statement (same idiom as run()'s proc_holder).
 _SSOT_CACHE: dict[str, str] = {}
+_SSOT_LOADED: list[bool] = [False]
 
 # syslog priority levels for c_jlog (RFC 5424 severity).
 _LEVELS_C: dict[str, int] = {"DEBUG": 7, "INFO": 6, "WARN": 4, "ERROR": 3}
@@ -143,14 +150,6 @@ def sd_notify_ready() -> None:
 # ---------------------------------------------------------------------------
 
 
-@overload
-def get_ssot_var(var_name: str, default: str) -> str: ...
-
-
-@overload
-def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
-
-
 def _strip_quotes(value: str) -> str:
     """Strip whitespace and matching outer quotes from a key=value RHS."""
     value = value.strip()
@@ -159,15 +158,16 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
-def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
-    """Read a SSoT config value, caching it in-process.
+def _load_ssot_cache() -> None:
+    """Parse the whole SSoT file into the cache in a single disk read.
 
-    Also sets os.environ[var_name] so spawned subprocesses inherit it
-    without re-reading the config.
+    First occurrence wins on duplicate keys (same as the old per-key
+    scan). The loaded flag is set before parsing so a read failure is
+    cached too instead of being retried on every later lookup. Resolved
+    values are exported to os.environ so spawned subprocesses inherit
+    them without re-reading the config.
     """
-    if var_name in _SSOT_CACHE:
-        return _SSOT_CACHE[var_name]
-
+    _SSOT_LOADED[0] = True
     try:
         with open(SSOT_CONF_PATH, "r", encoding="utf-8") as fh:
             for line in fh:
@@ -175,14 +175,29 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, _, raw = line.partition("=")
-                if key.strip() == var_name:
-                    value = _strip_quotes(raw)
-                    _SSOT_CACHE[var_name] = value
-                    os.environ[var_name] = value
-                    return value
+                _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
     except OSError as err:
-        jlog("CORE", f"SSOT_READ_ERROR: {var_name} - {err}", level="DEBUG")
-    return default
+        jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
+    os.environ.update(_SSOT_CACHE)
+
+
+@overload
+def get_ssot_var(var_name: str, default: str) -> str: ...
+
+
+@overload
+def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
+
+
+def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
+    """Read a SSoT config value from the in-process cache.
+
+    The first call parses the whole file once (_load_ssot_cache); later
+    calls — hit or miss — never touch the disk.
+    """
+    if not _SSOT_LOADED[0]:
+        _load_ssot_cache()
+    return _SSOT_CACHE.get(var_name, default)
 
 
 def clear_ssot_cache() -> None:
@@ -193,6 +208,7 @@ def clear_ssot_cache() -> None:
     the *current* on-disk config after the user edits it.
     """
     _SSOT_CACHE.clear()
+    _SSOT_LOADED[0] = False
 
 
 def get_ssot_num(var_name: str, default: float) -> float:
@@ -220,16 +236,25 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
 
 
 def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
-    """Parse *path* as YAML; return {} on any error."""
+    """Parse *path* as a YAML mapping; return {} on error or wrong shape."""
     if not path or not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            return _yaml_reader.load(fh) or {}
+            data = _yaml_reader.load(fh)
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="DEBUG")
+        return {}
     except YAMLError as err:
         jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
+        return {}
+    if isinstance(data, dict):
+        return data
+    if data is not None:
+        # Valid YAML but wrong shape (list/scalar root): callers do
+        # cfg.get(...) on the result, so returning it as-is would crash
+        # the session at boot. Degrade to {} and warn loudly.
+        jlog("CORE", f"YAML_NOT_MAPPING: {path}", level="WARN")
     return {}
 
 
