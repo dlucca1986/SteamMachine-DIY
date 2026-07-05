@@ -63,8 +63,12 @@ USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 BACKUP_MANIFEST_NAME: str = "links.txt"
 
-# In-process cache for SSoT values — avoids repeated disk reads.
+# In-process cache for SSoT values, filled by one full parse on first
+# access — a missing key then costs a dict miss, not a disk re-read.
+# The loaded flag lives in a mutable cell so clear_ssot_cache can reset
+# it without a `global` statement (same idiom as run()'s proc_holder).
 _SSOT_CACHE: dict[str, str] = {}
+_SSOT_LOADED: list[bool] = [False]
 
 # syslog priority levels for c_jlog (RFC 5424 severity).
 _LEVELS_C: dict[str, int] = {"DEBUG": 7, "INFO": 6, "WARN": 4, "ERROR": 3}
@@ -162,15 +166,16 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
-def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
-    """Read a SSoT config value, caching it in-process.
+def _load_ssot_cache() -> None:
+    """Parse the whole SSoT file into the cache in a single disk read.
 
-    Also sets os.environ[var_name] so spawned subprocesses inherit it
-    without re-reading the config.
+    First occurrence wins on duplicate keys (same as the old per-key
+    scan). The loaded flag is set before parsing so a read failure is
+    cached too instead of being retried on every later lookup. Resolved
+    values are exported to os.environ so spawned subprocesses inherit
+    them without re-reading the config.
     """
-    if var_name in _SSOT_CACHE:
-        return _SSOT_CACHE[var_name]
-
+    _SSOT_LOADED[0] = True
     try:
         with open(SSOT_CONF_PATH, "r", encoding="utf-8") as fh:
             for line in fh:
@@ -178,14 +183,21 @@ def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, _, raw = line.partition("=")
-                if key.strip() == var_name:
-                    value = _strip_quotes(raw)
-                    _SSOT_CACHE[var_name] = value
-                    os.environ[var_name] = value
-                    return value
+                _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
     except OSError as err:
-        jlog("CORE", f"SSOT_READ_ERROR: {var_name} - {err}", level="DEBUG")
-    return default
+        jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
+    os.environ.update(_SSOT_CACHE)
+
+
+def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
+    """Read a SSoT config value from the in-process cache.
+
+    The first call parses the whole file once (_load_ssot_cache); later
+    calls — hit or miss — never touch the disk.
+    """
+    if not _SSOT_LOADED[0]:
+        _load_ssot_cache()
+    return _SSOT_CACHE.get(var_name, default)
 
 
 def clear_ssot_cache() -> None:
@@ -196,6 +208,7 @@ def clear_ssot_cache() -> None:
     the *current* on-disk config after the user edits it.
     """
     _SSOT_CACHE.clear()
+    _SSOT_LOADED[0] = False
 
 
 def get_ssot_num(var_name: str, default: float) -> float:
