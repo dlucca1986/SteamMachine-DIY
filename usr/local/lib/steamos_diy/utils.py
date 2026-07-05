@@ -150,14 +150,6 @@ def sd_notify_ready() -> None:
 # ---------------------------------------------------------------------------
 
 
-@overload
-def get_ssot_var(var_name: str, default: str) -> str: ...
-
-
-@overload
-def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
-
-
 def _strip_quotes(value: str) -> str:
     """Strip whitespace and matching outer quotes from a key=value RHS."""
     value = value.strip()
@@ -187,6 +179,14 @@ def _load_ssot_cache() -> None:
     except OSError as err:
         jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
     os.environ.update(_SSOT_CACHE)
+
+
+@overload
+def get_ssot_var(var_name: str, default: str) -> str: ...
+
+
+@overload
+def get_ssot_var(var_name: str, default: None = ...) -> str | None: ...
 
 
 def get_ssot_var(var_name: str, default: str | None = None) -> str | None:
