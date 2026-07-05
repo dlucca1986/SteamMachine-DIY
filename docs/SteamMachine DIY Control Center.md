@@ -68,6 +68,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | **Binary `bin_*`** | each handler (`bin_gs` / `bin_steam` / `bin_plasma` / `bin_dbus`) resolves to an executable |
 | **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped |
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
+| **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
 | **Gamescope flags** | every option token in `config flags` is recognised by the installed `gamescope --help` — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
@@ -76,7 +77,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 
 `run_preflight()` calls `clear_ssot_cache()` first, so re-running the doctor after editing the config reflects the **current** on-disk state, not cached values.
 
-> **Scope:** the preflight validates *presence, path resolution and YAML syntax*, plus the two field types the runtime does not guard. It deliberately does **not** perform full schema/semantic validation (unexpected keys, `LOG_LEVEL` values, timing sanity) — the runtime already degrades those gracefully.
+> **Scope:** the preflight validates *presence, path resolution and YAML syntax*, plus the structural mistakes worth catching before boot (a non-mapping config root, list fields mistyped as scalars). It deliberately does **not** perform full schema/semantic validation (unexpected keys, `LOG_LEVEL` values, timing sanity) — the runtime already degrades those gracefully.
 
 ### Service status strip
 A permanent label in the window status bar reports `steamos_diy.service`, refreshed every **4 s** by a `QTimer` that fetches `get_service_status()` off-thread (`service_status_ready` signal):

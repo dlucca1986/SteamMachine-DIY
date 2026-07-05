@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- `sdy.py`: profile lookup by AppID matched the ID as a plain substring, so looking up AppID `220` also matched a profile declaring `SDY_ID: 2201290` — another game's profile (env vars, wrapper) could be applied, with directory scan order deciding the winner. The header scan now uses an end-of-line-anchored declaration match compared for equality; quoted values, CRLF line endings, trailing whitespace and inline comments are all tolerated.
+- `utils.py`: `load_yaml_safe` returned the YAML root whatever its type, so a global config whose root is a list or scalar (e.g. a file starting with `- flags:`) crashed the session launcher at boot — `cfg.get()` on a non-dict raised, systemd retried, and the loop ran until the start limit tripped (black TTY1). It now returns `{}` unless the root is a mapping, logging `YAML_NOT_MAPPING` at WARN so the degradation is visible in the journal.
+- `health.py`: new preflight check **config root** — a global config that is valid YAML but has a non-mapping root previously passed the whole preflight (the syntax check saw valid YAML and the field-type check silently skipped it), so the doctor reported all-green on a config the launcher would degrade to empty. It is now reported as a failure (`must be a mapping, got <type>`). Empty documents, missing files and parse errors stay with their existing checks.
+
+### Documentation
+- `Game Wrapper (sdy).md`: AppID discovery wording aligned with the exact-match scan; `SteamMachine DIY Control Center.md`: added the **config root** row to the preflight table; `Utilities Engine.md`: documented the mapping-only contract of `load_yaml_safe`.
+
+---
+
 ## [2.1.3] — 2026-06-24 — Game Mode Session Capabilities
 
 ### Added

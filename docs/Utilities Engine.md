@@ -32,7 +32,7 @@ The target file is never left in a partial state, even after a sudden power loss
 `clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but a long-lived tool — the Control Center doctor (`health.run_preflight`) — must re-validate the *current* on-disk config after the user edits it, instead of seeing stale cached values.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
-`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` silently on any error (missing file, parse error). Never raises.
+`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` on any error (missing file, parse error) and on a valid document whose root is not a mapping — callers do `cfg.get(...)` on the result, so a list/scalar root is degraded to empty and logged as `YAML_NOT_MAPPING` (WARN). Never raises.
 
 `apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are silently ignored.
 
