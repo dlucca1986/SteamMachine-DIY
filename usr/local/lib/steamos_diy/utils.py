@@ -54,11 +54,14 @@ NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
 CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
 _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
-# User-side path (relative to home) and embedded restore-script entry name.
+# User-side path (relative to home) and embedded archive-entry names.
 # Centralised here so the archive format contract has a single source of
 # truth — backup and restore can never disagree about what goes where.
+# BACKUP_SCRIPT_NAME survives only so restore can recognise the legacy
+# entry in old archives; new backups embed the data manifest instead.
 USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
+BACKUP_MANIFEST_NAME: str = "links.txt"
 
 # In-process cache for SSoT values — avoids repeated disk reads.
 _SSOT_CACHE: dict[str, str] = {}
