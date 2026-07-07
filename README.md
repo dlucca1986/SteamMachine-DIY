@@ -70,6 +70,16 @@ chmod +x install.sh
 sudo ./install.sh
 ```
 
+## 🔄 Updating
+
+From the Control Center: **Maintenance → ⬆️ Check for Updates** (downloads the latest release and runs the installer for you). Or from a terminal, on an unpacked release:
+
+```bash
+sudo ./install.sh --update
+```
+
+User configs and the SSoT are preserved; the system reboots automatically when done. Details in the **[Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating)** wiki page.
+
 ## 🗑️ Uninstallation
 
 ```bash

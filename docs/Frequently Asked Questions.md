@@ -71,7 +71,10 @@ The project uses a **non-destructive** approach. We don't modify core system bin
 >
 > If you update the Kernel, ensure your **Early KMS** is rebuilt so the driver loads before the `steamos_diy` service starts.
 
-### 11. Where are the configuration files?
+### 11. How do I update SteamMachine-DIY itself?
+From the Control Center: **Maintenance → ⬆️ Check for Updates** — it downloads the latest release and runs the installer for you (user configs and the SSoT are preserved; the system reboots when done). Or manually with `sudo ./install.sh --update` on an unpacked release. Full details in [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating).
+
+### 12. Where are the configuration files?
 | Level | Path | Purpose |
 | :--- | :--- | :--- |
 | System | `/etc/default/steamos_diy.conf` | Binary paths, log level, timeouts |
@@ -80,7 +83,7 @@ The project uses a **non-destructive** approach. We don't modify core system bin
 
 See [Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture) for the complete filesystem hierarchy.
 
-### 12. Where can I find the logs for debugging?
+### 13. Where can I find the logs for debugging?
 We use the **System Journal**. Use the following commands or check the **Logs** tab in the Control Center:
 ```bash
 # Session logs (Gaming/Desktop lifecycle, crash recovery)

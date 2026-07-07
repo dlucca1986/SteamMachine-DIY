@@ -72,6 +72,19 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 
 ---
 
+## ⬆️ Update Check & Download (GitHub Releases)
+
+Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check for Updates** button — no Qt, testable standalone:
+
+| Symbol | Description |
+| :--- | :--- |
+| `VERSION` | The running project version. Single runtime source, kept in sync with the file headers by the release bump. |
+| `check_latest_release()` | Queries the GitHub Releases API (fixed `https` URL, 10s timeout) and returns a `ReleaseInfo(version, is_newer, notes, tarball_url, html_url)` — or `None` when the network or the reply is unusable (logged as `UPDATE_CHECK_FAIL`, never raised). Versions compare as integer tuples, so `2.10.0 > 2.9.0`. |
+| `download_release(info, dest_root)` | Streams the release tarball and unpacks it under `dest_root/v<version>/`, pruning previous `v*` downloads first. Extraction uses the tarfile `data` filter (rejects absolute paths, traversal and special members) and only accepts `https://` URLs. Returns the inner export directory (the one holding `install.sh`), or `None` on failure (`UPDATE_DOWNLOAD_FAIL`). |
+| `UPDATES_DIR_NAME` | `"updates"` — the download folder name under `~/.config/steamos_diy/`, shared with `backup.py` which excludes it from archives. |
+
+---
+
 ## 📂 Framework Dependencies
 
 | Component | `utils` imports used |
@@ -79,9 +92,10 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | `session_launch.py` | `NEXT_SESSION_PATH`, `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `spawn_native`, `get_ssot_var`, `get_ssot_num` |
 | `session_select.py` | `NEXT_SESSION_PATH`, `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
 | `sdy.py` | `load_yaml_safe`, `apply_env_map`, `jlog`, `get_ssot_var` |
-| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `verify_archive` |
+| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `verify_archive` |
 | `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `spawn_native`, `write_atomic` |
+| `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `VERSION`, `spawn_native`, `write_atomic` |
+| `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native` |
 | `health.py` | `CORE_LIB_DIR`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `clear_ssot_cache`, `get_ssot_var` |
 | Compatibility shims | `jlog`, `run_shim` |
 

@@ -14,12 +14,13 @@
 import ctypes
 import os
 import pwd
+import shutil
 import subprocess  # nosec B404
 import sys
 import tarfile
 import threading
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, NamedTuple, overload
 
 from ruamel.yaml import YAML as _YAML, YAMLError
 
@@ -49,6 +50,10 @@ except OSError as err:
 # Project-wide path constants — single source of truth for all modules.
 # ---------------------------------------------------------------------------
 
+# Runtime project version — kept in sync with the file headers by the
+# release bump (a plain-text substitution across the whole tree).
+VERSION: str = "2.1.4"
+
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
 CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
@@ -62,6 +67,10 @@ _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 BACKUP_MANIFEST_NAME: str = "links.txt"
+
+# Where downloaded release tarballs are unpacked, relative to the user
+# config dir. Shared with backup.py, which must exclude it from archives.
+UPDATES_DIR_NAME: str = "updates"
 
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
@@ -382,3 +391,144 @@ def run_shim(tag: str, message: str, exit_code: int = 0) -> None:
     """Log the intercepted SteamOS call and exit with the expected code."""
     jlog(tag, message)
     sys.exit(exit_code)
+
+
+# ---------------------------------------------------------------------------
+# Update check & download (GitHub Releases) — no Qt, testable standalone.
+# ---------------------------------------------------------------------------
+
+_RELEASES_API: str = (
+    "https://api.github.com/repos/dlucca1986/SteamMachine-DIY"
+    "/releases/latest"
+)
+_HTTP_TIMEOUT: int = 10
+
+
+class ReleaseInfo(NamedTuple):
+    """Latest-release facts consumed by the Control Center updater."""
+
+    version: str
+    is_newer: bool
+    notes: str
+    tarball_url: str
+    html_url: str
+
+
+def _version_tuple(text: str) -> tuple[int, ...]:
+    """Parse "v2.1.4"/"2.1.4" into a comparable tuple; (0,) if malformed."""
+    try:
+        return tuple(int(p) for p in text.strip().lstrip("v").split("."))
+    except ValueError:
+        return (0,)
+
+
+def _api_str(data: dict[str, Any], key: str) -> str:
+    """String field from the API reply; missing/None degrade to ""."""
+    val = data.get(key)
+    return str(val) if val else ""
+
+
+def _release_from_api(data: Any) -> ReleaseInfo | None:
+    """Map the releases-API JSON to a ReleaseInfo; None if unusable."""
+    if not isinstance(data, dict) or not data.get("tag_name"):
+        jlog("SYSTEM", "UPDATE_CHECK_FAIL: malformed API reply", "WARN")
+        return None
+    remote = _api_str(data, "tag_name").lstrip("v")
+    return ReleaseInfo(
+        version=remote,
+        is_newer=_version_tuple(remote) > _version_tuple(VERSION),
+        notes=_api_str(data, "body"),
+        tarball_url=_api_str(data, "tarball_url"),
+        html_url=_api_str(data, "html_url"),
+    )
+
+
+def check_latest_release() -> ReleaseInfo | None:
+    """Query GitHub for the latest published release.
+
+    Returns None when the network or the API reply is unusable — the
+    caller renders that as "could not check", never as a crash. Fixed
+    https URL and a short timeout: a dead network degrades to a quick
+    "unknown" instead of hanging the worker thread.
+    """
+    # Deferred imports: urllib pulls in ~40ms of http machinery. Only
+    # the Control Center pays that, never the session-boot or game-
+    # launch paths that import utils.
+    # pylint: disable=import-outside-toplevel
+    import json
+    import urllib.request
+    from http.client import HTTPException
+
+    req = urllib.request.Request(
+        _RELEASES_API,
+        headers={
+            "User-Agent": "SteamMachine-DIY",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    try:
+        # B310: fixed https:// URL (_RELEASES_API), no user-controlled scheme.
+        with urllib.request.urlopen(  # nosec B310
+            req, timeout=_HTTP_TIMEOUT
+        ) as resp:
+            data = json.load(resp)
+    except (OSError, ValueError, HTTPException) as err:
+        jlog("SYSTEM", f"UPDATE_CHECK_FAIL: {err}", level="WARN")
+        return None
+    return _release_from_api(data)
+
+
+def _prune_downloads(root: Path) -> None:
+    """Drop previous release downloads (v<digit>… dirs) under *root*.
+
+    Only version-named directories are touched, so anything the user
+    parked in the updates folder by hand survives the cleanup.
+    """
+    for entry in root.iterdir():
+        if (
+            entry.is_dir()
+            and entry.name.startswith("v")
+            and entry.name[1:2].isdigit()
+        ):
+            shutil.rmtree(entry, ignore_errors=True)
+
+
+def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
+    """Download and unpack *info*'s source tarball under *dest_root*.
+
+    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns the
+    inner export directory (the one holding install.sh), or None on any
+    failure. Older downloads are pruned first so the updates folder
+    never accumulates stale releases. The "data" extraction filter
+    rejects absolute paths, traversal and special members.
+    """
+    # Deferred imports — see check_latest_release.
+    # pylint: disable=import-outside-toplevel
+    import urllib.request
+    from http.client import HTTPException
+
+    if not info.tarball_url.startswith("https://"):
+        jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: non-https URL", "ERROR")
+        return None
+    root = Path(dest_root)
+    target = root / f"v{info.version}"
+    req = urllib.request.Request(
+        info.tarball_url, headers={"User-Agent": "SteamMachine-DIY"}
+    )
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        _prune_downloads(root)
+        # B310: scheme constrained to https:// by the guard above.
+        with urllib.request.urlopen(  # nosec B310
+            req, timeout=_HTTP_TIMEOUT
+        ) as resp:
+            with tarfile.open(fileobj=resp, mode="r|gz") as tar:
+                tar.extractall(target, filter="data")
+    except (OSError, ValueError, tarfile.TarError, HTTPException) as err:
+        jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
+        return None
+    for entry in sorted(target.iterdir()):
+        if (entry / "install.sh").is_file():
+            return entry
+    jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: install.sh not found", "ERROR")
+    return None

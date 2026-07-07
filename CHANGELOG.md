@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **In-app updater**: the Control Center Maintenance tab gains **⬆️ Check for Updates** — it queries the GitHub Releases API (stdlib `urllib`, no new dependencies), compares against the running version and, when a newer release exists, shows the release notes and offers **Download & Install**: the tarball is unpacked into `~/.config/steamos_diy/updates/` (auto-pruned, excluded from backups) and the installer runs visibly in a Konsole window via a polkit prompt — no terminal commands to type. The Qt-side flow lives in the new `updater.py` module (`UpdateManager`), following the `editors.py`/`journal.py` isolation pattern; `utils.py` exposes the Qt-free plumbing (`VERSION`, `check_latest_release`, `download_release`). The extraction uses the tarfile `data` filter (rejects path traversal and special members) and only accepts `https://` tarball URLs.
+- `install.sh --update`: non-interactive upgrade mode over an existing installation. Preserves the live SSoT (staging the new template as `steamos_diy.conf.new`, pacman-style, only when it actually changed since the last deploy — a pristine copy is kept in `/var/lib/steamos_diy/ssot.template`), preserves user YAML configs without prompting, wipes `/usr/local/lib/steamos_diy` before redeploying so files dropped by the new release cannot linger, and ends with an automatic reboot after a 10-second `CTRL+C`-abortable countdown.
+- New documentation page **Updating**: both update entry points (Control Center and `install.sh --update`), what update mode preserves, and the classic uninstall+reinstall path with its SSoT caveat.
+
+### Fixed
+- `install.sh`: user detection only looked at `SUDO_USER`, so under `pkexec` (which exposes `PKEXEC_UID` instead) the "real user" resolved to root and user-space configs would be deployed to `/root`. Both are now resolved, matching `get_real_user()` in `utils.py`.
+- `control_center.py`: the window title now shows the installed version.
+
 ## [2.1.4] — 2026-07-05 — Codebase Review & Hardening
 
 ### Changed

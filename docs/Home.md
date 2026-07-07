@@ -12,6 +12,7 @@ Transforms Arch Linux into a console-style gaming system — no display manager,
 ### 🏗️ Architecture & Setup
 * 📖 **[Project Overview](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Project-Overview)**: System requirements and design principles.
 * 🚀 **[Installer Workflow](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Installer-Workflow)**: Breakdown of the installation process and system configuration.
+* ⬆️ **[Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating)**: Moving an existing installation to a new release (`install.sh --update` and the Control Center updater).
 * 🏗️ **[Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture)**: Technical implementation of **Atomic Writes** and session transition logic.
 * 🛠️ **[The Utilities Engine](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine)**: Shared modules for I/O handling, SSoT parsing, and logging.
 * ⚡ **[Zero-DM Boot & TTY1](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Zero-DM-Setup)**: TTY1 session management and display manager bypass configuration.

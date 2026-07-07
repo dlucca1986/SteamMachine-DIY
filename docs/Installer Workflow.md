@@ -61,6 +61,18 @@ Replaces traditional Display Managers with a custom systemd service:
 
 ---
 
+## 🔄 Update Mode (`--update`)
+
+`sudo ./install.sh --update` runs the same stages non-interactively over an existing installation — it is the engine behind the Control Center's **Check for Updates** button and the recommended way to move between releases:
+
+* **SSoT preserved:** the live `/etc/default/steamos_diy.conf` is never overwritten. The freshly rendered template is compared against the pristine copy of the previous deploy (`/var/lib/steamos_diy/ssot.template`); if it changed, it is staged as `steamos_diy.conf.new` (pacman `.pacnew` style) for manual review.
+* **User YAMLs preserved:** existing configs are kept without prompting; only new template files are added (`cp -n`).
+* **Clean redeploy:** `/usr/local/lib/steamos_diy/` is wiped before copying, so files removed or renamed by the new release cannot linger.
+* **Automatic reboot:** after a 10-second countdown (`CTRL+C` aborts) instead of the interactive prompt.
+* **pkexec aware:** the real user is resolved from `SUDO_USER` *or* `PKEXEC_UID`, so the Control Center's polkit-driven invocation deploys user files to the right home.
+
+See **[Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating)** for the full user-facing procedure.
+
 ## ⚠️ Requirements & Warnings
 
 * **Root Access:** Must be run with `sudo`.

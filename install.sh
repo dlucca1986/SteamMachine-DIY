@@ -28,8 +28,33 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# --- Execution Mode ---
+# --update: non-interactive upgrade over an existing installation.
+# Preserves the live SSoT and user YAMLs, wipes the lib dir so files
+# dropped by the new release cannot linger, then reboots on a countdown.
+UPDATE_MODE=false
+for arg in "$@"; do
+    case "$arg" in
+        --update) UPDATE_MODE=true ;;
+        *) error "Unknown option: $arg (supported: --update)"; exit 1 ;;
+    esac
+done
+
+# Run from the project root regardless of the caller's cwd — pkexec
+# (Control Center one-click update) starts programs in root's home,
+# and every deploy below uses paths relative to the repository root.
+cd "$(dirname "$(readlink -f "$0")")"
+
 # --- Environment Detection ---
-REAL_USER=${SUDO_USER:-$(whoami)}
+# pkexec (Control Center one-click update) exposes PKEXEC_UID instead of
+# SUDO_USER — resolve both, or user files would land in /root.
+if [ -n "${SUDO_USER:-}" ]; then
+    REAL_USER="$SUDO_USER"
+elif [ -n "${PKEXEC_UID:-}" ]; then
+    REAL_USER=$(id -nu "$PKEXEC_UID")
+else
+    REAL_USER=$(whoami)
+fi
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 REAL_UID=$(id -u "$REAL_USER")
 
@@ -99,9 +124,25 @@ deploy_files() {
     # Initialize Global SSoT Configuration
     mkdir -p "$(dirname "$SSOT_CONF")"
     if [ -f etc/default/steamos_diy.conf ]; then
-        cp -f etc/default/steamos_diy.conf "$SSOT_CONF"
-        info "Patching SSoT with User Home: $USER_HOME"
-        sed -i "s|{{HOME}}|$USER_HOME|g" "$SSOT_CONF"
+        RENDERED_SSOT=$(mktemp)
+        cp -f etc/default/steamos_diy.conf "$RENDERED_SSOT"
+        sed -i "s|{{HOME}}|$USER_HOME|g" "$RENDERED_SSOT"
+        if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
+            # Never clobber the live SSoT on update: user edits survive.
+            # Stage the new template as .new (pacnew-style), but only when
+            # it changed since the last deploy (pristine copy in STATE_DIR)
+            # so users are not trained to ignore a .new on every update.
+            if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
+                cp -f "$RENDERED_SSOT" "${SSOT_CONF}.new"
+                warn "SSoT template changed: review ${SSOT_CONF}.new"
+            fi
+        else
+            info "Patching SSoT with User Home: $USER_HOME"
+            cp -f "$RENDERED_SSOT" "$SSOT_CONF"
+        fi
+        mkdir -p "$STATE_DIR"
+        cp -f "$RENDERED_SSOT" "$STATE_DIR/ssot.template"
+        rm -f "$RENDERED_SSOT"
     fi
 
     # --- Deploy User-space Configurations (with Safety Check) ---
@@ -122,14 +163,19 @@ deploy_files() {
     if ! $HAS_SRC_YAML; then
         info "No template YAML configs to deploy in $CONFIG_SRC; skipping."
     elif $HAS_EXISTING_YAML; then
-        warn "Existing configuration found in $CONFIG_DEST"
-        read -r -p "Do you want to overwrite existing YAML configs? (y/N): " overwrite_configs
-        if [[ "$overwrite_configs" =~ ^[Yy]$ ]]; then
-            info "Overwriting configurations as requested..."
-            cp -f "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
-        else
-            info "Preserving custom settings. Only deploying new configuration files..."
+        if $UPDATE_MODE; then
+            info "Update mode: preserving custom settings. Only deploying new configuration files..."
             cp -n "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
+        else
+            warn "Existing configuration found in $CONFIG_DEST"
+            read -r -p "Do you want to overwrite existing YAML configs? (y/N): " overwrite_configs
+            if [[ "$overwrite_configs" =~ ^[Yy]$ ]]; then
+                info "Overwriting configurations as requested..."
+                cp -f "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
+            else
+                info "Preserving custom settings. Only deploying new configuration files..."
+                cp -n "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
+            fi
         fi
     else
         # Fresh installation: no existing user configs, templates available.
@@ -138,6 +184,12 @@ deploy_files() {
     chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DEST"
 
     # Deploy Python Core Libraries, Helpers & C-Core
+    if $UPDATE_MODE; then
+        # Wipe first so files removed or renamed by the new release
+        # cannot linger and shadow the fresh deployment.
+        info "Update mode: clearing $LIB_DIR before redeploy..."
+        rm -rf "$LIB_DIR"
+    fi
     mkdir -p "$HELPERS_DIR"
 
     info "Installing Python modules and helpers..."
@@ -248,6 +300,18 @@ deploy_files
 setup_shim_links
 setup_systemd_lockdown
 disable_display_managers
+
+if $UPDATE_MODE; then
+    success "UPDATE COMPLETED SUCCESSFULLY!"
+    warn "Rebooting in 10 seconds to apply the update — press CTRL+C to abort."
+    for i in {10..1}; do
+        printf '\r    Rebooting in %2d s... ' "$i"
+        sleep 1
+    done
+    echo
+    reboot
+    exit 0
+fi
 
 success "INSTALLATION COMPLETED SUCCESSFULLY!"
 info "TTY1 is now owned by steamos_diy.service."

@@ -31,6 +31,7 @@ Buttons in order:
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
 | **Browse Config Folder** | Opens `~/.config/steamos_diy/` via `xdg-open`. |
+| **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
 | **Open Project Wiki** | Opens the wiki URL via `QDesktopServices`. |
 
 ### 3. Global Options (Tab Index 2)

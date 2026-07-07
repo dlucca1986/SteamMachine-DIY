@@ -62,10 +62,12 @@ from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
+    VERSION,
     spawn_native,
     write_atomic,
 )
 from editors import YAMLEditor, YAMLSyntaxHighlighter
+from updater import UpdateManager
 from journal import (
     fetch_gamescope_logs,
     fetch_tagged_entries,
@@ -179,7 +181,7 @@ class SDYControlCenter(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SteamMachine-DIY Control Center")
+        self.setWindowTitle(f"SteamMachine-DIY Control Center — v{VERSION}")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
         self.conf_root = Path.home() / USER_CONFIG_REL
 
@@ -225,6 +227,9 @@ class SDYControlCenter(QMainWindow):
         self.game_temp_btn = None
         self.game_save_btn = None
         self.game_hl = None
+
+        # Maintenance tab widgets
+        self.updater = None
 
         # Service health strip (status bar)
         self.service_label = None
@@ -366,6 +371,11 @@ class SDYControlCenter(QMainWindow):
             btn.setStyleSheet(_BUTTON_STYLE)
             btn.clicked.connect(func)
             layout.addWidget(btn)
+
+        # Whole updater flow (check → download → Konsole handoff) lives
+        # in updater.py; the tab only mounts its button.
+        self.updater = UpdateManager(self, _BUTTON_STYLE)
+        layout.addWidget(self.updater.button)
 
         wiki_btn = QPushButton("📖 Open Project Wiki (Online)")
         wiki_btn.setStyleSheet(_BUTTON_STYLE)
