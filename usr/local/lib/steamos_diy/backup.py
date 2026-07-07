@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Backup Tool
-# VERSION:      2.1.4
+# VERSION:      2.1.5
 # DESCRIPTION:  Surgical backup with deep symlink recovery for SteamOS shims.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -22,6 +22,7 @@ from utils import (
     BACKUP_MANIFEST_NAME,
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
+    UPDATES_DIR_NAME,
     USER_CONFIG_REL,
     check_root,
     fix_ownership,
@@ -51,11 +52,13 @@ _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
 
 # Path components excluded from the archive — matched by component, not
 # substring, so "my_backups.yaml" is safe while a dir named "backups" is not.
+# UPDATES_DIR_NAME keeps downloaded release tarballs out of the archives.
 _EXCLUDE_COMPONENTS: frozenset[str] = frozenset(
     {
         ".cache",
         "__pycache__",
         "backups",
+        UPDATES_DIR_NAME,
     }
 )
 

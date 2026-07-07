@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.4-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.5-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Core components, filesystem layout, and the SteamOS compatibility shim layer.
@@ -33,8 +33,8 @@ A module within the launcher that parses `config.yaml`. It dynamically generates
 ### 5. SDY Discovery Engine (`sdy.py`)
 A wrapper that identifies games via `SteamAppId` or executable name and applies per-game YAML overrides from `games.d/`.
 
-### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`)
-The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`, keeping `control_center.py` focused on UI wiring only.
+### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`, `updater.py`)
+The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`. The in-app updater flow (release check, download, installer handoff — `UpdateManager`) lives in `updater.py`, keeping `control_center.py` focused on UI wiring only.
 
 ### 7. Health & Preflight (`health.py`)
 A Qt-free backend module — like `journal.py`, pure functions testable in isolation — powering the Control Center's diagnostics. `run_preflight()` returns a list of `CheckResult`s that validate the configuration *before* it can cause a black-screen boot: SSoT presence, binary handlers, SSoT path resolution, YAML syntax, `flags`/`post_start_cmds` types, gamescope flag validity (checked against `gamescope --help`), group membership, C-Core loadability, and session-state writability. `get_service_status()` snapshots `steamos_diy.service` via `systemctl show`. See [Control Center](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center).

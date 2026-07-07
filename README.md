@@ -1,7 +1,7 @@
 # 🎮 SteamMachine-DIY
 
 
-[![Version](https://img.shields.io/badge/Version-2.1.4-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.5-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Transform your Arch Linux machine into a dedicated gaming console using systemd, supporting AMD, Intel, and NVIDIA hardware.**
@@ -69,6 +69,16 @@ cd SteamMachine-DIY
 chmod +x install.sh
 sudo ./install.sh
 ```
+
+## 🔄 Updating
+
+From the Control Center: **Maintenance → ⬆️ Check for Updates** (downloads the latest release and runs the installer for you). Or from a terminal, on an unpacked release:
+
+```bash
+sudo ./install.sh --update
+```
+
+User configs and the SSoT are preserved; the system reboots automatically when done. Details in the **[Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating)** wiki page.
 
 ## 🗑️ Uninstallation
 
