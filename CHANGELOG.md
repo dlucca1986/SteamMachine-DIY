@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [2.1.5] — 2026-07-07 — In-App Updater
 
 ### Added
 - **In-app updater**: the Control Center Maintenance tab gains **⬆️ Check for Updates** — it queries the GitHub Releases API (stdlib `urllib`, no new dependencies), compares against the running version and, when a newer release exists, shows the release notes and offers **Download & Install**: the tarball is unpacked into `~/.config/steamos_diy/updates/` (auto-pruned, excluded from backups) and the installer runs visibly in a Konsole window via a polkit prompt — no terminal commands to type. The Qt-side flow lives in the new `updater.py` module (`UpdateManager`), following the `editors.py`/`journal.py` isolation pattern; `utils.py` exposes the Qt-free plumbing (`VERSION`, `check_latest_release`, `download_release`). The extraction uses the tarfile `data` filter (rejects path traversal and special members) and only accepts `https://` tarball URLs.

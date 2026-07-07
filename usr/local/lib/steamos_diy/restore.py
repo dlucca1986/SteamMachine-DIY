@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.1.4
+# VERSION:      2.1.5
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

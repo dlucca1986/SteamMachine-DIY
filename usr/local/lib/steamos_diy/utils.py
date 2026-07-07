@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.4
+# VERSION:      2.1.5
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -52,7 +52,7 @@ except OSError as err:
 
 # Runtime project version — kept in sync with the file headers by the
 # release bump (a plain-text substitution across the whole tree).
-VERSION: str = "2.1.4"
+VERSION: str = "2.1.5"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
@@ -415,7 +415,7 @@ class ReleaseInfo(NamedTuple):
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
-    """Parse "v2.1.4"/"2.1.4" into a comparable tuple; (0,) if malformed."""
+    """Parse "v2.1.5"/"2.1.5" into a comparable tuple; (0,) if malformed."""
     try:
         return tuple(int(p) for p in text.strip().lstrip("v").split("."))
     except ValueError:
