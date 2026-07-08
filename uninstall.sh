@@ -119,9 +119,9 @@ remove_components() {
         rm -f "$BIN_DIR/$name"
     done
 
-    # Project files
+    # Project files (.new = template staged by install.sh --update)
     rm -rf "$LIB_DIR" "$STATE_DIR"
-    rm -f "$SSOT_CONF"
+    rm -f "$SSOT_CONF" "${SSOT_CONF}.new"
     rm -f "$APP_DIR/Control_Center.desktop" "$APP_DIR/Game_Mode.desktop"
     rm -f "$ALPM_HOOKS_DIR/gamescope-privs.hook"
 
