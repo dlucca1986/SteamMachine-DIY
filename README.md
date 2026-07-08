@@ -86,3 +86,6 @@ User configs and the SSoT are preserved; the system reboots automatically when d
 chmod +x uninstall.sh
 sudo ./uninstall.sh
 ```
+
+> [!NOTE]
+> The uninstaller removes every file the project deployed and restores the boot chain (getty on TTY1, your display manager, the default target). Installed packages (`steam`, `gamescope`, Mesa…), the `[multilib]` repository and the group memberships added for your user are deliberately **left in place** — they are standard system components, not project files, and removing them could break unrelated software.

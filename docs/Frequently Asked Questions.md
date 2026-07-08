@@ -74,7 +74,10 @@ The project uses a **non-destructive** approach. We don't modify core system bin
 ### 11. How do I update SteamMachine-DIY itself?
 From the Control Center: **Maintenance → ⬆️ Check for Updates** — it downloads the latest release and runs the installer for you (user configs and the SSoT are preserved; the system reboots when done). Or manually with `sudo ./install.sh --update` on an unpacked release. Full details in [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating).
 
-### 12. Where are the configuration files?
+### 12. Does `uninstall.sh` restore the system completely?
+It removes every file and symlink the project deployed (libraries, shims, SSoT, service, desktop entries, pacman hook), restores the boot chain (getty on TTY1, your display manager, the default target), resets the Gamescope capabilities, and optionally wipes your user configs. Three things are deliberately **left in place**: the installed packages (`steam`, `gamescope`, Mesa drivers…), the `[multilib]` repository, and the groups your user was added to — they are standard system components, not project files, and removing them could break software unrelated to the project.
+
+### 13. Where are the configuration files?
 | Level | Path | Purpose |
 | :--- | :--- | :--- |
 | System | `/etc/default/steamos_diy.conf` | Binary paths, log level, timeouts |
@@ -83,7 +86,7 @@ From the Control Center: **Maintenance → ⬆️ Check for Updates** — it dow
 
 See [Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture) for the complete filesystem hierarchy.
 
-### 13. Where can I find the logs for debugging?
+### 14. Where can I find the logs for debugging?
 We use the **System Journal**. Use the following commands or check the **Logs** tab in the Control Center:
 ```bash
 # Session logs (Gaming/Desktop lifecycle, crash recovery)
