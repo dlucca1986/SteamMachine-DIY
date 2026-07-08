@@ -3,7 +3,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Branch Selection Shim
-# VERSION:      2.1.5
+# VERSION:      2.1.6
 # DESCRIPTION:  Self-sufficient shim for SteamOS branch-switch requests.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
