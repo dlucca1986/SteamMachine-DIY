@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Switcher
-# VERSION:      2.1.5
+# VERSION:      2.1.6
 # DESCRIPTION:  Dispatcher to trigger session switches between Steam and KDE.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.6] — 2026-07-08 — Installer Permissions Fix
+
+### Fixed
+- `install.sh`: the SSoT was deployed mode `600 root:root` instead of `644` — 2.1.5 started rendering it on a `mktemp` file (created `0600`) and `cp` propagates the source mode to a newly created destination, so on a fresh install the user session could no longer read `/etc/default/steamos_diy.conf`: Control Center editing and the preflight check both failed. The SSoT, its `.new` staging copy and the pristine template are now written with `install -m 644`, and update mode additionally re-asserts `644` on the live SSoT to heal installations deployed by the 2.1.5 installer. Existing systems can be fixed immediately with `sudo chmod 644 /etc/default/steamos_diy.conf`.
+- `uninstall.sh`: also removes `/etc/default/steamos_diy.conf.new` — the template staged by `install.sh --update` (introduced in 2.1.5) would otherwise survive uninstallation.
+
+### Documentation
+- README and FAQ now state explicitly what the uninstaller deliberately leaves in place (installed packages, the `[multilib]` repository, group memberships) and why — the previous "full reversibility" wording implied more than the scripts actually do.
+
 ## [2.1.5] — 2026-07-07 — In-App Updater
 
 ### Added

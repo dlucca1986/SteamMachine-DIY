@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      2.1.5
+# VERSION:      2.1.6
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -119,9 +119,9 @@ remove_components() {
         rm -f "$BIN_DIR/$name"
     done
 
-    # Project files
+    # Project files (.new = template staged by install.sh --update)
     rm -rf "$LIB_DIR" "$STATE_DIR"
-    rm -f "$SSOT_CONF"
+    rm -f "$SSOT_CONF" "${SSOT_CONF}.new"
     rm -f "$APP_DIR/Control_Center.desktop" "$APP_DIR/Game_Mode.desktop"
     rm -f "$ALPM_HOOKS_DIR/gamescope-privs.hook"
 

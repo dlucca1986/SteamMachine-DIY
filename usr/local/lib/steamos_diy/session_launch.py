@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# VERSION:      2.1.5
+# VERSION:      2.1.6
 # DESCRIPTION:  Core Session Manager
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      2.1.5
+# VERSION:      2.1.6
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -127,21 +127,26 @@ deploy_files() {
         RENDERED_SSOT=$(mktemp)
         cp -f etc/default/steamos_diy.conf "$RENDERED_SSOT"
         sed -i "s|{{HOME}}|$USER_HOME|g" "$RENDERED_SSOT"
+        # install -m 644, not cp: mktemp creates 0600 and cp propagates
+        # it, leaving the SSoT unreadable by the user session (CC edit
+        # and preflight both broke on 2.1.5 because of exactly this).
         if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
+            # Heal installs deployed by the 2.1.5 installer (SSoT 0600).
+            chmod 644 "$SSOT_CONF"
             # Never clobber the live SSoT on update: user edits survive.
             # Stage the new template as .new (pacnew-style), but only when
             # it changed since the last deploy (pristine copy in STATE_DIR)
             # so users are not trained to ignore a .new on every update.
             if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
-                cp -f "$RENDERED_SSOT" "${SSOT_CONF}.new"
+                install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
                 warn "SSoT template changed: review ${SSOT_CONF}.new"
             fi
         else
             info "Patching SSoT with User Home: $USER_HOME"
-            cp -f "$RENDERED_SSOT" "$SSOT_CONF"
+            install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
         fi
         mkdir -p "$STATE_DIR"
-        cp -f "$RENDERED_SSOT" "$STATE_DIR/ssot.template"
+        install -m 644 "$RENDERED_SSOT" "$STATE_DIR/ssot.template"
         rm -f "$RENDERED_SSOT"
     fi
 
