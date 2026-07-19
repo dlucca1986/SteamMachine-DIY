@@ -107,7 +107,10 @@ env_vars:
 ```
 
 ### Gamescope Flags Reference (`gamescope.example.yaml`)
-`~/.config/steamos_diy/gamescope.example.yaml` is a read-only reference document — it is **not** loaded by the launcher. It contains the full list of available Gamescope CLI flags translated to YAML format with descriptions, organized by category (general, HDR & performance, embedded mode, VR, debug, shaders, keyboard shortcuts).
+`~/.config/steamos_diy/gamescope.example.yaml` is a reference document — it is **not** loaded by the launcher. It contains the full list of available Gamescope CLI flags translated to YAML format with descriptions, organized by category (general, HDR & performance, embedded mode, VR, debug, shaders, keyboard shortcuts).
+
+> [!WARNING]
+> The Control Center's file selector lists it alongside `config.yaml` and `config.example.yaml`, and Save is **not** disabled while it's open (only entering **View Template** mode disables Save). If you open this file directly from the combo and press Ctrl+S, you will overwrite your own reference copy. Use **View Template** to browse it safely, or edit it outside the Control Center.
 
 ---
 

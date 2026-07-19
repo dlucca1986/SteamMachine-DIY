@@ -30,9 +30,16 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 *   **Readiness Notification**: `Type=notify` is set so systemd receives `READY=1` only after the session survives the validation window. This means dependent units and `systemctl start` calls block until the session is confirmed stable.
 
 ### Environment & Recovery
-*   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>` and `XDG_SESSION_TYPE=wayland` explicitly, ensuring Gamescope and Wayland clients operate correctly outside a standard desktop login session.
+*   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>`, `XDG_SESSION_TYPE=wayland`, `SSOT_CONF=/etc/default/steamos_diy.conf`, and `XDG_DESKTOP_PORTAL_DIR=/usr/share/xdg-desktop-portal/portals` explicitly, ensuring Gamescope, Wayland clients, and portal-dependent apps operate correctly outside a standard desktop login session.
 *   **Log Routing**: `StandardOutput=journal` and `StandardError=journal` route all session output to the systemd journal, visible via `journalctl -u steamos_diy.service`.
-*   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay ensures the session recovers automatically from crashes and restarts after session switches.
+*   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay recovers the session automatically from crashes and after session switches — this is frequent and expected (every switch exits `75` by design, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch)).
+
+> [!WARNING]
+> **Restart limit — give-up condition**
+>
+> `StartLimitIntervalSec=120` / `StartLimitBurst=10` caps restarts at 10 within 120 seconds. This is deliberate: if *both* Gaming and Desktop targets crash instantly (e.g. a broken Wayland/Plasma install), the guard stops systemd from hammering TTY1 at ~1 Hz forever. It is tuned generously enough to never trip during normal Steam↔Desktop toggling.
+>
+> If the limit is ever hit, `steamos_diy.service` stops retrying and TTY1 goes black — with `getty@tty1` masked, there is no automatic way back. **Recovery**: switch to another TTY (`Ctrl+Alt+F2`) or SSH in, then run `sudo systemctl reset-failed steamos_diy.service && sudo systemctl start steamos_diy.service` after fixing the underlying issue (check `journalctl -u steamos_diy.service` for the crash cause first).
 *   **TTY Cleanup**: `TTYReset=yes` and `TTYVTDisallocate=yes` ensure the terminal is fully reset between session restarts, preventing display artifacts.
 *   **Kill Policy**: `KillMode=mixed` sends `SIGTERM` to the main process only (not the whole cgroup), allowing `session_launch.py`'s signal handler to drain the child process before exiting. `TimeoutStopSec=10` sets the hard limit before systemd escalates to `SIGKILL`.
 
@@ -51,7 +58,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 
 A session switch involves three components working in sequence:
 
-1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`).
+1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`). Any argument other than `steam` resolves to `desktop` — `plasma` and `kde` are accepted as synonyms for readability (`steamos-session-select plasma` works identically to `steamos-session-select desktop`).
 2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits with code `75` (`EX_TEMPFAIL`).
 3. `steamos_diy.service` treats code `75` as a failure (`Restart=on-failure`, `RestartSec=1.0s`) and restarts the launcher, which reads the new target from the state file and spawns the next session. A deliberate stop (`systemctl stop`) exits with `0` and does **not** trigger a restart.
 

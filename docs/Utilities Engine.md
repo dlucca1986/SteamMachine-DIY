@@ -97,7 +97,7 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 | `control_center.py` | `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `VERSION`, `spawn_native`, `write_atomic` |
 | `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native` |
 | `health.py` | `CORE_LIB_DIR`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `clear_ssot_cache`, `get_ssot_var` |
-| Compatibility shims | `jlog`, `run_shim` |
+| Compatibility shims | `run_shim` (which internally calls `jlog`) |
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.
