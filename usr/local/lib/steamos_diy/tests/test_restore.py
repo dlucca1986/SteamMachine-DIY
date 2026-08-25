@@ -2,8 +2,10 @@
 
 import io
 import tarfile
+from pathlib import Path
 
 import restore
+import utils
 
 
 def _tar_with_member(name: str, data: bytes) -> tarfile.TarFile:
@@ -93,3 +95,58 @@ def test_resolve_target_rejects_outside_allowlist():
         "user/config/x", mapping, ("/home/someoneelse/",)
     )
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# backup/restore symmetry — get_backup_mapping() is generated once and
+# consumed independently by backup.py (tar.add) and restore.py's own
+# prefix-matching (_resolve_target). CLAUDE.md calls this out explicitly:
+# a key that backs up cleanly but restore can't resolve is a silent
+# data-loss bug, not a cosmetic mismatch — so every real mapping key must
+# round-trip through restore's actual resolution+allow-list logic.
+# ---------------------------------------------------------------------------
+
+
+def test_every_backup_mapping_key_resolves_via_restore(tmp_path, monkeypatch):
+    # The autouse _isolate_ssot_cache fixture points SSOT_CONF_PATH at a
+    # nonexistent tmp path (outside /etc/, /usr/, /var/) so no test
+    # touches the real conf file — but this test's whole point is to
+    # verify the *real* production path actually lands in restore's
+    # allow-list, so it must use the real value here.
+    monkeypatch.setattr(
+        utils, "SSOT_CONF_PATH", "/etc/default/steamos_diy.conf"
+    )
+    home = str(tmp_path / "home" / "tester")
+    mapping = utils.get_backup_mapping(home)
+    home_real = str(Path(home).resolve())
+    allowed = restore._allowed_prefixes(home_real)
+
+    assert mapping, "get_backup_mapping returned nothing to verify"
+    for archive_key, expected_fs_path in mapping.items():
+        resolved = restore._resolve_target(archive_key, mapping, allowed)
+        assert resolved == expected_fs_path, (
+            f"backup key {archive_key!r} -> {expected_fs_path!r} did not "
+            f"round-trip through restore._resolve_target (got {resolved!r})"
+        )
+
+
+def test_every_backup_mapping_key_nested_member_resolves(
+    tmp_path, monkeypatch
+):
+    """Same guarantee one level down — a file *inside* each mapped root
+    (not just the root itself) must also resolve and land in the
+    allow-list, exactly what a real archive member looks like."""
+    monkeypatch.setattr(
+        utils, "SSOT_CONF_PATH", "/etc/default/steamos_diy.conf"
+    )
+    home = str(tmp_path / "home" / "tester")
+    mapping = utils.get_backup_mapping(home)
+    home_real = str(Path(home).resolve())
+    allowed = restore._allowed_prefixes(home_real)
+
+    for archive_key, expected_fs_path in mapping.items():
+        member_name = f"{archive_key}/some_file.txt"
+        resolved = restore._resolve_target(member_name, mapping, allowed)
+        assert resolved == f"{expected_fs_path}/some_file.txt", (
+            f"nested member under {archive_key!r} did not resolve safely"
+        )
