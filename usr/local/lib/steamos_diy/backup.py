@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Backup Tool
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Surgical backup with deep symlink recovery for SteamOS shims.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

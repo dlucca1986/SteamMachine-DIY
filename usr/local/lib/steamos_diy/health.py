@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Health & Preflight Backend
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Pure config-validation and service-status helpers.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -24,7 +24,11 @@ from typing import NamedTuple
 from ruamel.yaml import YAML, YAMLError
 
 from utils import (
-    CORE_LIB_DIR,
+    CORE_LIB_PATH,
+    DEFAULT_DBUS_BIN,
+    DEFAULT_GS_BIN,
+    DEFAULT_PLASMA_BIN,
+    DEFAULT_STEAM_BIN,
     NEXT_SESSION_PATH,
     SSOT_CONF_PATH,
     clear_ssot_cache,
@@ -37,10 +41,10 @@ _yaml_probe = YAML(typ="safe")
 
 # Binary handlers declared in the SSoT, with their built-in defaults.
 _BINARY_KEYS: tuple[tuple[str, str], ...] = (
-    ("bin_gs", "/usr/bin/gamescope"),
-    ("bin_steam", "/usr/bin/steam"),
-    ("bin_plasma", "/usr/bin/startplasma-wayland"),
-    ("bin_dbus", "/usr/bin/qdbus6"),
+    ("bin_gs", DEFAULT_GS_BIN),
+    ("bin_steam", DEFAULT_STEAM_BIN),
+    ("bin_plasma", DEFAULT_PLASMA_BIN),
+    ("bin_dbus", DEFAULT_DBUS_BIN),
 )
 
 # Groups whose absence breaks the session — tty is mandatory because
@@ -52,7 +56,6 @@ _CRITICAL_GROUPS: tuple[str, ...] = ("tty", "video", "render", "input")
 # runtime has no guard — the one mistyping worth catching before boot.
 _LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
 
-_LIBCORE_PATH: str = f"{CORE_LIB_DIR}/libcore.so"
 _SERVICE_UNIT: str = "steamos_diy.service"
 
 # Leading option token(s) of a `gamescope --help` line, e.g.
@@ -266,7 +269,7 @@ def _check_gamescope_flags(data: object) -> CheckResult:
     flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:
         return CheckResult("Gamescope flags", True, "none set")
-    gs_bin = get_ssot_var("bin_gs", "/usr/bin/gamescope")
+    gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
     supported = _gamescope_options(gs_bin)
     if supported is None:
         return CheckResult("Gamescope flags", True, "gamescope unavailable")
@@ -303,8 +306,8 @@ def _check_groups() -> CheckResult:
 def _check_core() -> CheckResult:
     """Confirm the native C-Core shared object is loadable."""
     try:
-        ctypes.CDLL(_LIBCORE_PATH)
-        return CheckResult("C-Core", True, _LIBCORE_PATH)
+        ctypes.CDLL(CORE_LIB_PATH)
+        return CheckResult("C-Core", True, CORE_LIB_PATH)
     except OSError as err:
         return CheckResult("C-Core", False, str(err))
 

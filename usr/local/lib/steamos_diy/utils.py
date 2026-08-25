@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -31,10 +31,12 @@ _yaml_reader = _YAML(typ="safe")
 # C-Core integration — mandatory at import time.
 # ---------------------------------------------------------------------------
 
-_CORE_LIB_PATH: str = "/usr/local/lib/steamos_diy/libcore.so"
+# Public so health.py's C-Core preflight check can report the same path
+# it's actually loaded from here, instead of re-deriving its own copy.
+CORE_LIB_PATH: str = "/usr/local/lib/steamos_diy/libcore.so"
 
 try:
-    _LIB: ctypes.CDLL = ctypes.CDLL(_CORE_LIB_PATH)
+    _LIB: ctypes.CDLL = ctypes.CDLL(CORE_LIB_PATH)
 
     _LIB.c_jlog.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
     _LIB.c_notify.argtypes = [ctypes.c_char_p, ctypes.c_int]
@@ -42,7 +44,7 @@ try:
     _LIB.c_sd_notify_ready.argtypes = []
 
 except OSError as err:
-    sys.stderr.write(f"FATAL: C-Core missing at {_CORE_LIB_PATH}: {err}\n")
+    sys.stderr.write(f"FATAL: C-Core missing at {CORE_LIB_PATH}: {err}\n")
     sys.exit(127)
 
 
@@ -52,7 +54,7 @@ except OSError as err:
 
 # Runtime project version — kept in sync with the file headers by the
 # release bump (a plain-text substitution across the whole tree).
-VERSION: str = "2.1.6"
+VERSION: str = "2.1.7"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
@@ -71,6 +73,15 @@ BACKUP_MANIFEST_NAME: str = "links.txt"
 # Where downloaded release tarballs are unpacked, relative to the user
 # config dir. Shared with backup.py, which must exclude it from archives.
 UPDATES_DIR_NAME: str = "updates"
+
+# Session binary fallbacks, used when the matching SSoT bin_* key is
+# unset. Single source of truth for session_launch.py, session_select.py
+# and health.py's preflight — previously each re-declared its own copy,
+# risking drift if a distro ever relocates one of these.
+DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
+DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
+DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
+DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
@@ -415,7 +426,7 @@ class ReleaseInfo(NamedTuple):
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
-    """Parse "v2.1.6"/"2.1.6" into a comparable tuple; (0,) if malformed."""
+    """Parse "v2.1.7"/"2.1.7" into a comparable tuple; (0,) if malformed."""
     try:
         return tuple(int(p) for p in text.strip().lstrip("v").split("."))
     except ValueError:

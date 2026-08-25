@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.6-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 How YAML configuration becomes Gamescope arguments: global config, per-game overrides, and templates.

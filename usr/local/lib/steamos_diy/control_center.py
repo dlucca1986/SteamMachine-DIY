@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -63,6 +63,7 @@ from utils import (
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
+    get_ssot_var,
     spawn_native,
     write_atomic,
 )
@@ -162,6 +163,24 @@ def _build_support_report() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
+    """Resolve (conf_root, games_conf_dir) from the SSoT.
+
+    Falls back to default_root/"config.yaml" resp. default_root/"games.d"
+    when the SSoT doesn't set user_config/games_conf_dir — but when it
+    does, this must follow it: sdy.py and health.py already resolve both
+    dynamically, and a hardcoded default here would let the GUI silently
+    edit a file the session launcher no longer reads.
+    """
+    conf_root = Path(
+        get_ssot_var("user_config", str(default_root / "config.yaml"))
+    ).parent
+    games_conf_dir = Path(
+        get_ssot_var("games_conf_dir", str(default_root / "games.d"))
+    )
+    return conf_root, games_conf_dir
+
+
 # ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
@@ -183,7 +202,14 @@ class SDYControlCenter(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"SteamMachine-DIY Control Center — v{VERSION}")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
-        self.conf_root = Path.home() / USER_CONFIG_REL
+        self.conf_root, self.games_conf_dir = _resolve_config_paths(
+            Path.home() / USER_CONFIG_REL
+        )
+
+        # Guards _run_pkexec against a second privileged operation (e.g. a
+        # double-clicked Backup/Restore) starting while one is already
+        # writing to the same files.
+        self._pkexec_busy = False
 
         # Style maps — emoji + colour per log category
         self.log_styles = {
@@ -684,7 +710,7 @@ class SDYControlCenter(QMainWindow):
         if not raw or "/" in raw:
             return
         name = raw.split(" (")[0].strip()
-        path = self.conf_root / "games.d" / f"{name}.yaml"
+        path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
             self.game_editor.setPlainText(path.read_text(encoding="utf-8"))
         else:
@@ -720,7 +746,7 @@ class SDYControlCenter(QMainWindow):
             )
             return
         name = raw.split(" (")[0].strip()
-        path = self.conf_root / "games.d" / f"{name}.yaml"
+        path = self.games_conf_dir / f"{name}.yaml"
         self._atomic_save(
             str(path), self.game_editor.toPlainText(), self.game_editor
         )
@@ -828,7 +854,7 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.setPlaceholderText("Journal unavailable.")
 
     def _merge_on_disk_profiles(self, detected):
-        gdir = self.conf_root / "games.d"
+        gdir = self.games_conf_dir
         if not gdir.exists():
             return
         for p in gdir.glob("*.yaml"):
@@ -1026,8 +1052,17 @@ class SDYControlCenter(QMainWindow):
         """Run *cmd* under pkexec in a daemon thread; emit process_finished.
 
         Single entry point for every privileged operation in the UI —
-        journal vacuum, backup, and restore all route through here.
+        journal vacuum, backup, and restore all route through here. Guarded
+        by _pkexec_busy so two privileged operations (e.g. Backup and
+        Restore double-clicked in a row) can never run concurrently against
+        the same files.
         """
+        if self._pkexec_busy:
+            self.statusBar().showMessage(
+                "Another privileged operation is already running…", 3000
+            )
+            return
+        self._pkexec_busy = True
 
         def worker() -> None:
             try:
@@ -1041,6 +1076,8 @@ class SDYControlCenter(QMainWindow):
                 self.process_finished.emit(
                     err_title, f"Cannot launch pkexec: {err}", True
                 )
+            finally:
+                self._pkexec_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 

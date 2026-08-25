@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -178,9 +178,15 @@ def _consume_export_line(
         (datetime, formatted_line) on MESSAGE= terminator, else None.
     """
     if line.startswith("__REALTIME_TIMESTAMP="):
-        cur["ts"] = datetime.fromtimestamp(
-            int(line.split("=", 1)[1]) / _MICROSECONDS_PER_SECOND
-        )
+        try:
+            cur["ts"] = datetime.fromtimestamp(
+                int(line.split("=", 1)[1]) / _MICROSECONDS_PER_SECOND
+            )
+        except (ValueError, OSError, OverflowError):
+            # Malformed/truncated timestamp (corrupted journal): leave "ts"
+            # unset — _finalize_export_entry already falls back to
+            # datetime.now() for a missing key, same as a dropped field.
+            pass
         return None
     if line.startswith("SYSLOG_IDENTIFIER="):
         cur["id"] = line.split("=", 1)[1]
@@ -209,11 +215,15 @@ def fetch_tagged_entries(
     Shared by the Diagnostics view and the support-report export so the
     two can never drift on how project logs are fetched. Raises
     CalledProcessError/OSError — error handling is the caller's concern.
+    errors="replace" keeps decoding itself from ever raising: a MESSAGE
+    field with an embedded newline flips journalctl's export format to
+    binary-safe encoding, which is not guaranteed valid UTF-8.
     """
     res = subprocess.run(  # nosec B603
         get_journal_cmd(tag),
         capture_output=True,
         text=True,
+        errors="replace",
         check=True,
     )
     return parse_export_format(res.stdout, launches)
@@ -271,6 +281,7 @@ def _run_journalctl_iso() -> str:
             ],
             capture_output=True,
             text=True,
+            errors="replace",
             check=False,
         )
         return res.stdout or ""

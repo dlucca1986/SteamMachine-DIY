@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.6-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 PyQt6 dashboard for system management, YAML configuration editing, and log analysis.
@@ -30,13 +30,14 @@ Buttons in order:
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
-| **Browse Config Folder** | Opens `~/.config/steamos_diy/` via `xdg-open`. |
+| **Browse Config Folder** | Opens `conf_root` (SSoT-resolved `user_config` directory, default `~/.config/steamos_diy/`) via `xdg-open`. |
 | **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
 | **Open Project Wiki** | Opens the wiki URL via `QDesktopServices`. |
 
 ### 3. Global Options (Tab Index 2)
 Text editor for YAML configuration files with real-time validation.
 
+* **File location**: resolved from the SSoT (`user_config` for the file's directory, `games_conf_dir` for the Game Overrides tab below) via `_resolve_config_paths()`, falling back to `~/.config/steamos_diy/` when either key is unset — the same resolution `sdy.py`/`health.py` already use, so a custom SSoT path is honoured instead of the GUI silently editing a file the session launcher no longer reads.
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser — converting tabs to two spaces, fixing indentation and normalising spacing while preserving comments and quoting. The reformat is applied as a **single undoable edit** (one `Ctrl+Z` reverts it) and the scroll position is preserved; the outcome is reported in the status bar (`✨ YAML formatted` / `Already clean` / `Nothing to format` for a comments-only document / `Syntax error — see highlight`). It only reformats documents that already parse — broken YAML surfaces as a syntax error instead, and string *values* (e.g. the content inside each `flags` entry) are left verbatim.

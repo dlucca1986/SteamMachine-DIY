@@ -1,3 +1,6 @@
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Local-only engineering standards, not part of the public repo
+CLAUDE.md

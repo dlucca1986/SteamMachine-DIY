@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.6-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 How `sdy` finds the right profile and launches the game.
@@ -34,16 +34,18 @@ To maintain a clean process tree, `sdy` uses `os.execvpe`. The launcher process 
 
 ```python
 # Construction of the final command list
-full_cmd = shlex.split(wrapper) if wrapper else []
+full_cmd = _safe_split("GAME_WRAPPER", wrapper) if wrapper else []
 full_cmd.extend(raw_args)
 if extra:
-    full_cmd.extend(shlex.split(extra))
+    full_cmd.extend(_safe_split("GAME_EXTRA_ARGS", extra))
 
 # Replace this process with the game
 os.execvpe(full_cmd[0], full_cmd, os.environ)
 ```
 
 **YAML Resilience**: If a profile YAML is missing or unparseable, `load_yaml_safe` returns `{}` silently. The game still launches using only the global `config.yaml` values — no error is raised and no message is logged.
+
+**Malformed Overrides**: `_safe_split` wraps `shlex.split` — an unbalanced quote in a hand-edited `GAME_WRAPPER`/`GAME_EXTRA_ARGS` (e.g. `mangohud "unterminated`) no longer aborts the launch with an unhandled exception; it falls back to a plain whitespace split and logs `BAD_GAME_WRAPPER`/`BAD_GAME_EXTRA_ARGS` at `WARN` instead.
 
 ---
 

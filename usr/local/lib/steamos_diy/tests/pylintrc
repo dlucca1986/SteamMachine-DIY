@@ -1,0 +1,25 @@
+[MASTER]
+# conftest.py adds the parent dir to sys.path at runtime (so `import utils`
+# etc. resolve without a package/__init__.py); pylint needs the same hint
+# statically or every production-module import here false-positives as
+# import-error.
+init-hook=import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+[MESSAGES CONTROL]
+# - import-error/no-member: astroid doesn't always honour init-hook's
+#   sys.path change when resolving a sibling module from a subdirectory
+#   (flat, non-package layout); pytest's own real imports are the
+#   authoritative check here — every test run exercises them for real.
+# - missing-function-docstring: test names are the documentation
+#   (test_write_member_atomically_replaces_existing_file doesn't need a
+#   docstring repeating that sentence).
+# - protected-access: unit-testing a private helper means calling it by
+#   its real (underscore-prefixed) name — that's the point, not a smell.
+# - import-outside-toplevel: conftest.py fixtures import utils lazily so
+#   nothing touches it before the ctypes.CDLL shim is in place.
+disable=
+    import-error,
+    no-member,
+    missing-function-docstring,
+    protected-access,
+    import-outside-toplevel
