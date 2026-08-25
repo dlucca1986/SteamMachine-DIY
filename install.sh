@@ -203,6 +203,10 @@ deploy_files() {
 
     info "Installing Python modules and helpers..."
     cp -rf usr/local/lib/steamos_diy/* "$LIB_DIR/"
+    # Dev-only: the pytest suite has no business on a deployed install
+    # (pytest isn't a runtime dependency, and nothing on the target
+    # machine ever imports it).
+    rm -rf "$LIB_DIR/tests"
 
     info "Building C-Core from source (steamos_diy_core.c)..."
     # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
