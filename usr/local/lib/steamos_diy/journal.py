@@ -181,7 +181,7 @@ def _consume_export_line(
         try:
             cur["ts"] = datetime.fromtimestamp(
                 int(line.split("=", 1)[1]) / _MICROSECONDS_PER_SECOND
-            )
+            ).astimezone()
         except (ValueError, OSError, OverflowError):
             # Malformed/truncated timestamp (corrupted journal): leave "ts"
             # unset — _finalize_export_entry already falls back to
@@ -201,7 +201,7 @@ def _finalize_export_entry(
 ) -> tuple[datetime, str]:
     msg = line.split("=", 1)[1]
     ident = cur.get("id", "SYSTEM")
-    ts = cur.get("ts", datetime.now())
+    ts = cur.get("ts", datetime.now().astimezone())
     if ident == "STEAM" and "LAUNCH_ARGS" in msg:
         launches.add(msg.split("LAUNCH_ARGS:", 1)[-1].strip())
     return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")

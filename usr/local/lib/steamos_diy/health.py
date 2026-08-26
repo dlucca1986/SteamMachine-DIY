@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ruamel.yaml import YAML, YAMLError
-
 from utils import (
     CORE_LIB_PATH,
     DEFAULT_DBUS_BIN,

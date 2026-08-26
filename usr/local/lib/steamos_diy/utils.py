@@ -22,7 +22,8 @@ import threading
 from pathlib import Path
 from typing import Any, NamedTuple, overload
 
-from ruamel.yaml import YAML as _YAML, YAMLError
+from ruamel.yaml import YAML as _YAML
+from ruamel.yaml import YAMLError
 
 _yaml_reader = _YAML(typ="safe")
 
@@ -530,11 +531,13 @@ def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
         root.mkdir(parents=True, exist_ok=True)
         _prune_downloads(root)
         # B310: scheme constrained to https:// by the guard above.
-        with urllib.request.urlopen(  # nosec B310
-            req, timeout=_HTTP_TIMEOUT
-        ) as resp:
-            with tarfile.open(fileobj=resp, mode="r|gz") as tar:
-                tar.extractall(target, filter="data")
+        with (
+            urllib.request.urlopen(  # nosec B310
+                req, timeout=_HTTP_TIMEOUT
+            ) as resp,
+            tarfile.open(fileobj=resp, mode="r|gz") as tar,
+        ):
+            tar.extractall(target, filter="data")
     except (OSError, ValueError, tarfile.TarError, HTTPException) as err:
         jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
         return None

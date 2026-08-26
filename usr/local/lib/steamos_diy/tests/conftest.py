@@ -24,7 +24,7 @@ sys.path.insert(0, str(_STEAMOS_DIY_DIR))
 
 # Must happen before the first `import utils` anywhere in the suite.
 _FAKE_CORE_LIB = MagicMock(name="fake_libcore")
-ctypes.CDLL = lambda path, *a, **kw: _FAKE_CORE_LIB  # noqa: ARG005
+ctypes.CDLL = lambda path, *a, **kw: _FAKE_CORE_LIB
 
 
 @pytest.fixture(autouse=True)

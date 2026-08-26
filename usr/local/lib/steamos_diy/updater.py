@@ -21,7 +21,6 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QMessageBox, QPushButton
 
 # pylint: enable=no-name-in-module
-
 from utils import (
     UPDATES_DIR_NAME,
     USER_CONFIG_REL,
@@ -173,7 +172,9 @@ class UpdateManager(QObject):
                 "-e",
                 "bash",
                 "-c",
-                f"pkexec bash {script} --update; echo; "
-                "read -rp 'Press ENTER to close this window...'",
+                (
+                    f"pkexec bash {script} --update; echo; "
+                    "read -rp 'Press ENTER to close this window...'"
+                ),
             ],
         )

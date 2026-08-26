@@ -29,15 +29,13 @@ def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
 
 
 def test_parse_export_format_survives_garbled_timestamp_line():
-    stdout = "\n".join(
-        [
-            "__REALTIME_TIMESTAMP=garbage",
-            "SYSLOG_IDENTIFIER=CORE",
-            "MESSAGE=first entry",
-            "__REALTIME_TIMESTAMP=1700000000000000",
-            "SYSLOG_IDENTIFIER=STEAM",
-            "MESSAGE=second entry",
-        ]
+    stdout = (
+        "__REALTIME_TIMESTAMP=garbage\n"
+        "SYSLOG_IDENTIFIER=CORE\n"
+        "MESSAGE=first entry\n"
+        "__REALTIME_TIMESTAMP=1700000000000000\n"
+        "SYSLOG_IDENTIFIER=STEAM\n"
+        "MESSAGE=second entry"
     )
 
     entries = journal.parse_export_format(stdout, set())

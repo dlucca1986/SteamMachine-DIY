@@ -191,7 +191,7 @@ def _archive_paths(backup_dir: Path) -> tuple[Path, Path]:
 
     tmp lives in the same directory so os.replace is atomic (same fs).
     """
-    timestamp = datetime.now().strftime(_ARCHIVE_TS_FORMAT)
+    timestamp = datetime.now().astimezone().strftime(_ARCHIVE_TS_FORMAT)
     final = backup_dir / f"{_ARCHIVE_PREFIX}{timestamp}{_ARCHIVE_SUFFIX}"
     tmp = backup_dir / f"{_ARCHIVE_PREFIX}{timestamp}{_ARCHIVE_TMP_SUFFIX}"
     return final, tmp

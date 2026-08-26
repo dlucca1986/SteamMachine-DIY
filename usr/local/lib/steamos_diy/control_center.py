@@ -23,6 +23,15 @@ from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
+from editors import YAMLEditor, YAMLSyntaxHighlighter
+from health import get_service_status, run_preflight
+from journal import (
+    fetch_gamescope_logs,
+    fetch_tagged_entries,
+    filter_game_journal_lines,
+    parse_game_logs,
+)
+
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import (
     Qt,
@@ -55,9 +64,8 @@ from PyQt6.QtWidgets import (
 )
 
 # pylint: enable=no-name-in-module
-
 from ruamel.yaml import YAML, YAMLError
-
+from updater import UpdateManager
 from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
@@ -67,15 +75,6 @@ from utils import (
     spawn_native,
     write_atomic,
 )
-from editors import YAMLEditor, YAMLSyntaxHighlighter
-from updater import UpdateManager
-from journal import (
-    fetch_gamescope_logs,
-    fetch_tagged_entries,
-    filter_game_journal_lines,
-    parse_game_logs,
-)
-from health import get_service_status, run_preflight
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -145,12 +144,14 @@ def _build_support_report() -> str:
     status = get_service_status()
     lines = [
         "=== SteamMachine-DIY Support Report ===",
-        f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"Generated: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S}",
         f"Kernel: {os.uname().release}",
         "",
         "--- Service ---",
-        f"steamos_diy: {status.active} ({status.sub}) | "
-        f"restarts: {status.restarts} | last exit: {status.exit_code}",
+        (
+            f"steamos_diy: {status.active} ({status.sub}) | "
+            f"restarts: {status.restarts} | last exit: {status.exit_code}"
+        ),
         "",
         "--- Preflight ---",
     ]
@@ -987,7 +988,8 @@ class SDYControlCenter(QMainWindow):
         view: the report is rebuilt from scratch in a worker thread so
         it is complete regardless of the active filter.
         """
-        default = f"sdy_support_{datetime.now():%Y%m%d_%H%M%S}.log"
+        now = datetime.now().astimezone()
+        default = f"sdy_support_{now:%Y%m%d_%H%M%S}.log"
         dest, _ = QFileDialog.getSaveFileName(
             self, "Save Support Report", default
         )

@@ -7,7 +7,6 @@ import tarfile
 import backup
 import utils
 
-
 # ---------------------------------------------------------------------------
 # _path_is_excluded — component match, not substring match
 # ---------------------------------------------------------------------------

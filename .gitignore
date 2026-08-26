@@ -4,3 +4,8 @@ __pycache__/
 
 # Local-only engineering standards, not part of the public repo
 CLAUDE.md
+
+# Tool caches (Ruff, pytest, bandit)
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
