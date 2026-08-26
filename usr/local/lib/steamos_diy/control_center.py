@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -22,6 +22,15 @@ import threading
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
+
+from editors import YAMLEditor, YAMLSyntaxHighlighter
+from health import get_service_status, run_preflight
+from journal import (
+    fetch_gamescope_logs,
+    fetch_tagged_entries,
+    filter_game_journal_lines,
+    parse_game_logs,
+)
 
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import (
@@ -55,26 +64,17 @@ from PyQt6.QtWidgets import (
 )
 
 # pylint: enable=no-name-in-module
-
 from ruamel.yaml import YAML, YAMLError
-
+from updater import UpdateManager
 from utils import (
     CORE_LIB_DIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
+    get_ssot_var,
     spawn_native,
     write_atomic,
 )
-from editors import YAMLEditor, YAMLSyntaxHighlighter
-from updater import UpdateManager
-from journal import (
-    fetch_gamescope_logs,
-    fetch_tagged_entries,
-    filter_game_journal_lines,
-    parse_game_logs,
-)
-from health import get_service_status, run_preflight
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -99,6 +99,19 @@ _YAML_INDENT_OFFSET: int = 2
 # Matches the LAST parenthesised number — "Half-Life 2 (2004) (220)" → 220.
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
+
+
+def _extract_game_name_from_display(raw: str) -> str:
+    """Strip a trailing "(AppID)" suffix from a combo display string.
+
+    _format_combo_items() only ever appends the suffix at the very end
+    (same anchor as _APPID_FROM_DISPLAY), so stripping via that anchor
+    instead of splitting on the first "(" avoids truncating a game name
+    that legitimately contains "(" of its own, e.g. "Portal (Test Build)"
+    plus an appid suffix would otherwise collide with a game named
+    "Portal".
+    """
+    return _APPID_FROM_DISPLAY.sub("", raw).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -144,12 +157,14 @@ def _build_support_report() -> str:
     status = get_service_status()
     lines = [
         "=== SteamMachine-DIY Support Report ===",
-        f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"Generated: {datetime.now().astimezone():%Y-%m-%d %H:%M:%S}",
         f"Kernel: {os.uname().release}",
         "",
         "--- Service ---",
-        f"steamos_diy: {status.active} ({status.sub}) | "
-        f"restarts: {status.restarts} | last exit: {status.exit_code}",
+        (
+            f"steamos_diy: {status.active} ({status.sub}) | "
+            f"restarts: {status.restarts} | last exit: {status.exit_code}"
+        ),
         "",
         "--- Preflight ---",
     ]
@@ -160,6 +175,24 @@ def _build_support_report() -> str:
     lines.extend(["", "--- Logs (last 12h, all tags + gamescope) ---"])
     lines.extend(_fetch_support_logs())
     return "\n".join(lines) + "\n"
+
+
+def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
+    """Resolve (conf_root, games_conf_dir) from the SSoT.
+
+    Falls back to default_root/"config.yaml" resp. default_root/"games.d"
+    when the SSoT doesn't set user_config/games_conf_dir — but when it
+    does, this must follow it: sdy.py and health.py already resolve both
+    dynamically, and a hardcoded default here would let the GUI silently
+    edit a file the session launcher no longer reads.
+    """
+    conf_root = Path(
+        get_ssot_var("user_config", str(default_root / "config.yaml"))
+    ).parent
+    games_conf_dir = Path(
+        get_ssot_var("games_conf_dir", str(default_root / "games.d"))
+    )
+    return conf_root, games_conf_dir
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +216,14 @@ class SDYControlCenter(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"SteamMachine-DIY Control Center — v{VERSION}")
         self.resize(_WINDOW_WIDTH, _WINDOW_HEIGHT)
-        self.conf_root = Path.home() / USER_CONFIG_REL
+        self.conf_root, self.games_conf_dir = _resolve_config_paths(
+            Path.home() / USER_CONFIG_REL
+        )
+
+        # Guards _run_pkexec against a second privileged operation (e.g. a
+        # double-clicked Backup/Restore) starting while one is already
+        # writing to the same files.
+        self._pkexec_busy = False
 
         # Style maps — emoji + colour per log category
         self.log_styles = {
@@ -683,8 +723,8 @@ class SDYControlCenter(QMainWindow):
         """
         if not raw or "/" in raw:
             return
-        name = raw.split(" (")[0].strip()
-        path = self.conf_root / "games.d" / f"{name}.yaml"
+        name = _extract_game_name_from_display(raw)
+        path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
             self.game_editor.setPlainText(path.read_text(encoding="utf-8"))
         else:
@@ -719,8 +759,8 @@ class SDYControlCenter(QMainWindow):
                 "Invalid game name — '/' not allowed", 3000
             )
             return
-        name = raw.split(" (")[0].strip()
-        path = self.conf_root / "games.d" / f"{name}.yaml"
+        name = _extract_game_name_from_display(raw)
+        path = self.games_conf_dir / f"{name}.yaml"
         self._atomic_save(
             str(path), self.game_editor.toPlainText(), self.game_editor
         )
@@ -828,7 +868,7 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.setPlaceholderText("Journal unavailable.")
 
     def _merge_on_disk_profiles(self, detected):
-        gdir = self.conf_root / "games.d"
+        gdir = self.games_conf_dir
         if not gdir.exists():
             return
         for p in gdir.glob("*.yaml"):
@@ -961,7 +1001,8 @@ class SDYControlCenter(QMainWindow):
         view: the report is rebuilt from scratch in a worker thread so
         it is complete regardless of the active filter.
         """
-        default = f"sdy_support_{datetime.now():%Y%m%d_%H%M%S}.log"
+        now = datetime.now().astimezone()
+        default = f"sdy_support_{now:%Y%m%d_%H%M%S}.log"
         dest, _ = QFileDialog.getSaveFileName(
             self, "Save Support Report", default
         )
@@ -1026,8 +1067,17 @@ class SDYControlCenter(QMainWindow):
         """Run *cmd* under pkexec in a daemon thread; emit process_finished.
 
         Single entry point for every privileged operation in the UI —
-        journal vacuum, backup, and restore all route through here.
+        journal vacuum, backup, and restore all route through here. Guarded
+        by _pkexec_busy so two privileged operations (e.g. Backup and
+        Restore double-clicked in a row) can never run concurrently against
+        the same files.
         """
+        if self._pkexec_busy:
+            self.statusBar().showMessage(
+                "Another privileged operation is already running…", 3000
+            )
+            return
+        self._pkexec_busy = True
 
         def worker() -> None:
             try:
@@ -1041,6 +1091,8 @@ class SDYControlCenter(QMainWindow):
                 self.process_finished.emit(
                     err_title, f"Cannot launch pkexec: {err}", True
                 )
+            finally:
+                self._pkexec_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 

@@ -1,14 +1,14 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # LICENSE:      MIT
 # =============================================================================
 
-set -e
+set -eo pipefail
 
 # --- Colors & UI Elements ---
 RED='\033[0;31m'
@@ -56,6 +56,10 @@ else
     REAL_USER=$(whoami)
 fi
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+if [ -z "$USER_HOME" ]; then
+    error "Cannot resolve home directory for user: $REAL_USER"
+    exit 1
+fi
 REAL_UID=$(id -u "$REAL_USER")
 
 # --- Filesystem Layout (shared contract with utils.py constants) ---
@@ -73,7 +77,7 @@ readonly USER_CONFIG_REL=".config/steamos_diy"
 # --- 1. Hardware Audit & Driver Selection ---
 check_gpu_and_drivers() {
     info "Auditing Hardware and Graphics Stack..."
-    GPU_INFO=$(lspci | grep -iE "vga|3d controller")
+    GPU_INFO=$(lspci | grep -iE "vga|3d controller" || true)
     DRIVER_PKGS=""
 
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
@@ -199,6 +203,10 @@ deploy_files() {
 
     info "Installing Python modules and helpers..."
     cp -rf usr/local/lib/steamos_diy/* "$LIB_DIR/"
+    # Dev-only: the pytest suite has no business on a deployed install
+    # (pytest isn't a runtime dependency, and nothing on the target
+    # machine ever imports it).
+    rm -rf "$LIB_DIR/tests"
 
     info "Building C-Core from source (steamos_diy_core.c)..."
     # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.

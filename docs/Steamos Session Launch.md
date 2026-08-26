@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.6-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 The supervisor behind session transitions: lifecycle, watchdog, signals and exit codes.
@@ -15,7 +15,7 @@ Execution arguments are generated from a **YAML configuration**.
 
 #### **Transformation Logic**
 The `_build_gamescope_args()` function constructs the execution string:
-* **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command.
+* **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command. Each entry is split with `shlex.split`; an unbalanced quote falls back to a plain whitespace split (logged as `BAD_FLAG_ENTRY` at `WARN`) instead of crashing the launcher over one malformed entry.
 * **Environment Overrides**: First applies `GAME_MODE_ENV` — a fixed set of session capabilities advertised to Steam (see *Session Capabilities* below) — then injects the user's `env_vars`, which are applied afterwards and therefore keep the last word. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
 * **Safe Execution**: Uses `subprocess.Popen` with argument arrays to prevent shell-injection vulnerabilities.
 
@@ -73,7 +73,7 @@ After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.y
 
 This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
 
-* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires.
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) is skipped and logged as `BAD_POST_START_CMD` at `WARN`, the remaining commands still fire.
 
 ---
 

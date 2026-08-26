@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Switcher
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Dispatcher to trigger session switches between Steam and KDE.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -14,6 +14,8 @@
 import sys
 
 from utils import (
+    DEFAULT_DBUS_BIN,
+    DEFAULT_STEAM_BIN,
     NEXT_SESSION_PATH,
     get_ssot_var,
     jlog,
@@ -25,9 +27,6 @@ from utils import (
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once, never re-read from disk.
 # ---------------------------------------------------------------------------
-
-DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
-DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
 # Keywords that map argv[1] to the desktop target. Frozenset to enforce
 # immutability and O(1) membership lookup.

@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -186,29 +186,28 @@ def _ensure_safe_target(target: str) -> bool:
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
 ) -> None:
-    """Write member to target; unlink first to avoid ETXTBSY."""
+    """Write member to target via tmp+rename.
+
+    Atomic (target either holds the old content or the fully-written new
+    one, never missing/truncated on a crash mid-write), and — like
+    backup.py's archive write — os.replace also sidesteps ETXTBSY: it
+    swaps the directory entry to a new inode instead of truncating the
+    file in place, so replacing a currently-running binary still works.
+    """
     if member.isdir():
         os.makedirs(target, exist_ok=True)
         return
 
     os.makedirs(os.path.dirname(target), exist_ok=True)
 
-    if os.path.exists(target):
-        try:
-            os.unlink(target)
-        except OSError as err:
-            jlog(
-                "SYSTEM",
-                f"RESTORE_UNLINK_WARN: {target} - {err}",
-                level="WARN",
-            )
-
     src = tar.extractfile(member)
     if src is None:
         return
 
-    with src, open(target, "wb") as dest:
+    tmp = f"{target}.sdy_restore_tmp"
+    with src, open(tmp, "wb") as dest:
         dest.write(src.read())
+    os.replace(tmp, target)
 
 
 def _extract_member(

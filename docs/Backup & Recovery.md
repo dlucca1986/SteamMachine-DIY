@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.6-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -16,7 +16,7 @@ Three components:
 ---
 
 ## 🖥️ Using the Control Center
-The easiest way to manage your data is through the **Maintenance** tab in the Control Center.
+The easiest way to manage your data is through the **Maintenance** tab in the Control Center. **Backup**, **Restore**, and journal-vacuum are mutually exclusive: starting one while another is still running (e.g. a double-click) is rejected with a status-bar message instead of launching a second `pkexec` process against the same files.
 
 ### Creating a Backup
 1. Navigate to the **Maintenance** tab.
@@ -80,6 +80,7 @@ The restore tool implements multiple layers of validation before writing anythin
 * **Pre-existing symlink guard**: If a symlink already exists at the target path on disk, the write is refused to prevent redirect attacks from a previously planted link.
 * **Permission mask**: File modes from the archive are applied masked to `0o777` — a crafted archive cannot plant setuid/setgid binaries through a root-run restore.
 * **Link manifest validation**: Every `link → target` pair from the manifest (or mined from a legacy script) must resolve inside the allow-list on **both** ends, or it is rejected and logged. No shell is ever involved in link reconstruction.
+* **Atomic extraction**: Each file is written to a temporary sibling and `os.replace()`d into place — a crash or power loss mid-restore can never leave a target missing or truncated, and (like `backup.py`'s own archive write) this still avoids `ETXTBSY` when replacing a currently-running binary, since `os.replace()` swaps the directory entry instead of truncating the file in place.
 
 ## ⚠️ Important Notes
 * **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.

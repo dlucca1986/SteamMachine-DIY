@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Core Session Manager
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -20,6 +20,9 @@ import time
 from typing import Any
 
 from utils import (
+    DEFAULT_GS_BIN,
+    DEFAULT_PLASMA_BIN,
+    DEFAULT_STEAM_BIN,
     NEXT_SESSION_PATH,
     apply_env_map,
     get_ssot_num,
@@ -36,10 +39,6 @@ from utils import (
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
 # ---------------------------------------------------------------------------
-
-DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
-DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
-DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 
 STATUS_MAP: dict[str, str] = {
     "steam": "Starting Game Mode...",
@@ -88,7 +87,14 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
     apply_env_map(GAME_MODE_ENV)
     apply_env_map(cfg.get("env_vars"))
     for flag in cfg.get("flags") or []:
-        gs_args.extend(shlex.split(str(flag)))
+        try:
+            gs_args.extend(shlex.split(str(flag)))
+        except ValueError as err:
+            # Unbalanced quote in a hand-edited flag: don't crash the whole
+            # session over one bad entry — same fallback health.py's
+            # preflight already uses for this exact field.
+            jlog("STEAM", f"BAD_FLAG_ENTRY: {flag!r} - {err}", level="WARN")
+            gs_args.extend(str(flag).split())
 
     steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
     gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
@@ -107,7 +113,15 @@ def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
     """Sleep *delay* seconds, then fire each cmd via spawn_native."""
     time.sleep(delay)
     for cmd_str in cmds:
-        parts = shlex.split(cmd_str)
+        try:
+            parts = shlex.split(cmd_str)
+        except ValueError as err:
+            jlog(
+                "STEAM",
+                f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
+                level="WARN",
+            )
+            continue
         if parts:
             spawn_native(parts[0], parts)
             jlog("STEAM", f"POST_START_CMD: {cmd_str}")

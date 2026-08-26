@@ -1,3 +1,11 @@
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Local-only engineering standards, not part of the public repo
+CLAUDE.md
+
+# Tool caches (Ruff, pytest, bandit)
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/

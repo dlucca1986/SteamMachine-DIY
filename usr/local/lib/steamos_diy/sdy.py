@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
-# VERSION:      2.1.6
+# VERSION:      2.1.7
 # DESCRIPTION:  Executes games with per-game overrides and global config.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -141,6 +141,19 @@ def _get_profile_path(
     return None
 
 
+def _safe_split(field: str, value: str) -> list[str]:
+    """shlex.split *value*; on an unbalanced quote, fall back to str.split().
+
+    A malformed per-game override must not stop the game from launching —
+    same fallback health.py's preflight already uses for gamescope flags.
+    """
+    try:
+        return shlex.split(value)
+    except ValueError as err:
+        jlog("STEAM", f"BAD_{field}: {value!r} - {err}", level="WARN")
+        return value.split()
+
+
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     """Compose wrapper + raw_args + extra_args for execvpe.
 
@@ -162,10 +175,12 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
         else str(extra_val)
     )
 
-    full_cmd: list[str] = shlex.split(wrapper) if wrapper else []
+    full_cmd: list[str] = (
+        _safe_split("GAME_WRAPPER", wrapper) if wrapper else []
+    )
     full_cmd.extend(raw_args)
     if extra:
-        full_cmd.extend(shlex.split(extra))
+        full_cmd.extend(_safe_split("GAME_EXTRA_ARGS", extra))
 
     return full_cmd
 
