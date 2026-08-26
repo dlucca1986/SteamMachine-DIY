@@ -111,6 +111,9 @@ install_dependencies() {
     BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc"
 
     info "Synchronizing package databases and installing core dependencies..."
+    # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
+    # are fixed-literal space-separated package lists, each must reach pacman as
+    # its own argv entry, not a single quoted string.
     pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS
 
     info "Configuring system groups for user: $REAL_USER"
