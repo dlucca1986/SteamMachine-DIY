@@ -293,9 +293,18 @@ def _check_binaries() -> list[CheckResult]:
 def _check_groups() -> CheckResult:
     """Confirm the current user belongs to every session-critical group."""
     try:
-        current = {grp.getgrgid(g).gr_name for g in os.getgroups()}
-    except (KeyError, OSError):
-        current = set()
+        gids = os.getgroups()
+    except OSError:
+        gids = []
+    current: set[str] = set()
+    for gid in gids:
+        try:
+            current.add(grp.getgrgid(gid).gr_name)
+        except KeyError:
+            # Stale/deleted group entry for this gid — not one of the
+            # critical groups we care about either way, so it must not
+            # blank out every group already resolved successfully.
+            continue
     missing = [g for g in _CRITICAL_GROUPS if g not in current]
     ok = not missing
     detail = "all present" if ok else f"missing: {', '.join(missing)}"

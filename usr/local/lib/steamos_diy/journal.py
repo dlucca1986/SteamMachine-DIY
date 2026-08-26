@@ -28,6 +28,11 @@ _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
 
+# journalctl's default "short" line format (used with --no-hostname) is
+# "<timestamp> <syslog-identifier>[<pid>]: <message>" — the pid lets us
+# attribute a NAME/ID pair to the process that actually logged it.
+_PID_FROM_LINE = re.compile(r"\[(\d+)\]:")
+
 # Allow-list for genuine gamescope log payloads (upstream output format).
 # Excludes false positives where "gamescope" appears only as a substring
 # inside file paths (e.g. Dolphin/kio copying gamescope.example.yaml) or
@@ -122,16 +127,26 @@ def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
 
 
 def parse_game_logs(res: str) -> dict[str, str]:
-    """Extract {name: appid_or_name} pairs from filtered journal text."""
+    """Extract {name: appid_or_name} pairs from filtered journal text.
+
+    Tracks the last-seen NAME per source pid rather than one shared
+    "current" name, so interleaved lines from two concurrently-running
+    processes (e.g. two games launched close together) can't misattribute
+    one game's AppID to another's name.
+    """
     det: dict[str, str] = {}
-    cur: str | None = None
+    cur_by_pid: dict[str, str] = {}
     for line in res.splitlines():
         kind, value = extract_game_metadata(line)
+        pid_match = _PID_FROM_LINE.search(line)
+        pid = pid_match.group(1) if pid_match else ""
         if kind == "NAME" and value:
             det[value] = value
-            cur = value
-        elif kind == "ID" and cur and value and len(value) >= _MIN_APPID_LEN:
-            det[cur] = value
+            cur_by_pid[pid] = value
+        elif kind == "ID" and value and len(value) >= _MIN_APPID_LEN:
+            cur = cur_by_pid.get(pid)
+            if cur:
+                det[cur] = value
     return det
 
 

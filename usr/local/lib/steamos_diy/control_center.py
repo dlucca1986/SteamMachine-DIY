@@ -101,6 +101,19 @@ _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 
 
+def _extract_game_name_from_display(raw: str) -> str:
+    """Strip a trailing "(AppID)" suffix from a combo display string.
+
+    _format_combo_items() only ever appends the suffix at the very end
+    (same anchor as _APPID_FROM_DISPLAY), so stripping via that anchor
+    instead of splitting on the first "(" avoids truncating a game name
+    that legitimately contains "(" of its own, e.g. "Portal (Test Build)"
+    plus an appid suffix would otherwise collide with a game named
+    "Portal".
+    """
+    return _APPID_FROM_DISPLAY.sub("", raw).strip()
+
+
 # ---------------------------------------------------------------------------
 # YAML parser — Round-Trip preserves comments and quoting on save.
 # ---------------------------------------------------------------------------
@@ -710,7 +723,7 @@ class SDYControlCenter(QMainWindow):
         """
         if not raw or "/" in raw:
             return
-        name = raw.split(" (")[0].strip()
+        name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
             self.game_editor.setPlainText(path.read_text(encoding="utf-8"))
@@ -746,7 +759,7 @@ class SDYControlCenter(QMainWindow):
                 "Invalid game name — '/' not allowed", 3000
             )
             return
-        name = raw.split(" (")[0].strip()
+        name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         self._atomic_save(
             str(path), self.game_editor.toPlainText(), self.game_editor

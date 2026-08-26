@@ -28,6 +28,36 @@ def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
     assert "hello" in line
 
 
+# ---------------------------------------------------------------------------
+# parse_game_logs — per-pid attribution
+#
+# Before the fix, a single global "current name" was reassigned on every
+# NAME line regardless of which process logged it, so an ID line from one
+# process could get attributed to a different, more-recently-seen game.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_game_logs_attributes_appid_to_its_own_process():
+    lines = 'chdir "/home/user/.steam/steamapps/common/GameA"\ngameID 220'
+    assert journal.parse_game_logs(lines) == {"GameA": "220"}
+
+
+def test_parse_game_logs_does_not_cross_attribute_interleaved_processes():
+    lines = (
+        "Aug 26 09:41:07 steam[1001]: "
+        'chdir "/home/user/.steam/steamapps/common/GameA"\n'
+        "Aug 26 09:41:07 steam[1002]: "
+        'chdir "/home/user/.steam/steamapps/common/GameB"\n'
+        "Aug 26 09:41:08 steam[1002]: gameID 730\n"
+        "Aug 26 09:41:08 steam[1001]: gameID 220"
+    )
+
+    detected = journal.parse_game_logs(lines)
+
+    assert detected["GameA"] == "220"
+    assert detected["GameB"] == "730"
+
+
 def test_parse_export_format_survives_garbled_timestamp_line():
     stdout = (
         "__REALTIME_TIMESTAMP=garbage\n"

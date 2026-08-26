@@ -1,10 +1,11 @@
-"""Regression tests for control_center.py's SSoT path resolution and the
-pkexec re-entrancy guard.
+"""Regression tests for control_center.py's SSoT path resolution, combo
+display-name parsing, and the pkexec re-entrancy guard.
 
-Neither needs a real QMainWindow/QApplication: _resolve_config_paths is
-a pure function, and _run_pkexec only touches self._pkexec_busy,
-self.statusBar() and self.process_finished — a plain stand-in object
-exercises the exact same code path without pulling Qt into the suite."""
+None need a real QMainWindow/QApplication: _resolve_config_paths and
+_extract_game_name_from_display are pure functions, and _run_pkexec only
+touches self._pkexec_busy, self.statusBar() and self.process_finished —
+a plain stand-in object exercises the exact same code path without
+pulling Qt into the suite."""
 
 from types import SimpleNamespace
 
@@ -39,6 +40,33 @@ def test_resolve_config_paths_falls_back_when_unset(set_ssot, tmp_path):
 
     assert conf_root == default_root
     assert games_conf_dir == default_root / "games.d"
+
+
+# ---------------------------------------------------------------------------
+# _extract_game_name_from_display
+# ---------------------------------------------------------------------------
+
+
+def test_extract_game_name_strips_trailing_appid_suffix():
+    assert (
+        control_center._extract_game_name_from_display("Half-Life 2 (220)")
+        == "Half-Life 2"
+    )
+
+
+def test_extract_game_name_keeps_parens_that_are_not_the_appid_suffix():
+    raw = "Portal (Test Build) (730)"
+    assert (
+        control_center._extract_game_name_from_display(raw)
+        == "Portal (Test Build)"
+    )
+
+
+def test_extract_game_name_returns_bare_name_unchanged():
+    assert (
+        control_center._extract_game_name_from_display("MyGame")
+        == "MyGame"
+    )
 
 
 # ---------------------------------------------------------------------------
