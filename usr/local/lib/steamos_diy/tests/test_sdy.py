@@ -135,6 +135,27 @@ def test_resolve_effective_name_picks_rightmost_existing_path(tmp_path):
     assert eff_name == "MyGame"
 
 
+def test_resolve_effective_name_skips_trailing_directory_arg(tmp_path):
+    """Regression: a trailing existing-but-directory argument (e.g. a
+    --workshop-dir value) must not be mistaken for the game binary just
+    because it's the rightmost existing absolute path — only a real file
+    can be the thing actually being launched (code-review finding,
+    2026-08-27)."""
+    game_dir = tmp_path / "MyGame"
+    game_dir.mkdir()
+    binary = game_dir / "start.sh"
+    binary.write_text("")
+    workshop_dir = tmp_path / "workshop"
+    workshop_dir.mkdir()
+
+    stem, eff_name = sdy._resolve_effective_name(
+        [str(binary), "--workshop-dir", str(workshop_dir)]
+    )
+
+    assert stem == "start"
+    assert eff_name == "MyGame"
+
+
 def test_resolve_effective_name_no_existing_path_falls_back_to_first_arg():
     stem, _ = sdy._resolve_effective_name(["relative_binary"])
 

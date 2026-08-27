@@ -102,12 +102,17 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
 
     When the stem is generic (start, launcher, run…), substitutes the parent
     directory name — /opt/MyGame/start.sh resolves to "MyGame", not "start".
+    Rightmost, not first: a wrapper (mangohud, gamemoderun) commonly comes
+    first in argv, with the actual game binary later — see the "rightmost"
+    regression test. isfile (not just exists) skips a trailing directory
+    argument (e.g. --workshop-dir /path/to/workshop) that would otherwise
+    be mistaken for the game binary itself.
     """
     target_path = next(
         (
             a
             for a in reversed(raw_args)
-            if a.startswith("/") and os.path.exists(a)
+            if a.startswith("/") and os.path.isfile(a)
         ),
         os.path.abspath(raw_args[0]),
     )

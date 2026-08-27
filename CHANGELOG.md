@@ -201,6 +201,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   in `flags` degraded to a naive `str.split()` and still ran. Now both fields share the same
   degrade-and-run behavior. Found independently by 3 of 8 review agents in the second
   extended code-review pass (reuse, cross-file, and architecture angles).
+- `sdy.py`: `_resolve_effective_name`'s "rightmost existing absolute path in argv" heuristic
+  could pick a trailing directory argument (e.g. a `--workshop-dir /path/to/workshop` value)
+  instead of the actual game binary, since it only checked `os.path.exists`, not that the
+  candidate was a file. The per-game profile lookup then silently missed, falling back to
+  the global config with no error. Now requires `os.path.isfile`, which keeps the
+  intentional "skip past a wrapper like mangohud earlier in argv" behavior (already pinned
+  by an existing test) while excluding directories.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
