@@ -95,6 +95,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   flag, same shape as `_pkexec_busy`/`_service_status_busy`: a second scan attempt while
   one is in flight is now a no-op instead of racing (found during this session's second
   code-review pass, 2026-08-27).
+- **Visual busy-state on Backup/Restore/Vacuum buttons** (CLAUDE.md checklist item 15):
+  these three buttons previously never reflected `_pkexec_busy` at all — the only feedback
+  for a double-click was a 3s status-bar toast, and once a timeout permanently locked
+  Backup/Restore the buttons kept looking fully clickable indefinitely, unlike
+  `updater.py`'s named `_set_busy` reference pattern. `control_center.py` now tracks each
+  button in `_lock_key_buttons` (keyed by `lock_key`) and disables it the moment
+  `_run_pkexec` starts; a new `pkexec_lock_released` signal — emitted only when the lock
+  actually clears — lets a main-thread slot (`_on_pkexec_lock_released`) re-enable it,
+  since Qt widgets must never be touched directly from the background worker thread
+  (found during this session's second code-review pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s

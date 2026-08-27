@@ -225,6 +225,11 @@ class SDYControlCenter(QMainWindow):
     # pylint: disable=too-many-public-methods  # Qt slots + closeEvent override
 
     process_finished = pyqtSignal(str, str, bool)  # (title, message, is_error)
+    # Fires when a lock_key's guard actually clears, so the matching
+    # button(s) can be safely re-enabled — separate from process_finished
+    # because a sticky timeout (see _run_pkexec) reports completion
+    # without releasing the lock, so the button must stay disabled then.
+    pkexec_lock_released = pyqtSignal(str)  # lock_key
     logs_ready = pyqtSignal(list, str)  # (entries, tag)
     games_detected = pyqtSignal(dict)  # {name: appid_or_name}
     preflight_ready = pyqtSignal(list)  # list[CheckResult]
@@ -259,6 +264,10 @@ class SDYControlCenter(QMainWindow):
         # (still running from an earlier click) finishes after it and
         # emits games_detected last (CLAUDE.md checklist item 17).
         self._scan_games_busy = False
+
+        # Populated by init_maint_tab; declared here so pylint sees it
+        # set in __init__ like every other instance attribute.
+        self._lock_key_buttons: dict[str, list[QPushButton]] = {}
 
         # Style maps — emoji + colour per log category
         self.log_styles = {
@@ -320,6 +329,7 @@ class SDYControlCenter(QMainWindow):
 
         # Wire async signals
         self.process_finished.connect(self._show_completion_message)
+        self.pkexec_lock_released.connect(self._on_pkexec_lock_released)
         self.logs_ready.connect(self._on_logs_ready)
         self.games_detected.connect(self._update_game_combo_ui)
         self.preflight_ready.connect(self._on_preflight_ready)
@@ -412,6 +422,8 @@ class SDYControlCenter(QMainWindow):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(QLabel("<b>System Management</b>"))
 
+        # Fourth element (lock_key) is None for tools that aren't guarded
+        # by _run_pkexec; the button is then never disabled/re-enabled.
         tools = [
             (
                 "🎮 Switch to Steam (Game Mode)",
@@ -423,15 +435,21 @@ class SDYControlCenter(QMainWindow):
                         "steam",
                     ],
                 ),
+                None,
             ),
-            ("📝 Edit System Config (SSoT)", self.edit_ssot_privileged),
-            ("🩺 Validate Configuration", self.validate_config),
-            ("🧹 Clean System Logs (Vacuum)", self.cleanup_logs_privileged),
-            ("📦 Create Full System Backup", self.run_backup),
-            ("🔄 Restore from Archive", self.run_restore),
+            ("📝 Edit System Config (SSoT)", self.edit_ssot_privileged, None),
+            ("🩺 Validate Configuration", self.validate_config, None),
+            (
+                "🧹 Clean System Logs (Vacuum)",
+                self.cleanup_logs_privileged,
+                "vacuum",
+            ),
+            ("📦 Create Full System Backup", self.run_backup, "files"),
+            ("🔄 Restore from Archive", self.run_restore, "files"),
             (
                 "🖥️ Open Konsole Terminal",
                 lambda: spawn_native("/usr/bin/konsole", ["/usr/bin/konsole"]),
+                None,
             ),
             (
                 "📂 Browse Config Folder",
@@ -439,13 +457,22 @@ class SDYControlCenter(QMainWindow):
                     "/usr/bin/xdg-open",
                     ["/usr/bin/xdg-open", str(self.conf_root)],
                 ),
+                None,
             ),
         ]
-        for text, func in tools:
+        # Populates self._lock_key_buttons (declared in __init__) so
+        # _run_pkexec can visually disable the button(s) tied to a
+        # lock_key while it's busy, then re-enable them once the guard
+        # actually clears (see pkexec_lock_released's own comment) —
+        # mirrors updater.py's _set_busy pattern (CLAUDE.md checklist
+        # item 15) instead of leaving the only feedback a 3s status toast.
+        for text, func, lock_key in tools:
             btn = QPushButton(text)
             btn.setStyleSheet(_BUTTON_STYLE)
             btn.clicked.connect(func)
             layout.addWidget(btn)
+            if lock_key is not None:
+                self._lock_key_buttons.setdefault(lock_key, []).append(btn)
 
         # Whole updater flow (check → download → Konsole handoff) lives
         # in updater.py; the tab only mounts its button.
@@ -1081,6 +1108,11 @@ class SDYControlCenter(QMainWindow):
         else:
             QMessageBox.information(self, title, message)
 
+    def _on_pkexec_lock_released(self, lock_key: str) -> None:
+        """Re-enable the button(s) tied to *lock_key* (main-thread slot)."""
+        for btn in self._lock_key_buttons.get(lock_key, []):
+            btn.setEnabled(True)
+
     def _refresh_service_status(self):
         """Fetch service status off-thread; emit service_status_ready.
 
@@ -1147,6 +1179,8 @@ class SDYControlCenter(QMainWindow):
             )
             return
         self._pkexec_busy[lock_key] = True
+        for btn in self._lock_key_buttons.get(lock_key, []):
+            btn.setEnabled(False)
 
         def worker() -> None:
             # Left True (never reset in the finally below) only on a
@@ -1203,6 +1237,11 @@ class SDYControlCenter(QMainWindow):
             finally:
                 if not timed_out:
                     self._pkexec_busy[lock_key] = False
+                    # Never touch the button widgets directly from this
+                    # background thread — emit and let the main-thread
+                    # slot (_on_pkexec_lock_released) do it, same as
+                    # process_finished above.
+                    self.pkexec_lock_released.emit(lock_key)
 
         threading.Thread(target=worker, daemon=True).start()
 

@@ -107,6 +107,14 @@ class _FakeStatusBar:
         self.messages.append(msg)
 
 
+class _FakeButton:
+    def __init__(self):
+        self.enabled = True
+
+    def setEnabled(self, value):  # pylint: disable=invalid-name
+        self.enabled = value
+
+
 class _FakeWindow:
     """Stand-in for SDYControlCenter: only what _run_pkexec touches."""
 
@@ -116,6 +124,8 @@ class _FakeWindow:
         self._status_bar = _FakeStatusBar()
         self._service_status_busy = False
         self.service_status_ready = SimpleNamespace(emit=lambda *a: None)
+        self._lock_key_buttons = {}
+        self.pkexec_lock_released = SimpleNamespace(emit=lambda *a: None)
 
     def statusBar(self):
         return self._status_bar
@@ -198,6 +208,108 @@ def test_run_pkexec_lock_keys_are_independent(monkeypatch):
     assert started
     assert win._pkexec_busy == {"files": True, "vacuum": True}
     assert not win._status_bar.messages
+
+
+def test_run_pkexec_disables_buttons_for_its_lock_key(monkeypatch):
+    """Regression: starting a privileged operation must visually disable
+    the button(s) tied to its lock_key — previously the only feedback for
+    a double-click was a 3s status-bar toast, unlike updater.py's
+    _set_busy pattern (CLAUDE.md checklist item 15; code-review finding,
+    2026-08-27)."""
+    win = _FakeWindow()
+    btn = _FakeButton()
+    win._lock_key_buttons = {"files": [btn]}
+    started = []
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _fake_thread_factory(started)
+    )
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="e",
+        err_msg="m2",
+    )
+
+    assert started
+    assert btn.enabled is False
+
+
+def test_run_pkexec_emits_lock_released_on_success(monkeypatch):
+    """The worker thread must never touch widgets directly — it emits
+    pkexec_lock_released so the main-thread slot can re-enable buttons."""
+    win = _FakeWindow()
+    released = []
+    win.pkexec_lock_released = SimpleNamespace(
+        emit=released.append
+    )
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    monkeypatch.setattr(
+        control_center.subprocess, "run", lambda *a, **k: None
+    )
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="e",
+        err_msg="m2",
+    )
+
+    assert released == ["files"]
+
+
+def test_run_pkexec_does_not_emit_lock_released_on_sticky_timeout(
+    monkeypatch,
+):
+    """A sticky timeout must leave the button disabled — the underlying
+    script may still be running, matching _pkexec_busy staying True."""
+    win = _FakeWindow()
+    released = []
+    win.pkexec_lock_released = SimpleNamespace(
+        emit=released.append
+    )
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="pkexec", timeout=300)
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="e",
+        err_msg="m2",
+    )
+
+    assert not released
+
+
+def test_on_pkexec_lock_released_reenables_only_matching_buttons():
+    win = _FakeWindow()
+    files_btn = _FakeButton()
+    files_btn.enabled = False
+    vacuum_btn = _FakeButton()
+    vacuum_btn.enabled = False
+    win._lock_key_buttons = {"files": [files_btn], "vacuum": [vacuum_btn]}
+
+    control_center.SDYControlCenter._on_pkexec_lock_released(win, "files")
+
+    assert files_btn.enabled is True
+    assert vacuum_btn.enabled is False
 
 
 def test_refresh_service_status_skips_tick_while_busy(monkeypatch):
