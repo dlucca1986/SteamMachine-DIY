@@ -24,13 +24,13 @@ from pathlib import Path
 from utils import (
     BACKUP_MANIFEST_NAME,
     BACKUP_SCRIPT_NAME,
-    SSOT_CONF_PATH,
     SYSTEMCTL_BIN,
     check_root,
     fix_ownership,
     get_backup_mapping,
     get_real_user,
     jlog,
+    require_ssot_conf,
     verify_archive,
 )
 
@@ -315,6 +315,10 @@ def _iter_link_pairs(name: str, text: str):
         return
     for line in text.splitlines():
         try:
+            # Deliberately skip rather than use shlex_split_or_fallback():
+            # a degraded str.split() here could pair the wrong link/target
+            # and recreate a bogus symlink, which is worse than skipping
+            # one legacy entry outright.
             tokens = shlex.split(line)
         except ValueError:
             continue
@@ -384,9 +388,7 @@ def _prepare_restore(
         (user, home_real, mapping, allowed) ready for _execute_restore.
     """
     check_root()
-    if not os.path.isfile(SSOT_CONF_PATH):
-        jlog("SYSTEM", "RESTORE_FAILED: SSoT config not found", level="ERROR")
-        sys.exit(1)
+    require_ssot_conf("RESTORE")
 
     if not os.path.exists(archive_path):
         jlog(

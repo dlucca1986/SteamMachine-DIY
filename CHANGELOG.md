@@ -133,6 +133,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   aren't SSoT-backed: every systemd distro ships them at this fixed path, so there's no
   legitimate per-deployment override — this is a same-file-concept centralization, not a new
   user-facing config knob.
+- `utils.py`: added `require_ssot_conf(tag)` — `backup.py` and `restore.py` each independently
+  checked `os.path.isfile(SSOT_CONF_PATH)` and exited with an identical `jlog`+`sys.exit(1)`
+  pattern, differing only in the log tag (`BACKUP_FAILED`/`RESTORE_FAILED`). Both now call the
+  shared helper. `restore.py`'s legacy `restore_links.sh` line parser also gained a comment
+  explaining why it deliberately skips a malformed line via a bare `shlex.split()`/`except
+  ValueError` instead of the shared `shlex_split_or_fallback()`: a degraded `str.split()` there
+  could pair the wrong link/target and recreate a bogus symlink, worse than skipping the entry.
 
 ---
 

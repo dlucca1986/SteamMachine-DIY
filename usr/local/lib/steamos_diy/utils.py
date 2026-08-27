@@ -417,6 +417,17 @@ def check_root() -> None:
         sys.exit(1)
 
 
+def require_ssot_conf(tag: str) -> None:
+    """Exit with code 1, logging f"{tag}_FAILED", if the SSoT conf is missing.
+
+    Shared precondition for backup.py and restore.py, which both need the
+    SSoT readable before doing anything privileged.
+    """
+    if not os.path.isfile(SSOT_CONF_PATH):
+        jlog("SYSTEM", f"{tag}_FAILED: SSoT config not found", level="ERROR")
+        sys.exit(1)
+
+
 def get_backup_mapping(home: str) -> dict[str, str]:
     """Archive-path → filesystem-path map. Single source of truth for the
     backup format used by both backup.py and restore.py.

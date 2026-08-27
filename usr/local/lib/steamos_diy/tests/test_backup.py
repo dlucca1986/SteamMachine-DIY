@@ -155,7 +155,6 @@ def test_run_backup_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(utils, "NEXT_SESSION_PATH", str(next_session))
     monkeypatch.setattr(utils, "CORE_LIB_DIR", str(core_lib_dir))
     monkeypatch.setattr(utils, "_SERVICE_PATH", str(service_file))
-    monkeypatch.setattr(backup, "SSOT_CONF_PATH", str(ssot_conf))
     monkeypatch.setattr(backup, "check_root", lambda: None)
     monkeypatch.setattr(backup, "get_real_user", lambda: ("tester", home))
     monkeypatch.setattr(backup, "fix_ownership", lambda *a, **k: None)

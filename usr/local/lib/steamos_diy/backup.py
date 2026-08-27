@@ -21,7 +21,6 @@ from pathlib import Path
 from utils import (
     BACKUP_MANIFEST_NAME,
     CORE_LIB_DIR,
-    SSOT_CONF_PATH,
     UPDATES_DIR_NAME,
     USER_CONFIG_REL,
     check_root,
@@ -30,6 +29,7 @@ from utils import (
     get_real_user,
     get_ssot_num,
     jlog,
+    require_ssot_conf,
     verify_archive,
 )
 
@@ -248,9 +248,7 @@ def run_backup() -> None:
     to *.tar.gz. The previous archive is never touched on failure.
     """
     check_root()
-    if not os.path.isfile(SSOT_CONF_PATH):
-        jlog("SYSTEM", "BACKUP_FAILED: SSoT config not found", level="ERROR")
-        sys.exit(1)
+    require_ssot_conf("BACKUP")
 
     user, home = get_real_user()
     home_str = str(home)
