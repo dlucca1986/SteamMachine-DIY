@@ -159,12 +159,27 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
     """SIGTERM → wait → SIGKILL if ignored within TERM_TIMEOUT."""
     if proc.returncode is None:
         proc.terminate()
+    term_timeout = get_ssot_num("TERM_TIMEOUT", 5.0)
     try:
-        proc.wait(timeout=get_ssot_num("TERM_TIMEOUT", 5.0))
+        proc.wait(timeout=term_timeout)
+        return
     except subprocess.TimeoutExpired:
         jlog("CORE", "SIGTERM_TIMEOUT: escalating to SIGKILL", level="WARN")
         proc.kill()
-        proc.wait()
+    try:
+        proc.wait(timeout=term_timeout)
+    except subprocess.TimeoutExpired:
+        # Still alive after SIGKILL: stuck in uninterruptible I/O
+        # (D-state), nothing more to do at this level — the kernel, not
+        # us, controls when that clears. systemd's own KillMode=mixed +
+        # TimeoutStopSec backstop reaps the cgroup regardless, so
+        # returning here (instead of blocking forever) lets the caller's
+        # shutdown/recovery flow proceed rather than wedging with it.
+        jlog(
+            "CORE",
+            "SIGKILL_TIMEOUT: process still alive (D-state?)",
+            level="ERROR",
+        )
 
 
 def _build_command_for(target: str, cfg: dict) -> list[str]:

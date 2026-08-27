@@ -215,6 +215,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   never possible either. The clause was logically dead code — reachable per syntax, never
   per actual call pattern — the exact class of issue `vulture` can't catch since it only
   flags unreferenced code, not unreachable branches. No behavior change.
+- `session_launch.py`: `_terminate_gracefully`'s final `proc.wait()` after escalating to
+  `SIGKILL` had no timeout, so a child stuck in uninterruptible I/O (D-state — a real
+  possibility on a handheld with a flaky storage/USB glitch) could block it indefinitely,
+  in turn blocking `_handle_term`'s `sys.exit(0)`. Now bounded by the same `TERM_TIMEOUT`
+  used for the SIGTERM wait; if still alive after that, logs `SIGKILL_TIMEOUT` and returns
+  rather than hanging — `systemd`'s own `KillMode=mixed` + `TimeoutStopSec` backstop reaps
+  the cgroup regardless, so this only affects how promptly the caller's own shutdown/
+  recovery flow can proceed, not whether the process eventually goes away.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`

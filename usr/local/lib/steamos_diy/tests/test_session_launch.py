@@ -124,6 +124,35 @@ def test_terminate_gracefully_escalates_to_sigkill(set_ssot):
         assert proc.returncode is not None
 
 
+def test_terminate_gracefully_returns_even_if_still_alive_after_sigkill(
+    set_ssot,
+):
+    """Regression: a process stuck in uninterruptible I/O (D-state) can
+    outlive even SIGKILL. The final proc.wait() must be bounded so this
+    function returns instead of blocking forever — systemd's own
+    KillMode=mixed + TimeoutStopSec backstop handles the cgroup regardless
+    (code-review finding, 2026-08-27)."""
+    set_ssot(TERM_TIMEOUT="0.05")
+    calls = {"kill": 0}
+
+    class _StuckProc:
+        returncode = None
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            calls["kill"] += 1
+
+        def wait(self, timeout=None):  # pylint: disable=unused-argument
+            raise subprocess.TimeoutExpired(cmd="stuck", timeout=timeout)
+
+    # Must return promptly (not hang) even though wait() never succeeds.
+    session_launch._terminate_gracefully(_StuckProc())
+
+    assert calls["kill"] == 1
+
+
 # ---------------------------------------------------------------------------
 # _run_session — end-to-end crash-recovery integration
 # ---------------------------------------------------------------------------
