@@ -253,6 +253,13 @@ class SDYControlCenter(QMainWindow):
         # simply skipping a cycle.
         self._service_status_busy = False
 
+        # Guards refresh_detected_games against a second scan starting
+        # while one is still in flight — without this, a fast second
+        # scan's result could be overwritten when a slower first scan
+        # (still running from an earlier click) finishes after it and
+        # emits games_detected last (CLAUDE.md checklist item 17).
+        self._scan_games_busy = False
+
         # Style maps — emoji + colour per log category
         self.log_styles = {
             "CORE:": ("🔵", "#3498db"),
@@ -859,33 +866,41 @@ class SDYControlCenter(QMainWindow):
         """Scan journal for game launches; emits games_detected when done.
 
         Runs journalctl directly (no shell) — pure-Python filtering avoids
-        shell-injection risk when home contains metacharacters.
+        shell-injection risk when home contains metacharacters. Skips the
+        scan if one is already in flight (see _scan_games_busy's comment).
         """
+        if self._scan_games_busy:
+            return
+        self._scan_games_busy = True
         self.combo_games.setPlaceholderText("Scanning history...")
         home = os.path.expanduser("~")
 
         def worker() -> None:
             try:
-                # Fixed argv, no shell — see this method's docstring on
-                # why journalctl is invoked directly instead of a shell.
-                res = subprocess.run(  # nosec B603
-                    [
-                        JOURNALCTL_BIN,
-                        "--since",
-                        "24 hours ago",
-                        "--no-hostname",
-                        "--no-pager",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=10,
-                )
-                lines = filter_game_journal_lines(res.stdout, home)
-                detected = parse_game_logs("\n".join(lines))
-                self.games_detected.emit(detected)
-            except (subprocess.SubprocessError, OSError):
-                self.games_detected.emit({})
+                try:
+                    # Fixed argv, no shell — see this method's docstring
+                    # on why journalctl is invoked directly instead of a
+                    # shell.
+                    res = subprocess.run(  # nosec B603
+                        [
+                            JOURNALCTL_BIN,
+                            "--since",
+                            "24 hours ago",
+                            "--no-hostname",
+                            "--no-pager",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        timeout=10,
+                    )
+                    lines = filter_game_journal_lines(res.stdout, home)
+                    detected = parse_game_logs("\n".join(lines))
+                    self.games_detected.emit(detected)
+                except (subprocess.SubprocessError, OSError):
+                    self.games_detected.emit({})
+            finally:
+                self._scan_games_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 

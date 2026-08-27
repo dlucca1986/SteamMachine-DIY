@@ -404,6 +404,7 @@ class _FakeGamesWindow:  # pylint: disable=too-few-public-methods
     def __init__(self):
         self.combo_games = _FakeCombo()
         self.games_detected = SimpleNamespace(emit=lambda *a: None)
+        self._scan_games_busy = False
 
 
 def test_refresh_detected_games_passes_a_timeout(monkeypatch):
@@ -428,3 +429,39 @@ def test_refresh_detected_games_passes_a_timeout(monkeypatch):
     control_center.SDYControlCenter.refresh_detected_games(win)
 
     assert captured.get("timeout") is not None
+
+
+def test_refresh_detected_games_skips_scan_while_busy(monkeypatch):
+    """Regression: a second click while a scan is in flight must not
+    start a new one — the previous, unguarded version let two scans
+    overlap, and whichever journalctl call finished last would silently
+    overwrite the other's (possibly fresher) result (CLAUDE.md checklist
+    item 17; code-review finding, 2026-08-27)."""
+    win = _FakeGamesWindow()
+    win._scan_games_busy = True
+    started = []
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _fake_thread_factory(started)
+    )
+
+    control_center.SDYControlCenter.refresh_detected_games(win)
+
+    assert not started
+
+
+def test_refresh_detected_games_resets_guard_after_completion(monkeypatch):
+    win = _FakeGamesWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+
+    def fake_run(cmd, **_kwargs):
+        return control_center.subprocess.CompletedProcess(
+            cmd, 0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter.refresh_detected_games(win)
+
+    assert win._scan_games_busy is False

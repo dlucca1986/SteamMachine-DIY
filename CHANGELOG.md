@@ -88,6 +88,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `_pkexec_busy`: a tick is skipped while a poll is already in flight, and the flag resets
   once `get_service_status()` returns (found during this session's second code-review
   pass, 2026-08-27).
+- **`refresh_detected_games` staleness guard** (CLAUDE.md checklist item 17): the "Scan
+  History" button had no guard against a second click starting an overlapping journalctl
+  scan — if a slower first scan finished after a faster second one, its stale result would
+  silently overwrite the fresher one in the games combo box. Added a `_scan_games_busy`
+  flag, same shape as `_pkexec_busy`/`_service_status_busy`: a second scan attempt while
+  one is in flight is now a no-op instead of racing (found during this session's second
+  code-review pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
