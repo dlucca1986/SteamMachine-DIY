@@ -16,13 +16,14 @@ The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/ste
 ## 🏗️ Core Responsibilities
 
 ### 1. Data Integrity (`write_atomic`)
-Files persisted via `write_atomic()` follow a three-step protocol executed entirely in the C-Core:
+Files persisted via `write_atomic()` follow a four-step protocol executed entirely in the C-Core:
 
 1. Write data to `<path>.tmp`.
 2. Call `fdatasync()` to flush write buffers to physical storage.
 3. Call `rename()` to atomically replace the target file.
+4. Best-effort `fsync()` the containing directory, so the rename's directory-entry update is itself durable across a power loss before its own journal entry flushes — `rename()` alone only guarantees the *content* swap is atomic, not that the directory update survives a crash immediately after.
 
-The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves.
+The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves. Note: the new file always gets mode `0644`, regardless of what the file it replaces had — inherent to tmp+rename (a new inode, not an in-place edit), harmless for every current caller since none write anything permission-sensitive.
 
 ### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
 `get_ssot_var(key)` serves values from the module-level `_SSOT_CACHE` dict, which the **first call** fills by parsing the whole of `/etc/default/steamos_diy.conf` in a single disk read (pure-Python `key=value` parser with quote-stripping via `_strip_quotes`; first occurrence wins on duplicate keys). Every later call — cache hit *or* miss — is a dict lookup with no disk I/O, so a key absent from the file never triggers a re-read. All resolved values are exported into `os.environ` at load time so child processes inherit them.

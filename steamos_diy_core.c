@@ -63,6 +63,11 @@ void c_write_atomic(const char *path, const char *val) {
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     // O_CLOEXEC: keep this transient fd out of any concurrently forked child.
+    // Mode 0644 always applies to the new inode, regardless of the target
+    // file's previous permissions (tmp+rename replaces the inode outright,
+    // it can't "preserve" the old one) — fine for every current caller
+    // (next_session marker, user config YAML), none of which need anything
+    // stricter, but worth this note for whoever adds the next one.
     int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd < 0) return;
     size_t len = strlen(val);
@@ -77,12 +82,32 @@ void c_write_atomic(const char *path, const char *val) {
     if (rename(tmp_path, path) != 0) {
         syslog(LOG_ERR, "c_write_atomic: rename %s -> %s: %m", tmp_path, path);
         unlink(tmp_path);
+        return;
+    }
+    // rename() is atomic, but the directory entry update it makes isn't
+    // guaranteed durable across a power loss until the directory itself is
+    // fsync'd — this runs on a handheld that can lose power mid-operation
+    // (same threat model as the subprocess timeout discipline elsewhere in
+    // this project). Best-effort: a failure to open/fsync the directory
+    // isn't reported, since the rename itself already succeeded.
+    char dir_path[512];
+    snprintf(dir_path, sizeof(dir_path), "%s", path);
+    char *slash = strrchr(dir_path, '/');
+    if (slash) {
+        // path directly under root ("/foo") -> keep dir_path as "/"
+        // rather than truncating to an empty, unopenable string.
+        *(slash == dir_path ? slash + 1 : slash) = '\0';
+        int dfd = open(dir_path, O_RDONLY | O_CLOEXEC);
+        if (dfd >= 0) {
+            fsync(dfd);
+            close(dfd);
+        }
     }
 }
 
 // 4. SYSTEMD READINESS NOTIFICATION (handles abstract sockets via '@' prefix)
 __attribute__((visibility("default")))
-void c_sd_notify_ready() {
+void c_sd_notify_ready(void) {
     const char *sock_path = getenv("NOTIFY_SOCKET");
     if (!sock_path) return;
     // SOCK_CLOEXEC: don't leak the notify socket into a forked child.
@@ -105,6 +130,6 @@ void c_sd_notify_ready() {
     socklen_t addrlen = offsetof(struct sockaddr_un, sun_path) + strlen(sock_path);
     if (addrlen > sizeof(addr)) addrlen = sizeof(addr);
     const char *msg = "READY=1";
-    sendto(fd, msg, 7, 0, (const struct sockaddr *)&addr, addrlen);
+    sendto(fd, msg, strlen(msg), 0, (const struct sockaddr *)&addr, addrlen);
     close(fd);
 }

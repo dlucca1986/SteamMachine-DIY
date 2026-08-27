@@ -162,6 +162,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   live on a real gamescope session (no prior test merged both entry sources).
   `journalctl -o short-iso` already includes the UTC offset, so dropping the
   `.replace(tzinfo=None)` call is sufficient — both sources now stay aware.
+- `steamos_diy_core.c`: first full manual review of the C source (checklist items 1/6/7,
+  pre-checked by `scripts/audit-c-core.sh`/`scripts/audit-ctypes-abi.py`) found and fixed
+  four issues in `c_write_atomic`/`c_sd_notify_ready`. Most notably, `c_write_atomic`'s
+  `rename()` was never followed by an `fsync()` on the containing directory — the rename
+  itself is atomic, but the directory-entry update it makes isn't guaranteed durable across
+  a power loss before that directory's own journal entry flushes, on the same handheld
+  power-loss threat model already documented for subprocess timeout discipline. It now
+  best-effort `fsync()`s the parent directory (handles both nested and single-level-under-
+  root paths) after a successful rename. Also: `c_sd_notify_ready()`'s empty `()` parameter
+  list (unspecified-argument C, not true zero-argument) is now `(void)`; its `sendto()` call
+  hardcoded the length of `"READY=1"` as the literal `7` instead of `strlen(msg)`; and a
+  comment now documents that `c_write_atomic` always creates its target with mode `0644`
+  regardless of the file's previous permissions (inherent to tmp+rename, harmless today
+  since no caller writes a permission-sensitive file through it). All four verified by
+  compiling `libcore.so` and exercising every function directly via `ctypes` (including a
+  real abstract `AF_UNIX` socket round-trip for `c_sd_notify_ready`), since this file has no
+  automated test coverage (`conftest.py` mocks `ctypes.CDLL` for the Python suite). CLAUDE.md
+  gained a "Confirmed-intentional design decisions" entry for `gcc -fanalyzer`'s unrelated
+  `%m`/`-Wformat` non-ISO-C warning on the same `syslog()` call (valid glibc extension, this
+  project only targets glibc distros) so it isn't re-flagged as a finding in future audits.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
