@@ -193,6 +193,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   gained a "Confirmed-intentional design decisions" entry for `gcc -fanalyzer`'s unrelated
   `%m`/`-Wformat` non-ISO-C warning on the same `syslog()` call (valid glibc extension, this
   project only targets glibc distros) so it isn't re-flagged as a finding in future audits.
+- `session_launch.py`: `_schedule_post_start_cmds` reimplemented shlex parsing with raw
+  `shlex.split`/skip-on-`ValueError` instead of reusing `shlex_split_or_fallback` — already
+  imported and used two functions above it for the structurally identical `flags` field, and
+  already the documented contract this test file's own docstring claimed for *both* fields.
+  A malformed `post_start_cmds` entry silently skipped the whole command; the identical typo
+  in `flags` degraded to a naive `str.split()` and still ran. Now both fields share the same
+  degrade-and-run behavior. Found independently by 3 of 8 review agents in the second
+  extended code-review pass (reuse, cross-file, and architecture angles).
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`

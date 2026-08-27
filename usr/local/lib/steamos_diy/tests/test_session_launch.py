@@ -46,7 +46,13 @@ def test_build_gamescope_args_well_formed_unaffected(set_ssot):
     assert "--" in args
 
 
-def test_schedule_post_start_cmds_skips_malformed_runs_rest(monkeypatch):
+def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
+    """Matches _build_gamescope_args's degrade-via-str.split() behavior
+    for the identical class of hand-edited field, instead of silently
+    skipping the malformed command outright (code-review finding,
+    2026-08-27: the two fields had diverged to different error-handling
+    despite this file's own docstring already documenting one shared
+    degrade-gracefully contract for both)."""
     monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
     spawned = []
     monkeypatch.setattr(
@@ -59,7 +65,12 @@ def test_schedule_post_start_cmds_skips_malformed_runs_rest(monkeypatch):
         ['echo "unterminated', "notify-send hello"], 0.0
     )
 
-    assert spawned == [["notify-send", "hello"]]
+    # First entry degrades via str.split() and still runs; second is
+    # well-formed and unaffected.
+    assert spawned == [
+        ["echo", '"unterminated'],
+        ["notify-send", "hello"],
+    ]
 
 
 # ---------------------------------------------------------------------------

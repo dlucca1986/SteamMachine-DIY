@@ -11,7 +11,6 @@
 # =============================================================================
 """
 
-import shlex
 import signal
 
 # B404: importing subprocess isn't the risk — every call site below
@@ -113,18 +112,22 @@ def _get_post_start_cmds(cfg: dict) -> list[str]:
 
 
 def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
-    """Sleep *delay* seconds, then fire each cmd via spawn_native."""
+    """Sleep *delay* seconds, then fire each cmd via spawn_native.
+
+    Uses shlex_split_or_fallback like every other hand-edited shell-like
+    field in this codebase (flags, GAME_WRAPPER, GAME_EXTRA_ARGS) — an
+    unbalanced quote degrades to a naive str.split() and still runs,
+    rather than silently skipping the command entirely.
+    """
     time.sleep(delay)
     for cmd_str in cmds:
-        try:
-            parts = shlex.split(cmd_str)
-        except ValueError as err:
+        parts, err = shlex_split_or_fallback(cmd_str)
+        if err is not None:
             jlog(
                 "STEAM",
                 f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
                 level="WARN",
             )
-            continue
         if parts:
             spawn_native(parts[0], parts)
             jlog("STEAM", f"POST_START_CMD: {cmd_str}")
