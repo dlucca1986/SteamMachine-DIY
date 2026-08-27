@@ -136,6 +136,16 @@ def test_prune_downloads_removes_only_version_named_dirs(tmp_path):
     assert remaining == {"not-a-version", "readme.txt"}
 
 
+def test_prune_downloads_skips_the_keep_directory(tmp_path):
+    (tmp_path / "v1.0.0").mkdir()
+    (tmp_path / "v2.0.0").mkdir()
+
+    utils._prune_downloads(tmp_path, keep=tmp_path / "v2.0.0")
+
+    remaining = {p.name for p in tmp_path.iterdir()}
+    assert remaining == {"v2.0.0"}
+
+
 # ---------------------------------------------------------------------------
 # download_release — HTTPS-only guardrail, checksum verification, extraction
 # ---------------------------------------------------------------------------
@@ -290,6 +300,30 @@ def test_download_release_returns_none_when_install_sh_is_missing(
 
     info = _fake_release_info()
     assert utils.download_release(info, tmp_path) is None
+
+
+def test_download_release_missing_install_sh_preserves_stale_cache(
+    tmp_path, monkeypatch
+):
+    """Regression: pruning must happen only after install.sh is confirmed
+    present, not merely after checksum verification — a checksum-valid
+    but malformed release must not cost the last known-good previously
+    cached release either (code-review finding, 2026-08-27)."""
+    stale = tmp_path / "v1.0.0"
+    stale.mkdir()
+    (stale / "marker").write_text("stale")
+
+    tarball = _make_release_tarball("export-dir", {"README.md": b"hi"})
+    digest = hashlib.sha256(tarball).hexdigest()
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(tarball, digest.encode("ascii")),
+    )
+
+    info = _fake_release_info()
+    assert utils.download_release(info, tmp_path) is None
+    assert stale.exists()
+    assert (stale / "marker").read_text() == "stale"
 
 
 def test_download_release_prunes_stale_versions_first(tmp_path, monkeypatch):

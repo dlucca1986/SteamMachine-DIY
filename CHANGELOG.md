@@ -42,6 +42,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   section) — a release published without one cannot be installed via the in-app updater.
   This defends against transport-level corruption/tampering of the download only, not
   against a compromised publishing account (no independent signature).
+- **`download_release()` prune ordering, follow-up fix**: the fix above only protected
+  against a checksum-mismatched download costing the last known-good cached release —
+  a checksum-*valid* tarball that then failed extraction (`tarfile.TarError`, a full disk)
+  or turned out not to contain `install.sh` still pruned the old cache before either of
+  those checks ran. `_prune_downloads()` now runs only after extraction succeeds and
+  `install.sh` is confirmed present, and takes a `keep=target` argument so the
+  just-extracted new version is never pruned as if it were a stale one (found during
+  this session's second code-review pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s

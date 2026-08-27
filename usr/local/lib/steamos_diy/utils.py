@@ -597,17 +597,20 @@ def check_latest_release() -> ReleaseInfo | None:
     return _release_from_api(data)
 
 
-def _prune_downloads(root: Path) -> None:
+def _prune_downloads(root: Path, keep: Path | None = None) -> None:
     """Drop previous release downloads (v<digit>… dirs) under *root*.
 
     Only version-named directories are touched, so anything the user
-    parked in the updates folder by hand survives the cleanup.
+    parked in the updates folder by hand survives the cleanup. *keep*,
+    if given, is skipped — used to protect a just-verified new download
+    from being pruned as if it were a stale previous one.
     """
     for entry in root.iterdir():
         if (
             entry.is_dir()
             and entry.name.startswith("v")
             and entry.name[1:2].isdigit()
+            and entry != keep
         ):
             shutil.rmtree(entry, ignore_errors=True)
 
@@ -684,11 +687,13 @@ def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
     download outright if it's missing or doesn't match — install.sh
     inside the tarball runs with elevated privileges, so nothing gets
     extracted unverified. Older downloads are pruned only after the new
-    tarball's checksum is verified, so a corrupted/mismatched download
-    never costs the last known-good cached release; the updates folder
-    still never accumulates stale releases in the success case. The
-    "data" extraction filter rejects absolute paths, traversal and
-    special members.
+    tarball is checksum-verified, fully extracted, AND confirmed to
+    contain install.sh — so a corrupted/mismatched download, a failed
+    extraction, or a malformed release tarball never costs the last
+    known-good cached release; the updates folder still never
+    accumulates stale releases in the success case. The "data"
+    extraction filter rejects absolute paths, traversal and special
+    members.
     """
     if not _require_https(info.tarball_url, "UPDATE_DOWNLOAD_FAIL"):
         return None
@@ -707,7 +712,6 @@ def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
         tmp = _download_verified_tarball(info.tarball_url, expected)
         if tmp is None:
             return None
-        _prune_downloads(root)
         with tmp, tarfile.open(fileobj=tmp, mode="r:gz") as tar:
             tar.extractall(target, filter="data")
     except (OSError, ValueError, tarfile.TarError) as err:
@@ -715,6 +719,7 @@ def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
         return None
     for entry in sorted(target.iterdir()):
         if (entry / "install.sh").is_file():
+            _prune_downloads(root, keep=target)
             return entry
     jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: install.sh not found", "ERROR")
     return None
