@@ -21,7 +21,7 @@ import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
 
-from utils import jlog
+from utils import JOURNALCTL_BIN, jlog
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -55,7 +55,7 @@ _GAMESCOPE_PAYLOAD = re.compile(
 def get_journal_cmd(tag: str) -> list[str]:
     """Build journalctl argv for *tag*; ALL expands to all known SDY tags."""
     base_cmd = [
-        "/usr/bin/journalctl",
+        JOURNALCTL_BIN,
         "--since",
         "12 hours ago",
         "-n",
@@ -293,7 +293,7 @@ def _run_journalctl_iso() -> str:
         # Fixed argv, no shell — the identifiers below are hardcoded.
         res = subprocess.run(  # nosec B603
             [
-                "/usr/bin/journalctl",
+                JOURNALCTL_BIN,
                 "-t",
                 "steam",
                 "-t",

@@ -127,6 +127,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   more prominent siblings already had (see `session_launch.py`'s existing `# nosec B404`/
   `# nosec B603` pattern) — no behavior change, but a bare suppression is no longer
   indistinguishable from an unreviewed one on a future read.
+- `utils.py`: added `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` constants — `/usr/bin/systemctl` was
+  hardcoded identically in `health.py` and `restore.py`, and `/usr/bin/journalctl` in
+  `journal.py` (twice) and `control_center.py` (twice). Unlike the `DEFAULT_*_BIN` group these
+  aren't SSoT-backed: every systemd distro ships them at this fixed path, so there's no
+  legitimate per-deployment override — this is a same-file-concept centralization, not a new
+  user-facing config knob.
 
 ---
 

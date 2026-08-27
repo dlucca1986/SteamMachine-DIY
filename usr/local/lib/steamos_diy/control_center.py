@@ -74,6 +74,7 @@ from updater import UpdateManager
 from utils import (
     CORE_LIB_DIR,
     GAMES_CONF_SUBDIR,
+    JOURNALCTL_BIN,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
@@ -461,7 +462,7 @@ class SDYControlCenter(QMainWindow):
     def cleanup_logs_privileged(self):
         """Vacuum journal via pkexec; emits process_finished."""
         self._run_pkexec(
-            ["/usr/bin/journalctl", "--rotate", "--vacuum-time=1s"],
+            [JOURNALCTL_BIN, "--rotate", "--vacuum-time=1s"],
             lock_key="vacuum",
             ok_title="Logs Cleaned",
             ok_msg="Journal wiped.",
@@ -860,7 +861,7 @@ class SDYControlCenter(QMainWindow):
                 # why journalctl is invoked directly instead of a shell.
                 res = subprocess.run(  # nosec B603
                     [
-                        "/usr/bin/journalctl",
+                        JOURNALCTL_BIN,
                         "--since",
                         "24 hours ago",
                         "--no-hostname",

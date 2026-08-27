@@ -25,6 +25,7 @@ from utils import (
     BACKUP_MANIFEST_NAME,
     BACKUP_SCRIPT_NAME,
     SSOT_CONF_PATH,
+    SYSTEMCTL_BIN,
     check_root,
     fix_ownership,
     get_backup_mapping,
@@ -360,7 +361,7 @@ def _reload_systemd() -> None:
     try:
         # Fixed argv, no shell, no user input involved.
         subprocess.run(  # nosec B603
-            ["/usr/bin/systemctl", "daemon-reload"],
+            [SYSTEMCTL_BIN, "daemon-reload"],
             check=True,
             capture_output=True,
             timeout=10,

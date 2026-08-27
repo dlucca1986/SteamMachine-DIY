@@ -89,6 +89,14 @@ DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
+# systemd tool paths — unlike the DEFAULT_*_BIN group above, these are not
+# SSoT-backed: every systemd distro ships them at this fixed path, so
+# there's no legitimate per-deployment override. Centralized here purely
+# to stop health.py/restore.py/journal.py/control_center.py from each
+# re-declaring their own literal.
+SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
+JOURNALCTL_BIN: str = "/usr/bin/journalctl"
+
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
 # The loaded flag lives in a mutable cell so clear_ssot_cache can reset

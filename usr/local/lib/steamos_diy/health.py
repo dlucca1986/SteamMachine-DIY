@@ -32,6 +32,7 @@ from utils import (
     DEFAULT_STEAM_BIN,
     NEXT_SESSION_PATH,
     SSOT_CONF_PATH,
+    SYSTEMCTL_BIN,
     clear_ssot_cache,
     get_ssot_var,
     shlex_split_or_fallback,
@@ -390,7 +391,7 @@ def get_service_status() -> ServiceStatus:
         # Fixed argv, no shell, no user input involved.
         res = subprocess.run(  # nosec B603
             [
-                "/usr/bin/systemctl",
+                SYSTEMCTL_BIN,
                 "show",
                 _SERVICE_UNIT,
                 "--property=ActiveState,SubState,NRestarts,ExecMainStatus",
