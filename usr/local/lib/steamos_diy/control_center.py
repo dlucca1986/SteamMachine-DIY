@@ -1123,10 +1123,13 @@ class SDYControlCenter(QMainWindow):
             # stuck.
             timed_out = False
             try:
-                # cmd is always a fixed literal argv from a call site in
-                # this file, never built from GUI input (see checklist
-                # item 20 in CLAUDE.md). Generous timeout: backup/restore
-                # can legitimately take minutes, not seconds.
+                # cmd's elements are always either fixed literals or a
+                # single whole GUI-provided value passed as its own list
+                # entry (e.g. run_restore's QFileDialog path) — never
+                # built by concatenating GUI input into a larger token
+                # (see checklist item 20 in CLAUDE.md). No shell is
+                # invoked, so that's safe. Generous timeout: backup/
+                # restore can legitimately take minutes, not seconds.
                 subprocess.run(  # nosec B603
                     ["/usr/bin/pkexec", *cmd], check=True, timeout=300
                 )

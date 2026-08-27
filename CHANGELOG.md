@@ -62,6 +62,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `sticky_on_timeout=False`, so a vacuum timeout resets its lock like any other error
   instead of requiring a restart (found during this session's second code-review pass,
   2026-08-27).
+- **Corrected a misleading `_run_pkexec` comment (and CLAUDE.md checklist item 20 itself)**:
+  both claimed every argv passed to `pkexec` was "a fixed literal, never built from GUI
+  input" — false for `run_restore()`, which appends the user-selected archive path from
+  `QFileDialog` as its own argv element. Not currently exploitable (no shell is invoked,
+  and `restore.py` independently validates the archive), but a future reviewer trusting
+  the comment could skip scrutinizing the one argv slot that actually varies with user
+  input. Both now state the real invariant: no argv element may be built by
+  string-concatenating GUI input into a larger token; a raw, whole GUI-provided value
+  passed as its own list element is fine (found during this session's second code-review
+  pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
