@@ -245,6 +245,14 @@ class SDYControlCenter(QMainWindow):
         # don't block each other.
         self._pkexec_busy: dict[str, bool] = {}
 
+        # Guards _refresh_service_status against overlapping polls: its
+        # subprocess.run timeout (5s) is longer than the QTimer interval
+        # that calls it (4s), so without this a slow `systemctl show`
+        # would let the next tick launch a second thread/subprocess
+        # before the first returns, piling up under load instead of
+        # simply skipping a cycle.
+        self._service_status_busy = False
+
         # Style maps — emoji + colour per log category
         self.log_styles = {
             "CORE:": ("🔵", "#3498db"),
@@ -1059,10 +1067,20 @@ class SDYControlCenter(QMainWindow):
             QMessageBox.information(self, title, message)
 
     def _refresh_service_status(self):
-        """Fetch service status off-thread; emit service_status_ready."""
+        """Fetch service status off-thread; emit service_status_ready.
+
+        Skips the tick if a previous poll hasn't returned yet (see
+        _service_status_busy's own comment for why that's needed).
+        """
+        if self._service_status_busy:
+            return
+        self._service_status_busy = True
 
         def worker() -> None:
-            self.service_status_ready.emit(get_service_status())
+            try:
+                self.service_status_ready.emit(get_service_status())
+            finally:
+                self._service_status_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 

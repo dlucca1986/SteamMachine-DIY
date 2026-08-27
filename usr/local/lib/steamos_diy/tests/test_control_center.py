@@ -114,6 +114,8 @@ class _FakeWindow:
         self._pkexec_busy = {}
         self.process_finished = SimpleNamespace(emit=lambda *a: None)
         self._status_bar = _FakeStatusBar()
+        self._service_status_busy = False
+        self.service_status_ready = SimpleNamespace(emit=lambda *a: None)
 
     def statusBar(self):
         return self._status_bar
@@ -196,6 +198,43 @@ def test_run_pkexec_lock_keys_are_independent(monkeypatch):
     assert started
     assert win._pkexec_busy == {"files": True, "vacuum": True}
     assert not win._status_bar.messages
+
+
+def test_refresh_service_status_skips_tick_while_busy(monkeypatch):
+    """Regression: _service_status_busy must block an overlapping poll —
+    get_service_status's subprocess timeout (5s) exceeds the QTimer
+    interval that calls it (4s), so without this guard a slow systemctl
+    call would let ticks pile up instead of just skipping one
+    (code-review finding, 2026-08-27)."""
+    win = _FakeWindow()
+    win._service_status_busy = True
+    started = []
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _fake_thread_factory(started)
+    )
+
+    control_center.SDYControlCenter._refresh_service_status(win)
+
+    assert not started
+
+
+def test_refresh_service_status_resets_guard_after_completion(monkeypatch):
+    win = _FakeWindow()
+    emitted = []
+    win.service_status_ready = SimpleNamespace(
+        emit=lambda *a: emitted.append(a)
+    )
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    monkeypatch.setattr(
+        control_center, "get_service_status", lambda: "status"
+    )
+
+    control_center.SDYControlCenter._refresh_service_status(win)
+
+    assert emitted == [("status",)]
+    assert win._service_status_busy is False
 
 
 # ---------------------------------------------------------------------------

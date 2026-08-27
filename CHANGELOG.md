@@ -79,6 +79,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   one-line-reason-on-the-line convention every other suppression in this codebase
   follows. `scripts/audit-suppressions.py` now reports zero unjustified markers (found
   during this session's second code-review pass, 2026-08-27).
+- **`_refresh_service_status` re-entrancy guard**: `get_service_status()`'s subprocess
+  timeout (`timeout=5`) is longer than the `QTimer` interval that polls it every 4s, so
+  a slow `systemctl show` could let the next tick launch a second thread/subprocess
+  before the first returned, piling up under load instead of simply skipping a cycle —
+  exactly the "wedged handheld" scenario this session's hardening pass otherwise targets.
+  `control_center.py` gained a `_service_status_busy` flag, following the same shape as
+  `_pkexec_busy`: a tick is skipped while a poll is already in flight, and the flag resets
+  once `get_service_status()` returns (found during this session's second code-review
+  pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
