@@ -1,15 +1,19 @@
 """Regression tests for control_center.py's SSoT path resolution, combo
-display-name parsing, and the pkexec re-entrancy guard.
+display-name parsing, the pkexec re-entrancy guard, and (CLAUDE.md review
+checklist item 14) the subprocess timeout discipline of the two
+background workers that talk to journalctl/pkexec.
 
 None need a real QMainWindow/QApplication: _resolve_config_paths and
-_extract_game_name_from_display are pure functions, and _run_pkexec only
-touches self._pkexec_busy, self.statusBar() and self.process_finished —
-a plain stand-in object exercises the exact same code path without
-pulling Qt into the suite."""
+_extract_game_name_from_display are pure functions, and _run_pkexec /
+refresh_detected_games only touch self._pkexec_busy, self.statusBar(),
+self.combo_games and their signal's .emit() — a plain stand-in object
+exercises the exact same code path without pulling Qt into the suite."""
 
+import subprocess
 from types import SimpleNamespace
 
 import control_center
+import pytest
 
 # ---------------------------------------------------------------------------
 # _resolve_config_paths
@@ -40,6 +44,24 @@ def test_resolve_config_paths_falls_back_when_unset(set_ssot, tmp_path):
 
     assert conf_root == default_root
     assert games_conf_dir == default_root / "games.d"
+
+
+def test_resolve_config_paths_fallback_follows_games_conf_subdir_constant(
+    set_ssot, tmp_path, monkeypatch
+):
+    """Pins that the games_conf_dir fallback derives from the shared
+    utils.GAMES_CONF_SUBDIR constant (also used by
+    utils.default_games_conf_dir() for sdy.py) rather than an
+    independently hardcoded "games.d" literal — the exact class of
+    divergence bug CLAUDE.md's 2026-08-26 audit already found once for
+    this same concept."""
+    set_ssot()
+    monkeypatch.setattr(control_center, "GAMES_CONF_SUBDIR", "custom.d")
+    default_root = tmp_path / "default"
+
+    _, games_conf_dir = control_center._resolve_config_paths(default_root)
+
+    assert games_conf_dir == default_root / "custom.d"
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +111,7 @@ class _FakeWindow:
     """Stand-in for SDYControlCenter: only what _run_pkexec touches."""
 
     def __init__(self):
-        self._pkexec_busy = False
+        self._pkexec_busy = {}
         self.process_finished = SimpleNamespace(emit=lambda *a: None)
         self._status_bar = _FakeStatusBar()
 
@@ -108,7 +130,7 @@ def _fake_thread_factory(started):
 
 def test_run_pkexec_blocks_while_already_busy(monkeypatch):
     win = _FakeWindow()
-    win._pkexec_busy = True
+    win._pkexec_busy = {"files": True}
     started = []
     monkeypatch.setattr(
         control_center.threading, "Thread", _fake_thread_factory(started)
@@ -117,6 +139,7 @@ def test_run_pkexec_blocks_while_already_busy(monkeypatch):
     control_center.SDYControlCenter._run_pkexec(
         win,
         ["/bin/true"],
+        lock_key="files",
         ok_title="t",
         ok_msg="m",
         err_title="e",
@@ -137,6 +160,7 @@ def test_run_pkexec_starts_when_idle(monkeypatch):
     control_center.SDYControlCenter._run_pkexec(
         win,
         ["/bin/true"],
+        lock_key="files",
         ok_title="t",
         ok_msg="m",
         err_title="e",
@@ -144,5 +168,185 @@ def test_run_pkexec_starts_when_idle(monkeypatch):
     )
 
     assert started
-    assert win._pkexec_busy is True
+    assert win._pkexec_busy == {"files": True}
     assert not win._status_bar.messages
+
+
+def test_run_pkexec_lock_keys_are_independent(monkeypatch):
+    """Pins the fix for the too-coarse shared guard: a busy "files" lock
+    (Backup/Restore) must not block an unrelated "vacuum" operation, and
+    vice versa — they don't share any target file."""
+    win = _FakeWindow()
+    win._pkexec_busy = {"files": True}
+    started = []
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _fake_thread_factory(started)
+    )
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="vacuum",
+        ok_title="t",
+        ok_msg="m",
+        err_title="e",
+        err_msg="m2",
+    )
+
+    assert started
+    assert win._pkexec_busy == {"files": True, "vacuum": True}
+    assert not win._status_bar.messages
+
+
+# ---------------------------------------------------------------------------
+# subprocess timeout discipline (CLAUDE.md review checklist item 14) —
+# _run_pkexec's own worker, and refresh_detected_games's journalctl scan.
+# ---------------------------------------------------------------------------
+
+
+def _sync_thread_factory():
+    """Like _fake_thread_factory, but actually runs the worker inline —
+    needed to observe what the try/except inside it does."""
+
+    def _make_thread(*_args, target, **_kwargs):
+        return SimpleNamespace(start=target)
+
+    return _make_thread
+
+
+def test_run_pkexec_reports_timeout_distinctly(monkeypatch):
+    """A timed-out pkexec may have left a privileged grandchild running,
+    so _pkexec_busy must stay set (only a restart clears it) rather than
+    being reset — see the TimeoutExpired branch's own comment."""
+    win = _FakeWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    emitted = []
+    win.process_finished = SimpleNamespace(
+        emit=lambda *a: emitted.append(a)
+    )
+
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="pkexec", timeout=300)
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="ERR",
+        err_msg="generic failure",
+    )
+
+    assert len(emitted) == 1
+    title, msg, is_error = emitted[0]
+    assert title == "ERR"
+    assert "timed out" in msg.lower()
+    assert is_error is True
+    assert win._pkexec_busy == {"files": True}
+
+
+def test_run_pkexec_still_reports_called_process_error_generically(
+    monkeypatch,
+):
+    """Guards the pre-existing branch: adding the TimeoutExpired handler
+    above it must not swallow a plain CalledProcessError differently."""
+    win = _FakeWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    emitted = []
+    win.process_finished = SimpleNamespace(
+        emit=lambda *a: emitted.append(a)
+    )
+
+    def fake_run(*_a, **_k):
+        raise subprocess.CalledProcessError(1, "pkexec")
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="ERR",
+        err_msg="generic failure",
+    )
+
+    assert emitted == [("ERR", "generic failure", True)]
+
+
+def test_run_pkexec_resets_guard_on_an_unforeseen_exception(monkeypatch):
+    """Regression: the guard must reset on ANY outcome other than a
+    timeout, not just the three explicitly-caught exception types —
+    a `finally` guarantees this even for an exception this code doesn't
+    know to expect (e.g. a cross-thread Qt signal emit failing)."""
+    win = _FakeWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+
+    def fake_run(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+    win.process_finished = SimpleNamespace(
+        emit=lambda *a: (_ for _ in ()).throw(RuntimeError("wrapped C/C++"))
+    )
+
+    with pytest.raises(RuntimeError):
+        control_center.SDYControlCenter._run_pkexec(
+            win,
+            ["/bin/true"],
+            lock_key="files",
+            ok_title="t",
+            ok_msg="m",
+            err_title="ERR",
+            err_msg="generic failure",
+        )
+
+    assert win._pkexec_busy == {"files": False}
+
+
+class _FakeCombo:  # pylint: disable=too-few-public-methods
+    def setPlaceholderText(self, text):  # pylint: disable=invalid-name
+        pass
+
+
+class _FakeGamesWindow:  # pylint: disable=too-few-public-methods
+    """Stand-in for SDYControlCenter: only what refresh_detected_games
+    touches."""
+
+    def __init__(self):
+        self.combo_games = _FakeCombo()
+        self.games_detected = SimpleNamespace(emit=lambda *a: None)
+
+
+def test_refresh_detected_games_passes_a_timeout(monkeypatch):
+    """The except clause in refresh_detected_games already caught
+    SubprocessError before the CLAUDE.md item-14 fix — timeout= itself
+    is the only thing that actually changed, so this pins that directly
+    rather than exercising the (already-covered) recovery path."""
+    win = _FakeGamesWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured.update(kwargs)
+        return control_center.subprocess.CompletedProcess(
+            cmd, 0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter.refresh_detected_games(win)
+
+    assert captured.get("timeout") is not None

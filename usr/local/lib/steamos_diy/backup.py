@@ -101,7 +101,12 @@ def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
         return []
     try:
         entries = list(os.scandir(search_path))
-    except OSError:
+    except OSError as err:
+        jlog(
+            "SYSTEM",
+            f"BACKUP_SYMLINK_SCAN_FAIL: {search_path} - {err}",
+            level="WARN",
+        )
         return []
 
     found: list[tuple[str, str]] = []

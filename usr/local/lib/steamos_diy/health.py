@@ -16,7 +16,9 @@ import ctypes
 import grp
 import os
 import re
-import shlex
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 from pathlib import Path
 from typing import NamedTuple
@@ -32,6 +34,7 @@ from utils import (
     SSOT_CONF_PATH,
     clear_ssot_cache,
     get_ssot_var,
+    shlex_split_or_fallback,
 )
 
 # Safe loader — validation only cares that the document parses, not about
@@ -210,6 +213,8 @@ def _gamescope_options(gs_bin: str) -> set[str] | None:
     (binary presence is already covered by _check_binaries).
     """
     try:
+        # gs_bin is the SSoT-configured gamescope path, run with a fixed
+        # flag — never shell=True or externally-controlled arguments.
         res = subprocess.run(  # nosec B603
             [gs_bin, "--help"],
             capture_output=True,
@@ -239,10 +244,7 @@ def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
     unknown: list[str] = []
     seen: set[str] = set()
     for entry in flags:
-        try:
-            tokens = shlex.split(str(entry))
-        except ValueError:
-            tokens = str(entry).split()
+        tokens, _ = shlex_split_or_fallback(str(entry))
         for tok in tokens:
             base = tok.split("=", 1)[0]
             if (
@@ -385,6 +387,7 @@ def parse_service_status(raw: str) -> ServiceStatus:
 def get_service_status() -> ServiceStatus:
     """Snapshot steamos_diy.service via `systemctl show` (no root needed)."""
     try:
+        # Fixed argv, no shell, no user input involved.
         res = subprocess.run(  # nosec B603
             [
                 "/usr/bin/systemctl",
@@ -395,7 +398,8 @@ def get_service_status() -> ServiceStatus:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
         return parse_service_status(res.stdout)
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         return ServiceStatus("unknown", "unknown", 0, 0)

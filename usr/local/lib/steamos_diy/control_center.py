@@ -16,6 +16,9 @@
 import html
 import os
 import re
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import threading
@@ -32,6 +35,8 @@ from journal import (
     parse_game_logs,
 )
 
+# PyQt6's compiled C-extension bindings aren't visible to pylint's static
+# import resolution, so these genuine, existing symbols get flagged.
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import (
     Qt,
@@ -68,6 +73,7 @@ from ruamel.yaml import YAML, YAMLError
 from updater import UpdateManager
 from utils import (
     CORE_LIB_DIR,
+    GAMES_CONF_SUBDIR,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
@@ -139,7 +145,7 @@ def _fetch_support_logs() -> list[str]:
     try:
         ents = fetch_tagged_entries("ALL", launches)
         ents.extend(fetch_gamescope_logs(launches))
-    except (subprocess.CalledProcessError, OSError) as err:
+    except (subprocess.SubprocessError, OSError) as err:
         return [f"(log retrieval failed: {err})"]
     if not ents:
         return ["(no project log entries in this window)"]
@@ -180,17 +186,26 @@ def _build_support_report() -> str:
 def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
     """Resolve (conf_root, games_conf_dir) from the SSoT.
 
-    Falls back to default_root/"config.yaml" resp. default_root/"games.d"
-    when the SSoT doesn't set user_config/games_conf_dir — but when it
-    does, this must follow it: sdy.py and health.py already resolve both
-    dynamically, and a hardcoded default here would let the GUI silently
-    edit a file the session launcher no longer reads.
+    Falls back to default_root/"config.yaml" resp.
+    default_root/GAMES_CONF_SUBDIR when the SSoT doesn't set
+    user_config/games_conf_dir — but when it does, this must follow it:
+    sdy.py and health.py already resolve both dynamically, and a
+    hardcoded default here would let the GUI silently edit a file the
+    session launcher no longer reads. Kept as a pure function of
+    *default_root* (no direct Path.home() call) so it's testable without
+    touching the real home directory; the one call site always passes
+    Path.home() / USER_CONFIG_REL, and the games_conf_dir fallback shares
+    utils.GAMES_CONF_SUBDIR with utils.default_games_conf_dir() (used by
+    sdy.py) so the two can't silently drift onto different subdirectory
+    names.
     """
     conf_root = Path(
         get_ssot_var("user_config", str(default_root / "config.yaml"))
     ).parent
     games_conf_dir = Path(
-        get_ssot_var("games_conf_dir", str(default_root / "games.d"))
+        get_ssot_var(
+            "games_conf_dir", str(default_root / GAMES_CONF_SUBDIR)
+        )
     )
     return conf_root, games_conf_dir
 
@@ -200,6 +215,8 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
 # ---------------------------------------------------------------------------
 
 
+# One cohesive main-window object owning every tab's widgets; splitting
+# it into sub-objects would scatter state without reducing complexity.
 # pylint: disable=too-many-instance-attributes
 class SDYControlCenter(QMainWindow):
     """Main application window: diagnostics, maintenance, YAML editors."""
@@ -220,10 +237,12 @@ class SDYControlCenter(QMainWindow):
             Path.home() / USER_CONFIG_REL
         )
 
-        # Guards _run_pkexec against a second privileged operation (e.g. a
-        # double-clicked Backup/Restore) starting while one is already
-        # writing to the same files.
-        self._pkexec_busy = False
+        # Guards _run_pkexec against a second privileged operation
+        # targeting the same files starting while one is already
+        # running — keyed by lock_key so unrelated operations (journal
+        # vacuum vs. Backup/Restore, which don't share any target file)
+        # don't block each other.
+        self._pkexec_busy: dict[str, bool] = {}
 
         # Style maps — emoji + colour per log category
         self.log_styles = {
@@ -432,6 +451,8 @@ class SDYControlCenter(QMainWindow):
         kate = "/usr/bin/kate"
         editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
         try:
+            # The editor must keep running after this call returns — a
+            # `with` block would wait for it to close before continuing.
             # pylint: disable=consider-using-with
             subprocess.Popen([editor, SSOT_CONF_PATH])  # nosec B603
         except OSError as err:
@@ -441,6 +462,7 @@ class SDYControlCenter(QMainWindow):
         """Vacuum journal via pkexec; emits process_finished."""
         self._run_pkexec(
             ["/usr/bin/journalctl", "--rotate", "--vacuum-time=1s"],
+            lock_key="vacuum",
             ok_title="Logs Cleaned",
             ok_msg="Journal wiped.",
             err_title="Error",
@@ -798,6 +820,7 @@ class SDYControlCenter(QMainWindow):
             dirty.append(self.save_game_profile)
         return dirty
 
+    # Qt override; camelCase name is mandated by QMainWindow's own API.
     def closeEvent(self, event):  # pylint: disable=invalid-name
         """Qt override: warn before discarding unsaved editor changes."""
         dirty = self._dirty_editors()
@@ -833,6 +856,8 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             try:
+                # Fixed argv, no shell — see this method's docstring on
+                # why journalctl is invoked directly instead of a shell.
                 res = subprocess.run(  # nosec B603
                     [
                         "/usr/bin/journalctl",
@@ -844,6 +869,7 @@ class SDYControlCenter(QMainWindow):
                     capture_output=True,
                     text=True,
                     check=True,
+                    timeout=10,
                 )
                 lines = filter_game_journal_lines(res.stdout, home)
                 detected = parse_game_logs("\n".join(lines))
@@ -898,7 +924,7 @@ class SDYControlCenter(QMainWindow):
                     ents.extend(fetch_gamescope_logs(launches))
                 ents.sort(key=lambda x: x[0])
                 self.logs_ready.emit(ents, tag)
-            except (subprocess.CalledProcessError, OSError) as err:
+            except (subprocess.SubprocessError, OSError) as err:
                 self.logs_ready.emit([], f"ERROR:{err}")
 
         threading.Thread(target=worker, daemon=True).start()
@@ -1059,6 +1085,7 @@ class SDYControlCenter(QMainWindow):
         self,
         cmd: list[str],
         *,
+        lock_key: str,
         ok_title: str,
         ok_msg: str,
         err_title: str,
@@ -1068,23 +1095,52 @@ class SDYControlCenter(QMainWindow):
 
         Single entry point for every privileged operation in the UI —
         journal vacuum, backup, and restore all route through here. Guarded
-        by _pkexec_busy so two privileged operations (e.g. Backup and
-        Restore double-clicked in a row) can never run concurrently against
-        the same files.
+        by _pkexec_busy[lock_key] so two privileged operations that target
+        the same files (Backup and Restore, both lock_key="files") can
+        never run concurrently — but an operation that shares no files with
+        either (journal vacuum, lock_key="vacuum") never blocks or is
+        blocked by them. On a timeout the guard is deliberately left set
+        (see the TimeoutExpired branch below) instead of being cleared.
         """
-        if self._pkexec_busy:
+        if self._pkexec_busy.get(lock_key):
             self.statusBar().showMessage(
                 "Another privileged operation is already running…", 3000
             )
             return
-        self._pkexec_busy = True
+        self._pkexec_busy[lock_key] = True
 
         def worker() -> None:
+            # Left True (never reset in the finally below) only on a
+            # timeout — every other outcome, expected or not, always
+            # resets it, so an exception this code doesn't even know
+            # to expect can't leave the guard silently stuck.
+            timed_out = False
             try:
+                # cmd is always a fixed literal argv from a call site in
+                # this file, never built from GUI input (see checklist
+                # item 20 in CLAUDE.md). Generous timeout: backup/restore
+                # can legitimately take minutes, not seconds.
                 subprocess.run(  # nosec B603
-                    ["/usr/bin/pkexec", *cmd], check=True
+                    ["/usr/bin/pkexec", *cmd], check=True, timeout=300
                 )
                 self.process_finished.emit(ok_title, ok_msg, False)
+            except subprocess.TimeoutExpired:
+                # pkexec's own PID is killed by subprocess.run(), but not
+                # any privileged grandchild it spawned (backup.py,
+                # restore.py, a chown -R) — it may still be writing to
+                # the same files. We have no way to confirm it's actually
+                # gone, so _pkexec_busy[lock_key] is deliberately left True
+                # rather than risk a second privileged run overlapping it;
+                # only a Control Center restart clears it.
+                timed_out = True
+                self.process_finished.emit(
+                    err_title,
+                    "Operation timed out after 5 minutes. The privileged "
+                    "process may still be running — restart Control "
+                    "Center before starting another privileged "
+                    "operation.",
+                    True,
+                )
             except subprocess.CalledProcessError:
                 self.process_finished.emit(err_title, err_msg, True)
             except OSError as err:
@@ -1092,7 +1148,8 @@ class SDYControlCenter(QMainWindow):
                     err_title, f"Cannot launch pkexec: {err}", True
                 )
             finally:
-                self._pkexec_busy = False
+                if not timed_out:
+                    self._pkexec_busy[lock_key] = False
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1101,6 +1158,7 @@ class SDYControlCenter(QMainWindow):
         QMessageBox.information(self, "Backup", "Backup process started...")
         self._run_pkexec(
             ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "backup.py")],
+            lock_key="files",
             ok_title="Success",
             ok_msg="Backup done!",
             err_title="Error",
@@ -1121,6 +1179,7 @@ class SDYControlCenter(QMainWindow):
                 os.path.join(CORE_LIB_DIR, "restore.py"),
                 fpath,
             ],
+            lock_key="files",
             ok_title="Restore Complete",
             ok_msg="Restored!",
             err_title="Restore Error",

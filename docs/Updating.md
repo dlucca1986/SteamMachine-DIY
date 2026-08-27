@@ -8,11 +8,17 @@ How to move an existing installation to a new release. One procedure — `instal
 ## 🖥️ 1. Updating from the Control Center (recommended)
 
 1. Open the **Maintenance** tab and click **⬆️ Check for Updates**. The Control Center queries the GitHub Releases API and tells you whether a newer version exists (your installed version is shown in the window title).
-2. If a new release is available, review the release notes and click **Download & Install**. The release tarball is downloaded and unpacked into `~/.config/steamos_diy/updates/` (old downloads are pruned automatically, and this folder is excluded from backups).
+2. If a new release is available, review the release notes and click **Download & Install**. The release tarball is downloaded, its SHA-256 checksum is verified against the release's `SHA256SUMS` asset, and only then unpacked into `~/.config/steamos_diy/updates/` (old downloads are pruned once the new one verifies successfully, and this folder is excluded from backups).
 3. A **Konsole window** opens and runs the installer for you. Authenticate in the polkit popup — no commands to type. You watch the live installer output (package sync, C-Core build, deployment).
 4. When the update completes, the system **reboots automatically after a 10-second countdown** (press `CTRL+C` in the terminal to abort the reboot).
 
 > ℹ️ Prefer reading first? **Open Release Page** in the same dialog takes you to the release on GitHub instead.
+
+## 🔒 Integrity verification
+
+This applies only to the Control Center's automated download in step 2 above — a manual `git pull`/download via the terminal procedure below is on you to verify, if you care to. Every release from 2.1.8 on publishes a `SHA256SUMS` asset alongside the source tarball. Before anything is extracted, the Control Center downloads that asset and checks the tarball's SHA-256 digest against it — the installer inside the tarball runs with elevated privileges, so nothing gets extracted unverified. This is a **fail-closed** design: if the checksum asset is missing, malformed, or doesn't match, the download is aborted and nothing is extracted or installed, with the reason recorded in the Diagnostics logs (`UPDATE_CHECKSUM_FAIL`/`UPDATE_DOWNLOAD_FAIL`). If **Download & Install** fails with a generic message, check the Diagnostics tab for one of those tags to see whether it was a checksum problem rather than a network one.
+
+This defends against transport-level corruption or tampering of the download itself — it does not defend against a compromised GitHub account publishing a bad release with a matching checksum (there is no independent signature). A release published without a `SHA256SUMS` asset (only possible before 2.1.8, or if the release process was run incorrectly) simply cannot be installed via the in-app updater; use the manual terminal procedure below instead, after verifying the source yourself.
 
 ## ⌨️ 2. Updating from the terminal
 

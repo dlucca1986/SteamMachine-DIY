@@ -13,6 +13,9 @@
 
 import os
 import shlex
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import tarfile
@@ -235,6 +238,8 @@ def _extract_member(
 # ---------------------------------------------------------------------------
 
 
+# 6 logical inputs (tar, member, mapping, allowed-list, home, user) — all
+# independently needed for one archive-entry decision, no natural subset.
 # pylint: disable=too-many-arguments
 def _process_member(
     tar: tarfile.TarFile,
@@ -353,12 +358,14 @@ def _restore_links(
 
 def _reload_systemd() -> None:
     try:
+        # Fixed argv, no shell, no user input involved.
         subprocess.run(  # nosec B603
             ["/usr/bin/systemctl", "daemon-reload"],
             check=True,
             capture_output=True,
+            timeout=10,
         )
-    except (subprocess.CalledProcessError, OSError) as err:
+    except (subprocess.SubprocessError, OSError) as err:
         jlog("SYSTEM", f"RESTORE_DAEMON_RELOAD_FAIL: {err}", level="ERROR")
 
 

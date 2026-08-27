@@ -13,6 +13,9 @@
 
 import shlex
 import signal
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import threading
@@ -32,6 +35,7 @@ from utils import (
     notify,
     read_session_target,
     sd_notify_ready,
+    shlex_split_or_fallback,
     spawn_native,
     write_atomic,
 )
@@ -87,14 +91,13 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
     apply_env_map(GAME_MODE_ENV)
     apply_env_map(cfg.get("env_vars"))
     for flag in cfg.get("flags") or []:
-        try:
-            gs_args.extend(shlex.split(str(flag)))
-        except ValueError as err:
+        tokens, err = shlex_split_or_fallback(str(flag))
+        if err is not None:
             # Unbalanced quote in a hand-edited flag: don't crash the whole
             # session over one bad entry — same fallback health.py's
             # preflight already uses for this exact field.
             jlog("STEAM", f"BAD_FLAG_ENTRY: {flag!r} - {err}", level="WARN")
-            gs_args.extend(str(flag).split())
+        gs_args.extend(tokens)
 
     steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
     gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
@@ -189,6 +192,8 @@ def _post_session_message(target: str, ret_code: int) -> str:
     return f"Ended (Code: {ret_code})"
 
 
+# 6 logical inputs (cmd, next_path, target, timeout, proc_holder,
+# post_start_cmds) — all independently needed by the caller, no subset.
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def _run_session(
     cmd: list[str],
@@ -208,6 +213,9 @@ def _run_session(
     initial_target = target
     ret_code = 0
     try:
+        # cmd is built from SSoT-configured binary paths plus fixed
+        # session literals (_build_command_for) — never shell=True or
+        # externally-controlled input.
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:

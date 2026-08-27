@@ -16,7 +16,7 @@ Three components:
 ---
 
 ## 🖥️ Using the Control Center
-The easiest way to manage your data is through the **Maintenance** tab in the Control Center. **Backup**, **Restore**, and journal-vacuum are mutually exclusive: starting one while another is still running (e.g. a double-click) is rejected with a status-bar message instead of launching a second `pkexec` process against the same files.
+The easiest way to manage your data is through the **Maintenance** tab in the Control Center. **Backup** and **Restore** are mutually exclusive — starting one while the other is still running (e.g. a double-click) is rejected with a status-bar message instead of launching a second `pkexec` process against the same files. Journal-vacuum uses its own independent lock, so it never blocks (or is blocked by) Backup/Restore, since it doesn't touch any of the same files. If a privileged operation ever times out (5 minutes), its lock is deliberately left in place rather than cleared — restart the Control Center to recover if that happens.
 
 ### Creating a Backup
 1. Navigate to the **Maintenance** tab.

@@ -6,6 +6,7 @@ critical group came back "missing" even when the user actually belonged
 to all of them — a misleading "everything is broken" preflight result
 caused by one unrelated stale entry."""
 
+import subprocess
 from types import SimpleNamespace
 
 import health
@@ -28,3 +29,21 @@ def test_check_groups_survives_one_stale_gid(monkeypatch):
 
     assert result.ok
     assert result.detail == "all present"
+
+
+# ---------------------------------------------------------------------------
+# get_service_status — subprocess timeout discipline (CLAUDE.md review
+# checklist item 14): a wedged `systemctl show` must degrade to the
+# "unknown" fallback, not hang the Control Center's status refresh.
+# ---------------------------------------------------------------------------
+
+
+def test_get_service_status_falls_back_on_timeout(monkeypatch):
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="systemctl", timeout=5)
+
+    monkeypatch.setattr(health.subprocess, "run", fake_run)
+
+    status = health.get_service_status()
+
+    assert status == health.ServiceStatus("unknown", "unknown", 0, 0)

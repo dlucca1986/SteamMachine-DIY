@@ -5,6 +5,131 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.8] — 2026-08-26 — Continuous Integration & Centralization Pass
+
+### Added
+- **Continuous Integration**: `.github/workflows/quality-gates.yml` runs on every push/PR to
+  `testing` and `stable`, one job step per gate (pylint on production code, flake8, ruff,
+  bandit, radon cc, radon mi, vulture, pytest, pylint on the test suite, shellcheck) —
+  mirrors CLAUDE.md's local review checklist verbatim, so a red X in the Actions UI points
+  straight at which tool failed. `radon cc`/`radon mi` don't have a built-in fail-on-threshold
+  flag (they always exit 0 regardless of findings), so each gets a short inline check instead:
+  fail the step if any function is grade C or worse, or any file drops below maintainability
+  grade A.
+- `vulture_whitelist.py` (repo root, generated via `vulture --make-whitelist`): covers exactly
+  the Qt/tarfile/ruamel false positives CLAUDE.md already documented. vulture's own exit code
+  is nonzero on any finding, including known false positives, so a whitelist was required for
+  it to function as a real CI pass/fail gate instead of a manually-eyeballed report. Lives
+  outside `usr/local/lib/steamos_diy/`, so `install.sh`'s deploy step never ships it.
+- `shellcheck` added to the local/CI gate list now that it's available in the dev environment.
+  `install.sh`'s only finding, `SC2086` on `pacman -Syu $BASE_PKGS $DRIVER_PKGS`, is intentional
+  word-splitting on two fixed-literal, space-separated package lists (never user input) — each
+  package must reach `pacman` as its own argv entry, so quoting would break installation.
+  Documented with a `# shellcheck disable=SC2086` and a one-line reason. `uninstall.sh` is clean.
+
+### Security
+- **Self-update integrity verification**: `download_release()` in `utils.py` previously
+  fetched and extracted a GitHub release tarball with no integrity check before
+  `install.sh` inside it ran with elevated privileges — flagged in CLAUDE.md as the
+  project's highest-value supply-chain risk. It now requires a `SHA256SUMS` release
+  asset (added to `ReleaseInfo` via `_release_from_api()`'s new `_find_checksum_url()`),
+  fetches and validates the digest format via the new `_fetch_expected_sha256()`, and
+  streams the tarball into a temp file while hashing it (`_download_verified_tarball()`)
+  before ever calling `tarfile.extractall`. Missing, malformed, or mismatched checksums
+  abort the download entirely (fail-closed) rather than degrading to an unverified
+  extraction. This makes attaching a `SHA256SUMS` asset a required manual step of the
+  release process from this version on (documented in CLAUDE.md's new "Release process"
+  section) — a release published without one cannot be installed via the in-app updater.
+  This defends against transport-level corruption/tampering of the download only, not
+  against a compromised publishing account (no independent signature).
+- **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
+  `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
+  now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
+  `get_service_status` (`timeout=5`), `journal.py`'s `fetch_tagged_entries` and
+  `_run_journalctl_iso` (`timeout=10` each), `restore.py`'s `_reload_systemd` (`timeout=10`),
+  `utils.py`'s `fix_ownership` (`timeout=30`), and `control_center.py`'s `_run_pkexec` worker
+  and journalctl-scan calls (`timeout=300`/`timeout=10`). Previously an unresponsive daemon —
+  plausible on a handheld that can wedge or lose power mid-operation — could hang a worker
+  thread indefinitely with no way to recover short of killing the process. Every widened
+  `except` clause now catches `subprocess.SubprocessError` (the common superclass of both
+  `CalledProcessError` and `TimeoutExpired`) instead of just `CalledProcessError`, so the new
+  timeout path degrades the same way an existing failure already did, without adding a second
+  exception type to every call site.
+
+### Fixed
+- `sdy.py`: `games_conf_dir`'s fallback (used only when the SSoT key is unset) hardcoded
+  `/etc/steamos_diy/games.d` — a directory `install.sh` never creates and nothing else in the
+  repo references, i.e. a dead path. `control_center.py` falls back to
+  `~/.config/steamos_diy/games.d` instead, so on an installation with a missing/corrupted
+  `games_conf_dir` key, the GUI would save per-game profiles to a directory the launcher would
+  never look in — same silent-divergence risk as the `user_config`/`games_conf_dir` SSoT bug
+  fixed in 2.1.7, but on the fallback value rather than the SSoT-read value. Now resolves via
+  the new `utils.default_games_conf_dir()`, matching `control_center.py`'s actual default.
+- `utils.py`: `download_release()` used to prune every previously-cached release download
+  (`_prune_downloads()`) *before* verifying the new download's checksum. A corrupted or
+  tampered-with download that failed `_download_verified_tarball()`'s SHA-256 check would
+  abort correctly, but the last known-good cached release had already been deleted — a
+  successful earlier update's cache was destroyed by an unrelated failed one. Pruning now
+  runs only after the new tarball is downloaded and verified, immediately before extraction.
+- `control_center.py`: `_run_pkexec`'s re-entrancy guard (`_pkexec_busy`) had two related gaps.
+  First, replacing its old unconditional `finally:` reset with a `TimeoutExpired`-only skip
+  meant *any* unforeseen exception in the worker (e.g. a cross-thread Qt signal emit racing
+  window teardown) — not just the deliberate timeout case — could leave the guard silently
+  stuck forever with no error shown; a `finally` guarded by a local flag now resets it on
+  every outcome except the intentional timeout. Second, the guard was a single flag shared by
+  three unrelated privileged operations (journal vacuum, backup, restore), so a timeout on
+  vacuum (which touches no files backup/restore care about) permanently blocked the other two
+  as well; it's now keyed per lock group (`lock_key="files"` for Backup/Restore, which do
+  share target files and must stay mutually exclusive, `lock_key="vacuum"` for journal
+  cleanup, which doesn't) so unrelated operations no longer block each other.
+- `control_center.py`: `_resolve_config_paths`'s `games_conf_dir` fallback independently
+  hardcoded the `"games.d"` subdirectory name instead of sharing it with
+  `utils.default_games_conf_dir()` (the function whose own docstring already claimed to be
+  the single source of truth for both files) — today's values happened to coincide, but
+  nothing would have caught the two silently diverging if either literal were ever edited
+  alone, the same class of bug already fixed once for this exact concept earlier in this
+  release. Both now derive from a single shared `utils.GAMES_CONF_SUBDIR` constant.
+
+### Changed
+- `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
+  on an unbalanced quote" pattern was independently reimplemented in `sdy.py` (`_safe_split`),
+  `session_launch.py` (the gamescope `flags` loop) and `health.py`
+  (`_collect_unknown_flags`) instead of sharing one copy. This is the exact class of code that
+  already caused a real crash in this project (the unguarded `shlex.split` fixed in 2.1.7) — a
+  future hardening of the fallback logic would otherwise need three independent edits instead
+  of one. `session_launch.py`'s `_schedule_post_start_cmds` keeps its own inline
+  `shlex.split`/`continue`-on-failure handling unchanged: skipping a malformed command entirely
+  is the safer choice there, since a degraded `str.split()` would still get natively exec'd via
+  `spawn_native`, unlike a merely-wrong gamescope flag.
+- `utils.py`: `check_latest_release()`, `_fetch_expected_sha256()`, and
+  `_download_verified_tarball()` each independently rebuilt the same
+  `urllib.request.Request`/`urlopen(timeout=...)` plumbing and the same "reject a non-https
+  URL" guard. Both are now centralized — `_https_open()` for the request/urlopen/timeout
+  boilerplate, `_require_https()` for the scheme guard — while each caller keeps its own
+  error handling, since what counts as recoverable (and what to log) genuinely differs per
+  caller (JSON parsing vs. raw digest text vs. streamed binary). `_fetch_expected_sha256()`'s
+  digest parsing/validation was also simplified from a double `str.split()` call plus a
+  hand-rolled per-character hex-alphabet loop to a single `re.fullmatch()` check.
+- `utils.py`: `fix_ownership`'s failure log (including the new timeout case above) moved from
+  `DEBUG` to `WARN` — a failed/timed-out `chown -R` after a backup/restore run leaves files
+  owned by root, which previously left zero trace in the journal under the default
+  `LOG_LEVEL=INFO`.
+- `backup.py` / `journal.py`: two previously-silent failure paths now log. `backup.py`'s
+  `_collect_symlinks` logs `BACKUP_SYMLINK_SCAN_FAIL` (WARN) if a symlink-search directory
+  can't be scanned, instead of silently omitting those symlinks from the backup manifest with
+  no trace. `journal.py`'s `_run_journalctl_iso` logs `GAMESCOPE_LOG_FETCH_FAIL` (WARN) if the
+  gamescope-log `journalctl` call fails, instead of returning an empty result indistinguishable
+  from "no gamescope activity in the last hour" — this required `journal.py` to start
+  importing `jlog` from `utils.py`, the only production file that previously imported nothing
+  from it.
+- Suppression-comment justification pass: every bare `# nosec`, `# pylint: disable`, and
+  `# shellcheck disable` marker across the codebase now carries the same one-line reason its
+  more prominent siblings already had (see `session_launch.py`'s existing `# nosec B404`/
+  `# nosec B603` pattern) — no behavior change, but a bare suppression is no longer
+  indistinguishable from an unreviewed one on a future read.
+
+---
+
 ## [2.1.7] — 2026-08-25 — Session Reliability & Regression Suite
 
 ### Added

@@ -87,3 +87,50 @@ def test_fetch_tagged_entries_decodes_with_replace(monkeypatch):
     journal.fetch_tagged_entries("ALL", set())
 
     assert captured.get("errors") == "replace"
+
+
+# ---------------------------------------------------------------------------
+# subprocess timeout discipline (CLAUDE.md review checklist item 14) —
+# every journalctl call must bound how long it can block, since this runs
+# on a handheld that can wedge or lose power mid-operation.
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_tagged_entries_passes_a_timeout(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(journal.subprocess, "run", fake_run)
+
+    journal.fetch_tagged_entries("ALL", set())
+
+    assert captured.get("timeout") is not None
+
+
+def test_fetch_tagged_entries_propagates_timeout_to_caller(monkeypatch):
+    """No local try/except here by design (see docstring: "error handling
+    is the caller's concern") — a hung journalctl must still surface as
+    TimeoutExpired, not hang the whole process."""
+
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="journalctl", timeout=10)
+
+    monkeypatch.setattr(journal.subprocess, "run", fake_run)
+
+    try:
+        journal.fetch_tagged_entries("ALL", set())
+        assert False, "expected TimeoutExpired to propagate"
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def test_run_journalctl_iso_returns_empty_on_timeout(monkeypatch):
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="journalctl", timeout=10)
+
+    monkeypatch.setattr(journal.subprocess, "run", fake_run)
+
+    assert journal._run_journalctl_iso() == ""

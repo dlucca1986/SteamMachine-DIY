@@ -13,11 +13,17 @@
 
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
-from utils import apply_env_map, get_ssot_var, jlog, load_yaml_safe
+from utils import (
+    apply_env_map,
+    default_games_conf_dir,
+    get_ssot_var,
+    jlog,
+    load_yaml_safe,
+    shlex_split_or_fallback,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -35,10 +41,6 @@ _GENERIC_STEMS: frozenset[str] = frozenset(
         "main",
     }
 )
-
-# Fallback directory for per-game profile files (used when user_config is
-# unavailable in the SSoT).
-_FALLBACK_GAMES_DIR: str = "/etc/steamos_diy/games.d"
 
 # Bytes read from the head of each YAML file when scanning for an AppID.
 # Headers are always at the top, so reading more would only waste I/O.
@@ -147,11 +149,10 @@ def _safe_split(field: str, value: str) -> list[str]:
     A malformed per-game override must not stop the game from launching —
     same fallback health.py's preflight already uses for gamescope flags.
     """
-    try:
-        return shlex.split(value)
-    except ValueError as err:
+    tokens, err = shlex_split_or_fallback(value)
+    if err is not None:
         jlog("STEAM", f"BAD_{field}: {value!r} - {err}", level="WARN")
-        return value.split()
+    return tokens
 
 
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
@@ -192,6 +193,9 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     """
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
+        # full_cmd comes from the user's own local YAML config (wrapper/
+        # extra args), not from network or other-user input — same trust
+        # level as a shell alias the user wrote for themselves.
         os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
     except OSError as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
@@ -215,7 +219,9 @@ def run() -> None:
     raw_args = sys.argv[1:]
 
     user_config_path = get_ssot_var("user_config")
-    game_conf_dir = get_ssot_var("games_conf_dir", _FALLBACK_GAMES_DIR)
+    game_conf_dir = get_ssot_var(
+        "games_conf_dir", str(default_games_conf_dir())
+    )
 
     stem, eff_name = _resolve_effective_name(raw_args)
     steam_id = os.getenv("SteamAppId")

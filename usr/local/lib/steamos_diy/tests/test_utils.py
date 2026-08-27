@@ -14,8 +14,11 @@ fetches and unpacks a GitHub release tarball with elevated privileges
 downstream (install.sh runs as root), so its HTTPS-only guardrail and
 extraction behavior are worth pinning even without full network mocking."""
 
+import hashlib
 import io
+import subprocess
 import tarfile
+from types import SimpleNamespace
 
 import utils
 
@@ -90,6 +93,30 @@ def test_release_from_api_defaults_missing_optional_fields_to_empty_str():
     assert info.notes == ""
     assert info.tarball_url == ""
     assert info.html_url == ""
+    assert info.checksum_url == ""
+
+
+def test_release_from_api_finds_checksum_asset_url():
+    info = utils._release_from_api(
+        {
+            "tag_name": "v9.9.9",
+            "assets": [
+                {"name": "irrelevant.txt", "browser_download_url": "x"},
+                {
+                    "name": "SHA256SUMS",
+                    "browser_download_url": "https://example.invalid/sums",
+                },
+            ],
+        }
+    )
+    assert info.checksum_url == "https://example.invalid/sums"
+
+
+def test_release_from_api_ignores_malformed_assets_list():
+    info = utils._release_from_api(
+        {"tag_name": "v9.9.9", "assets": "not-a-list"}
+    )
+    assert info.checksum_url == ""
 
 
 # ---------------------------------------------------------------------------
@@ -110,17 +137,23 @@ def test_prune_downloads_removes_only_version_named_dirs(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# download_release — HTTPS-only guardrail and real-tarball extraction
+# download_release — HTTPS-only guardrail, checksum verification, extraction
 # ---------------------------------------------------------------------------
 
+_TARBALL_URL = "https://example.invalid/tarball"
+_CHECKSUM_URL = "https://example.invalid/sums"
 
-def _fake_release_info(tarball_url: str) -> utils.ReleaseInfo:
+
+def _fake_release_info(
+    tarball_url: str = _TARBALL_URL, checksum_url: str = _CHECKSUM_URL
+) -> utils.ReleaseInfo:
     return utils.ReleaseInfo(
         version="9.9.9",
         is_newer=True,
         notes="",
         tarball_url=tarball_url,
         html_url="",
+        checksum_url=checksum_url,
     )
 
 
@@ -135,14 +168,93 @@ def _make_release_tarball(export_dir: str, files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def _fake_urlopen(tarball: bytes, checksum_body: bytes):
+    """Dispatch by URL: checksum text for _CHECKSUM_URL, tarball otherwise."""
+
+    def _fake(req, timeout):  # pylint: disable=unused-argument
+        if req.full_url == _CHECKSUM_URL:
+            return io.BytesIO(checksum_body)
+        return io.BytesIO(tarball)
+
+    return _fake
+
+
 def test_download_release_rejects_non_https_url(tmp_path, monkeypatch):
     def _fail_if_called(*_a, **_k):
         raise AssertionError("urlopen must not run for a non-https URL")
 
     monkeypatch.setattr("urllib.request.urlopen", _fail_if_called)
 
-    info = _fake_release_info("http://example.invalid/tarball")
+    info = _fake_release_info(tarball_url="http://example.invalid/tarball")
     assert utils.download_release(info, tmp_path) is None
+
+
+def test_download_release_rejects_missing_checksum_url(tmp_path, monkeypatch):
+    def _fail_if_called(*_a, **_k):
+        raise AssertionError(
+            "urlopen must not run when no checksum asset is published"
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", _fail_if_called)
+
+    info = _fake_release_info(checksum_url="")
+    assert utils.download_release(info, tmp_path) is None
+
+
+def test_download_release_rejects_checksum_mismatch(tmp_path, monkeypatch):
+    tarball = _make_release_tarball(
+        "export-dir", {"install.sh": b"#!/bin/bash\n"}
+    )
+    wrong_digest = "0" * 64
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(tarball, wrong_digest.encode("ascii")),
+    )
+
+    info = _fake_release_info()
+    assert utils.download_release(info, tmp_path) is None
+    assert not (tmp_path / "v9.9.9").exists()
+
+
+def test_download_release_checksum_mismatch_preserves_stale_cache(
+    tmp_path, monkeypatch
+):
+    """Regression: pruning must happen only after checksum verification —
+    a corrupted/mismatched download must not cost the last known-good
+    previously-cached release (code-review finding, 2026-08-27)."""
+    stale = tmp_path / "v1.0.0"
+    stale.mkdir()
+    (stale / "marker").write_text("stale")
+
+    tarball = _make_release_tarball(
+        "export-dir", {"install.sh": b"#!/bin/bash\n"}
+    )
+    wrong_digest = "0" * 64
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(tarball, wrong_digest.encode("ascii")),
+    )
+
+    info = _fake_release_info()
+    assert utils.download_release(info, tmp_path) is None
+    assert stale.exists()
+    assert (stale / "marker").read_text() == "stale"
+
+
+def test_download_release_rejects_malformed_checksum_asset(
+    tmp_path, monkeypatch
+):
+    tarball = _make_release_tarball(
+        "export-dir", {"install.sh": b"#!/bin/bash\n"}
+    )
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(tarball, b"not-a-hex-digest"),
+    )
+
+    info = _fake_release_info()
+    assert utils.download_release(info, tmp_path) is None
+    assert not (tmp_path / "v9.9.9").exists()
 
 
 def test_download_release_extracts_and_locates_install_sh(
@@ -152,12 +264,13 @@ def test_download_release_extracts_and_locates_install_sh(
         "dlucca1986-SteamMachine-DIY-abc123",
         {"install.sh": b"#!/bin/bash\necho hi\n"},
     )
+    digest = hashlib.sha256(tarball).hexdigest()
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda req, timeout: io.BytesIO(tarball),
+        _fake_urlopen(tarball, digest.encode("ascii")),
     )
 
-    info = _fake_release_info("https://example.invalid/tarball")
+    info = _fake_release_info()
     result = utils.download_release(info, tmp_path)
 
     assert result is not None
@@ -169,12 +282,13 @@ def test_download_release_returns_none_when_install_sh_is_missing(
     tmp_path, monkeypatch
 ):
     tarball = _make_release_tarball("export-dir", {"README.md": b"hi"})
+    digest = hashlib.sha256(tarball).hexdigest()
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda req, timeout: io.BytesIO(tarball),
+        _fake_urlopen(tarball, digest.encode("ascii")),
     )
 
-    info = _fake_release_info("https://example.invalid/tarball")
+    info = _fake_release_info()
     assert utils.download_release(info, tmp_path) is None
 
 
@@ -186,12 +300,86 @@ def test_download_release_prunes_stale_versions_first(tmp_path, monkeypatch):
     tarball = _make_release_tarball(
         "export-dir", {"install.sh": b"#!/bin/bash\n"}
     )
+    digest = hashlib.sha256(tarball).hexdigest()
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda req, timeout: io.BytesIO(tarball),
+        _fake_urlopen(tarball, digest.encode("ascii")),
     )
 
-    info = _fake_release_info("https://example.invalid/tarball")
+    info = _fake_release_info()
     utils.download_release(info, tmp_path)
 
     assert not stale.exists()
+
+
+# ---------------------------------------------------------------------------
+# _fetch_expected_sha256 — pure parsing/network guard, isolated from extraction
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_expected_sha256_rejects_non_https_url(monkeypatch):
+    def _fail_if_called(*_a, **_k):
+        raise AssertionError("urlopen must not run for a non-https URL")
+
+    monkeypatch.setattr("urllib.request.urlopen", _fail_if_called)
+    assert (
+        utils._fetch_expected_sha256("http://example.invalid/sums") is None
+    )
+
+
+def test_fetch_expected_sha256_parses_valid_digest(monkeypatch):
+    digest = "a" * 64
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout: io.BytesIO(digest.encode("ascii")),
+    )
+    assert utils._fetch_expected_sha256(_CHECKSUM_URL) == digest
+
+
+def test_fetch_expected_sha256_rejects_short_digest(monkeypatch):
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout: io.BytesIO(b"deadbeef"),
+    )
+    assert utils._fetch_expected_sha256(_CHECKSUM_URL) is None
+
+
+# ---------------------------------------------------------------------------
+# default_games_conf_dir
+# ---------------------------------------------------------------------------
+
+
+def test_default_games_conf_dir_under_user_config_home(monkeypatch, tmp_path):
+    """Pins the shared fallback sdy.py and control_center.py must agree on.
+
+    sdy.py used to hardcode an unrelated, never-created "/etc/steamos_diy/
+    games.d" as its own fallback — a dead path that would silently
+    diverge from where control_center.py actually saves per-game
+    profiles if the SSoT's games_conf_dir key were ever unset.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert utils.default_games_conf_dir() == tmp_path / (
+        ".config/steamos_diy/games.d"
+    )
+
+
+# ---------------------------------------------------------------------------
+# fix_ownership — subprocess timeout discipline (CLAUDE.md review checklist
+# item 14): a wedged `chown -R` must be logged and swallowed, not left to
+# hang backup/restore indefinitely.
+# ---------------------------------------------------------------------------
+
+
+def test_fix_ownership_swallows_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        utils.pwd,
+        "getpwnam",
+        lambda name: SimpleNamespace(pw_uid=1000, pw_gid=1000),
+    )
+
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="chown", timeout=30)
+
+    monkeypatch.setattr(utils.subprocess, "run", fake_run)
+
+    utils.fix_ownership(tmp_path, "someuser")  # must not raise

@@ -14,7 +14,12 @@
 import ctypes
 import os
 import pwd
+import re
+import shlex
 import shutil
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import tarfile
@@ -279,6 +284,36 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
     return {}
 
 
+GAMES_CONF_SUBDIR: str = "games.d"
+
+
+def default_games_conf_dir() -> Path:
+    """Fallback games_conf_dir when the SSoT key is unset.
+
+    ~/.config/steamos_diy/games.d — the same default the SSoT template
+    itself ships (etc/default/steamos_diy.conf). Single source of truth
+    for sdy.py and control_center.py so they can't silently disagree on
+    where per-game profiles live if the SSoT key is ever missing.
+    """
+    return Path.home() / USER_CONFIG_REL / GAMES_CONF_SUBDIR
+
+
+def shlex_split_or_fallback(value: str) -> tuple[list[str], ValueError | None]:
+    """shlex.split *value*; on an unbalanced quote, also return str.split().
+
+    Shared by every hand-edited shell-like field (game flags, wrapper,
+    extra args, gamescope preflight) so a malformed entry degrades instead
+    of crashing the session. The second return value is the caught error,
+    or None on a clean parse — callers that want to warn about the
+    fallback log it themselves, since the tag/field name differs per call
+    site.
+    """
+    try:
+        return shlex.split(value), None
+    except ValueError as err:
+        return value.split(), err
+
+
 def write_atomic(path: str | Path, val: str) -> None:
     """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable)."""
     _LIB.c_write_atomic(str(path).encode("utf-8"), str(val).encode("utf-8"))
@@ -345,6 +380,8 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
     try:
         u_info = pwd.getpwnam(user_name)
         if target.is_dir():
+            # user_name is the machine's real login user (resolved via
+            # pwd above), never attacker-controlled input; fixed argv.
             subprocess.run(  # nosec B603
                 [
                     "/usr/bin/chown",
@@ -355,11 +392,15 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                timeout=30,
             )
         else:
             os.chown(target, u_info.pw_uid, u_info.pw_gid)
-    except (OSError, KeyError, subprocess.CalledProcessError) as err:
-        jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="DEBUG")
+    except (OSError, KeyError, subprocess.SubprocessError) as err:
+        # WARN, not DEBUG: a failed/timed-out chown leaves target_path
+        # owned by root after a backup/restore ran as the privileged
+        # user, which the user needs to notice and fix manually.
+        jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="WARN")
 
 
 def check_root() -> None:
@@ -415,6 +456,10 @@ _RELEASES_API: str = (
 )
 _HTTP_TIMEOUT: int = 10
 
+# Release asset name every release must carry from 2.1.8 on: one line,
+# the tarball_url source tarball's hex SHA-256 digest. See download_release().
+_CHECKSUM_ASSET_NAME: str = "SHA256SUMS"
+
 
 class ReleaseInfo(NamedTuple):
     """Latest-release facts consumed by the Control Center updater."""
@@ -424,6 +469,44 @@ class ReleaseInfo(NamedTuple):
     notes: str
     tarball_url: str
     html_url: str
+    checksum_url: str
+
+
+def _https_open(url: str, *, extra_headers: dict[str, str] | None = None):
+    """Open *url* over HTTPS with the shared SteamMachine-DIY User-Agent.
+
+    Centralizes the Request/urlopen/timeout plumbing common to every
+    GitHub-release network call below (check_latest_release,
+    _fetch_expected_sha256, _download_verified_tarball); each caller
+    keeps its own error handling since what counts as recoverable, and
+    what to log, differs per caller (JSON parsing vs. raw digest text
+    vs. streamed binary). Every call site passes a URL already confirmed
+    https:// (either _RELEASES_API itself or a caller-side guard), so the
+    scheme is never attacker-controlled.
+    """
+    # Deferred import: urllib pulls in ~40ms of http machinery, paid only
+    # by the Control Center's update-check path, never session-boot.
+    # pylint: disable=import-outside-toplevel
+    import urllib.request
+
+    headers = {"User-Agent": "SteamMachine-DIY"}
+    if extra_headers:
+        headers.update(extra_headers)
+    req = urllib.request.Request(url, headers=headers)
+    return urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT)  # nosec B310
+
+
+def _require_https(url: str, fail_tag: str) -> bool:
+    """Log and return False if *url* isn't https://; True otherwise.
+
+    Shared by every caller that must reject a non-https URL before it
+    ever reaches _https_open(), which trusts its caller to have already
+    done this check.
+    """
+    if url.startswith("https://"):
+        return True
+    jlog("SYSTEM", f"{fail_tag}: non-https URL", "ERROR")
+    return False
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
@@ -440,6 +523,20 @@ def _api_str(data: dict[str, Any], key: str) -> str:
     return str(val) if val else ""
 
 
+def _find_checksum_url(data: dict[str, Any]) -> str:
+    """browser_download_url of the release's SHA256SUMS asset, or ""."""
+    assets = data.get("assets")
+    if not isinstance(assets, list):
+        return ""
+    for asset in assets:
+        if (
+            isinstance(asset, dict)
+            and asset.get("name") == _CHECKSUM_ASSET_NAME
+        ):
+            return _api_str(asset, "browser_download_url")
+    return ""
+
+
 def _release_from_api(data: Any) -> ReleaseInfo | None:
     """Map the releases-API JSON to a ReleaseInfo; None if unusable."""
     if not isinstance(data, dict) or not data.get("tag_name"):
@@ -452,6 +549,7 @@ def _release_from_api(data: Any) -> ReleaseInfo | None:
         notes=_api_str(data, "body"),
         tarball_url=_api_str(data, "tarball_url"),
         html_url=_api_str(data, "html_url"),
+        checksum_url=_find_checksum_url(data),
     )
 
 
@@ -463,25 +561,15 @@ def check_latest_release() -> ReleaseInfo | None:
     https URL and a short timeout: a dead network degrades to a quick
     "unknown" instead of hanging the worker thread.
     """
-    # Deferred imports: urllib pulls in ~40ms of http machinery. Only
-    # the Control Center pays that, never the session-boot or game-
-    # launch paths that import utils.
+    # Deferred import — see _https_open.
     # pylint: disable=import-outside-toplevel
     import json
-    import urllib.request
     from http.client import HTTPException
 
-    req = urllib.request.Request(
-        _RELEASES_API,
-        headers={
-            "User-Agent": "SteamMachine-DIY",
-            "Accept": "application/vnd.github+json",
-        },
-    )
     try:
-        # B310: fixed https:// URL (_RELEASES_API), no user-controlled scheme.
-        with urllib.request.urlopen(  # nosec B310
-            req, timeout=_HTTP_TIMEOUT
+        with _https_open(
+            _RELEASES_API,
+            extra_headers={"Accept": "application/vnd.github+json"},
         ) as resp:
             data = json.load(resp)
     except (OSError, ValueError, HTTPException) as err:
@@ -505,40 +593,105 @@ def _prune_downloads(root: Path) -> None:
             shutil.rmtree(entry, ignore_errors=True)
 
 
+def _fetch_expected_sha256(url: str) -> str | None:
+    """Fetch and parse a SHA256SUMS asset: one 64-char hex digest.
+
+    None on any network/format failure — download_release() treats that
+    identically to a missing checksum asset (abort, never extract
+    unverified content).
+    """
+    # Deferred import — see _https_open.
+    # pylint: disable=import-outside-toplevel
+    from http.client import HTTPException
+
+    if not _require_https(url, "UPDATE_CHECKSUM_FAIL"):
+        return None
+    try:
+        with _https_open(url) as resp:
+            text = resp.read(256).decode("ascii")
+    except (OSError, HTTPException, UnicodeDecodeError) as err:
+        jlog("SYSTEM", f"UPDATE_CHECKSUM_FAIL: {err}", level="ERROR")
+        return None
+    parts = text.split()
+    digest = parts[0].lower() if parts else ""
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        jlog("SYSTEM", f"UPDATE_CHECKSUM_FAIL: bad digest {text!r}", "ERROR")
+        return None
+    return digest
+
+
+def _download_verified_tarball(url: str, expected_sha256: str) -> Any:
+    """Download *url* into a temp file, verifying its SHA-256 en route.
+
+    Returns the temp file, seeked to 0, on a match. On any network error
+    or a mismatch, logs, closes the temp file, and returns None — the
+    caller (download_release) never receives an unverified file object.
+    """
+    # Deferred imports — see _https_open.
+    # pylint: disable=import-outside-toplevel
+    import hashlib
+    import tempfile
+    from http.client import HTTPException
+
+    # SIM115: handle is returned open — download_release() closes it via
+    # its own `with tmp, ...` block once extraction finishes.
+    tmp = tempfile.TemporaryFile()  # noqa: SIM115
+    try:
+        digest = hashlib.sha256()
+        # Scheme constrained to https:// by download_release's own guard.
+        with _https_open(url) as resp:
+            for chunk in iter(lambda: resp.read(65536), b""):
+                tmp.write(chunk)
+                digest.update(chunk)
+    except (OSError, HTTPException) as err:
+        jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
+        tmp.close()
+        return None
+    if digest.hexdigest() != expected_sha256:
+        jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: checksum mismatch", "ERROR")
+        tmp.close()
+        return None
+    tmp.seek(0)
+    return tmp
+
+
 def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
-    """Download and unpack *info*'s source tarball under *dest_root*.
+    """Download, checksum-verify, and unpack *info*'s source tarball.
 
     Layout: <dest_root>/v<version>/<github-export-dir>/… — returns the
     inner export directory (the one holding install.sh), or None on any
-    failure. Older downloads are pruned first so the updates folder
-    never accumulates stale releases. The "data" extraction filter
-    rejects absolute paths, traversal and special members.
+    failure. Requires info.checksum_url (the release's SHA256SUMS asset,
+    published alongside every release from 2.1.8 on) and rejects the
+    download outright if it's missing or doesn't match — install.sh
+    inside the tarball runs with elevated privileges, so nothing gets
+    extracted unverified. Older downloads are pruned only after the new
+    tarball's checksum is verified, so a corrupted/mismatched download
+    never costs the last known-good cached release; the updates folder
+    still never accumulates stale releases in the success case. The
+    "data" extraction filter rejects absolute paths, traversal and
+    special members.
     """
-    # Deferred imports — see check_latest_release.
-    # pylint: disable=import-outside-toplevel
-    import urllib.request
-    from http.client import HTTPException
-
-    if not info.tarball_url.startswith("https://"):
-        jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: non-https URL", "ERROR")
+    if not _require_https(info.tarball_url, "UPDATE_DOWNLOAD_FAIL"):
         return None
+
+    # _fetch_expected_sha256 already logs the specific reason (non-https,
+    # network error, or malformed digest) before returning None here —
+    # no second, generic log line needed for the same event.
+    expected = _fetch_expected_sha256(info.checksum_url)
+    if expected is None:
+        return None
+
     root = Path(dest_root)
     target = root / f"v{info.version}"
-    req = urllib.request.Request(
-        info.tarball_url, headers={"User-Agent": "SteamMachine-DIY"}
-    )
     try:
         root.mkdir(parents=True, exist_ok=True)
+        tmp = _download_verified_tarball(info.tarball_url, expected)
+        if tmp is None:
+            return None
         _prune_downloads(root)
-        # B310: scheme constrained to https:// by the guard above.
-        with (
-            urllib.request.urlopen(  # nosec B310
-                req, timeout=_HTTP_TIMEOUT
-            ) as resp,
-            tarfile.open(fileobj=resp, mode="r|gz") as tar,
-        ):
+        with tmp, tarfile.open(fileobj=tmp, mode="r:gz") as tar:
             tar.extractall(target, filter="data")
-    except (OSError, ValueError, tarfile.TarError, HTTPException) as err:
+    except (OSError, ValueError, tarfile.TarError) as err:
         jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
         return None
     for entry in sorted(target.iterdir()):

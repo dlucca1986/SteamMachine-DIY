@@ -1,6 +1,7 @@
 """Tests for restore.py: atomic member writes and target-resolution safety."""
 
 import io
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -150,3 +151,19 @@ def test_every_backup_mapping_key_nested_member_resolves(
         assert resolved == f"{expected_fs_path}/some_file.txt", (
             f"nested member under {archive_key!r} did not resolve safely"
         )
+
+
+# ---------------------------------------------------------------------------
+# _reload_systemd — subprocess timeout discipline (CLAUDE.md review
+# checklist item 14): a wedged `systemctl daemon-reload` must be logged
+# and swallowed, not left to hang the restore flow indefinitely.
+# ---------------------------------------------------------------------------
+
+
+def test_reload_systemd_swallows_timeout(monkeypatch):
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="systemctl", timeout=10)
+
+    monkeypatch.setattr(restore.subprocess, "run", fake_run)
+
+    restore._reload_systemd()  # must not raise

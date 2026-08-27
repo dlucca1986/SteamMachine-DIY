@@ -5,6 +5,12 @@ __pycache__/
 # Local-only engineering standards, not part of the public repo
 CLAUDE.md
 
+# Local-only workflow automation (gate runner, version bump, release helper)
+# — personal dev tooling, not part of the public repo, same treatment as
+# CLAUDE.md above. CI keeps its own independent copy of the gate logic
+# since GitHub Actions needs committed files to run.
+scripts/
+
 # Tool caches (Ruff, pytest, bandit)
 .ruff_cache/
 .pytest_cache/

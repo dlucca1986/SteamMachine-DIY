@@ -13,6 +13,8 @@
 
 import re
 
+# PyQt6's compiled C-extension bindings aren't visible to pylint's static
+# import resolution, so these genuine, existing symbols get flagged.
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import QRect, QRegularExpression, QSize, Qt
 from PyQt6.QtGui import (
@@ -34,10 +36,14 @@ class LineNumberArea(QWidget):
         super().__init__(editor)
         self.editor = editor
 
+    # Qt overrides below: camelCase names and behavior are mandated by
+    # the base class API, not our naming choice — a docstring restating
+    # "Qt calls this" for each one-liner would add noise, not clarity.
     # pylint: disable=missing-function-docstring
     def sizeHint(self):  # pylint: disable=invalid-name
         return QSize(self.editor.line_number_area_width(), 0)
 
+    # Qt override; camelCase name is mandated by the base class API.
     def paintEvent(self, event):  # pylint: disable=invalid-name
         self.editor.line_number_area_paint_event(event)
 
@@ -75,6 +81,7 @@ class YAMLEditor(QPlainTextEdit):
         if rect.contains(self.viewport().rect()):
             self.update_line_number_area_width(0)
 
+    # Qt override; camelCase name is mandated by the base class API.
     def resizeEvent(self, event):  # pylint: disable=invalid-name
         """Qt override: refit the sidebar geometry on editor resize."""
         super().resizeEvent(event)
@@ -113,6 +120,7 @@ class YAMLEditor(QPlainTextEdit):
                 self.blockBoundingRect(block).height()
             )
 
+    # Qt override; camelCase name is mandated by the base class API.
     def keyPressEvent(self, event):  # pylint: disable=invalid-name
         """Auto-indent on Enter — preserve leading whitespace."""
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -124,6 +132,8 @@ class YAMLEditor(QPlainTextEdit):
             super().keyPressEvent(event)
 
 
+# QSyntaxHighlighter's API only requires overriding highlightBlock; a
+# second public method would be added purely to satisfy this lint rule.
 # pylint: disable=too-few-public-methods
 class YAMLSyntaxHighlighter(QSyntaxHighlighter):
     """Regex-based syntax highlighter for YAML content in QPlainTextEdit."""
@@ -147,6 +157,7 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
                 fmt.setFontWeight(QFont.Weight.Bold)
             self.rules.append((QRegularExpression(pat), fmt))
 
+    # Qt override; camelCase name is mandated by the base class API.
     def highlightBlock(self, text):  # pylint: disable=invalid-name
         """Called by Qt per visible block."""
         for expression, fmt in self.rules:

@@ -14,9 +14,14 @@
 
 import os
 import re
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
+
+from utils import jlog
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -229,17 +234,21 @@ def fetch_tagged_entries(
 
     Shared by the Diagnostics view and the support-report export so the
     two can never drift on how project logs are fetched. Raises
-    CalledProcessError/OSError — error handling is the caller's concern.
-    errors="replace" keeps decoding itself from ever raising: a MESSAGE
-    field with an embedded newline flips journalctl's export format to
-    binary-safe encoding, which is not guaranteed valid UTF-8.
+    subprocess.SubprocessError (includes TimeoutExpired)/OSError — error
+    handling is the caller's concern. errors="replace" keeps decoding
+    itself from ever raising: a MESSAGE field with an embedded newline
+    flips journalctl's export format to binary-safe encoding, which is
+    not guaranteed valid UTF-8.
     """
+    # get_journal_cmd() builds a fixed argv from constants + a tag
+    # constrained to a known set — never a shell string, never raw input.
     res = subprocess.run(  # nosec B603
         get_journal_cmd(tag),
         capture_output=True,
         text=True,
         errors="replace",
         check=True,
+        timeout=10,
     )
     return parse_export_format(res.stdout, launches)
 
@@ -281,6 +290,7 @@ def _run_journalctl_iso() -> str:
     still the parent. Narrowing here keeps Dolphin/plasmashell noise out.
     """
     try:
+        # Fixed argv, no shell — the identifiers below are hardcoded.
         res = subprocess.run(  # nosec B603
             [
                 "/usr/bin/journalctl",
@@ -298,9 +308,16 @@ def _run_journalctl_iso() -> str:
             text=True,
             errors="replace",
             check=False,
+            timeout=10,
         )
         return res.stdout or ""
-    except OSError:
+    except (OSError, subprocess.SubprocessError) as err:
+        # Unlike fetch_tagged_entries's sibling call (which raises and
+        # lets the caller surface it), this one degrades to "" by design
+        # — but silently, that made a genuine journalctl failure
+        # indistinguishable from "no gamescope activity in the last
+        # hour". WARN leaves a trace without breaking the degrade.
+        jlog("SYSTEM", f"GAMESCOPE_LOG_FETCH_FAIL: {err}", level="WARN")
         return ""
 
 

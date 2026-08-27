@@ -17,7 +17,7 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
-Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
+Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Each call passes a `lock_key` so only operations that actually target the same files block each other: Backup and Restore share `lock_key="files"` (mutually exclusive with each other), while journal vacuum uses its own independent `lock_key="vacuum"` and never blocks or is blocked by the other two. If a `pkexec` call ever times out (5 minutes), its lock is deliberately **not** cleared — the privileged process it started may still be running — so that operation group stays disabled with a status-bar message until the Control Center is restarted. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
 
 Buttons in order:
 
@@ -31,7 +31,7 @@ Buttons in order:
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
 | **Browse Config Folder** | Opens `conf_root` (SSoT-resolved `user_config` directory, default `~/.config/steamos_diy/`) via `xdg-open`. |
-| **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
+| **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is downloaded, its SHA-256 is verified against the release's `SHA256SUMS` asset (fail-closed: aborts, nothing extracted, on a missing/mismatched checksum), then unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
 | **Open Project Wiki** | Opens the wiki URL via `QDesktopServices`. |
 
 ### 3. Global Options (Tab Index 2)

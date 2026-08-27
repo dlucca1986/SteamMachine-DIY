@@ -15,6 +15,8 @@ import shlex
 import threading
 from pathlib import Path
 
+# PyQt6's compiled C-extension bindings aren't visible to pylint's static
+# import resolution, so these genuine, existing symbols get flagged.
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices

@@ -39,6 +39,11 @@ On older or low-power GPUs, Steam's embedded Chromium (CEF) can fail at GPU-acce
 
 **Fix:** force CEF to software compositing with the Steam-client flag `-cef-disable-gpu-compositing` (or, for full software rendering, `-cef-disable-gpu`). These are **Steam client** flags, *not* gamescope flags — they go on the Steam invocation in `session_launch.py` (the `-gamepadui -steamos3 -steamdeck` line), **not** in `config.yaml`'s `flags`. Try the minimal `-cef-disable-gpu-compositing` first; fall back to `-cef-disable-gpu` only if the corruption persists.
 
+### "Another privileged operation is already running…" won't go away
+Backup, Restore, and journal-vacuum each guard against a double-click, but if a `pkexec` call ever times out (after 5 minutes), its lock is deliberately left in place rather than cleared — the privileged process it started (a `chown -R`, `backup.py`, `restore.py`) may still be running, and there's no way to confirm it's actually finished. Backup and Restore share one lock (they touch the same files), so a timeout on either one blocks both; journal vacuum has its own separate lock and isn't affected.
+
+**Fix:** restart the Control Center. This clears the guard; it does not itself confirm whether the original privileged process finished — check the Diagnostics logs or `journalctl` if you need to know for certain before retrying.
+
 ---
 
 ## 💡 4. Diagnostic Aliases (Terminal Power-User)
