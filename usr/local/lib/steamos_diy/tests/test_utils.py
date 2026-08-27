@@ -284,8 +284,11 @@ def test_download_release_extracts_and_locates_install_sh(
     result = utils.download_release(info, tmp_path)
 
     assert result is not None
-    assert result.name == "dlucca1986-SteamMachine-DIY-abc123"
-    assert (result / "install.sh").is_file()
+    assert result.dir.name == "dlucca1986-SteamMachine-DIY-abc123"
+    assert (result.dir / "install.sh").is_file()
+    assert result.install_sh_sha256 == hashlib.sha256(
+        b"#!/bin/bash\necho hi\n"
+    ).hexdigest()
 
 
 def test_download_release_returns_none_when_install_sh_is_missing(
@@ -344,6 +347,40 @@ def test_download_release_prunes_stale_versions_first(tmp_path, monkeypatch):
     utils.download_release(info, tmp_path)
 
     assert not stale.exists()
+
+
+# ---------------------------------------------------------------------------
+# verify_file_sha256 — TOCTOU re-check between download and pkexec exec
+# (updater.py::_on_download re-verifies install.sh with this right before
+# handing it to pkexec, since a blocking dialog sits between the
+# checksum-verified download and actual privileged execution).
+# ---------------------------------------------------------------------------
+
+
+def test_verify_file_sha256_accepts_untampered_file(tmp_path):
+    target = tmp_path / "install.sh"
+    target.write_bytes(b"#!/bin/bash\necho hi\n")
+    digest = hashlib.sha256(b"#!/bin/bash\necho hi\n").hexdigest()
+
+    assert utils.verify_file_sha256(target, digest) is True
+
+
+def test_verify_file_sha256_rejects_tampered_file(tmp_path):
+    """Regression: a file swapped after the original hash was taken must
+    fail verification, not silently pass — this is what closes the
+    TOCTOU window between download-time checksum and pkexec execution."""
+    target = tmp_path / "install.sh"
+    target.write_bytes(b"#!/bin/bash\necho hi\n")
+    original_digest = hashlib.sha256(b"#!/bin/bash\necho hi\n").hexdigest()
+
+    target.write_bytes(b"#!/bin/bash\nrm -rf /\n")  # tampered after hashing
+
+    assert utils.verify_file_sha256(target, original_digest) is False
+
+
+def test_verify_file_sha256_rejects_missing_file(tmp_path):
+    missing = tmp_path / "install.sh"
+    assert utils.verify_file_sha256(missing, "a" * 64) is False
 
 
 # ---------------------------------------------------------------------------

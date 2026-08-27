@@ -20,6 +20,8 @@ This applies only to the Control Center's automated download in step 2 above —
 
 This defends against transport-level corruption or tampering of the download itself — it does not defend against a compromised GitHub account publishing a bad release with a matching checksum (there is no independent signature). A release published without a `SHA256SUMS` asset (only possible before 2.1.8, or if the release process was run incorrectly) simply cannot be installed via the in-app updater; use the manual terminal procedure below instead, after verifying the source yourself.
 
+The download's checksum is also re-checked a second time, immediately before `install.sh` runs as root — right after you click **OK** on the "Installing Update" dialog, not just at download time. The extracted files live under your own home directory until that point, so this closes the (small, but real) window where something else already running as you could otherwise swap `install.sh` while that dialog is waiting for your click. If the file no longer matches, the update is aborted with an **"Update Aborted"** message instead of running whatever is actually on disk.
+
 ## ⌨️ 2. Updating from the terminal
 
 Download and unpack the latest release (or `git pull` your clone), then run the installer in update mode from the project root:

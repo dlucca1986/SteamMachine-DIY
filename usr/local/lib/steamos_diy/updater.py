@@ -30,6 +30,7 @@ from utils import (
     check_latest_release,
     download_release,
     spawn_native,
+    verify_file_sha256,
 )
 
 _IDLE_LABEL: str = "⬆️ Check for Updates"
@@ -52,7 +53,7 @@ class UpdateManager(QObject):
     """
 
     _check_ready = pyqtSignal(object)  # ReleaseInfo | None
-    _download_ready = pyqtSignal(object)  # extracted Path | None
+    _download_ready = pyqtSignal(object)  # ExtractedRelease | None
 
     def __init__(self, window, button_style: str):
         super().__init__(window)
@@ -140,7 +141,7 @@ class UpdateManager(QObject):
         elif box.clickedButton() is page_btn:
             QDesktopServices.openUrl(QUrl(info.html_url or _RELEASES_URL))
 
-    def _on_download(self, src_dir):
+    def _on_download(self, result):
         """Hand the unpacked release over to the installer in Konsole.
 
         The installer runs visibly in a terminal (live pacman/gcc output,
@@ -148,23 +149,39 @@ class UpdateManager(QObject):
         bad UX and undiagnosable when it fails.
         """
         self._set_idle()
-        if src_dir is None:
+        if result is None:
             QMessageBox.warning(
                 self._win,
                 "Update Download",
                 "Download failed — see the Diagnostics logs.",
             )
             return
+        src_dir, expected_sha256 = result
         QMessageBox.information(
             self._win,
             "Installing Update",
             "The installer will now run in a terminal window.\n"
             "The system reboots automatically when it completes.",
         )
+        # Re-verify right before privileged use, not just at download
+        # time: the QMessageBox above can block on the user for an
+        # unbounded time, during which src_dir (under the user's own
+        # home, writable by that same user) could be tampered with by
+        # anything else already running as that user — this closes the
+        # TOCTOU window down to the few ms between this check and exec.
+        install_sh = src_dir / "install.sh"
+        if not verify_file_sha256(install_sh, expected_sha256):
+            QMessageBox.critical(
+                self._win,
+                "Update Aborted",
+                "install.sh changed unexpectedly after download — "
+                "aborting for safety. Please try the update again.",
+            )
+            return
         # Absolute script path: pkexec starts programs in root's home,
         # so a relative ./install.sh would not resolve (the installer
         # then cd's to its own directory for the relative deploy paths).
-        script = shlex.quote(str(src_dir / "install.sh"))
+        script = shlex.quote(str(install_sh))
         spawn_native(
             "/usr/bin/konsole",
             [

@@ -42,6 +42,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   section) — a release published without one cannot be installed via the in-app updater.
   This defends against transport-level corruption/tampering of the download only, not
   against a compromised publishing account (no independent signature).
+- **Update-installer TOCTOU**: `download_release()` now returns an `ExtractedRelease`
+  (extracted dir + `install.sh`'s own SHA-256, via the new `_sha256_file()`) instead of a
+  bare `Path`. `updater.py::_on_download` re-verifies that hash (`verify_file_sha256()`)
+  immediately before handing `install.sh` to `pkexec`, right after the blocking "Installing
+  Update" dialog closes. Previously, the only integrity check happened at download time,
+  before an unbounded, modal wait for the user's OK click — during that window, anything
+  already running as the same desktop user could overwrite `install.sh` in its
+  user-writable destination directory and have it executed as root on the next click, a
+  distinct local-privilege-escalation path from the compromised-GitHub-account threat model
+  the SHA-256 download check above already covers. Verified end-to-end (untampered file
+  still installs normally; a file swapped after download is blocked before `pkexec` runs).
 - **`download_release()` prune ordering, follow-up fix**: the fix above only protected
   against a checksum-mismatched download costing the last known-good cached release —
   a checksum-*valid* tarball that then failed extraction (`tarfile.TarError`, a full disk)

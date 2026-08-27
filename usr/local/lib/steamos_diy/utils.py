@@ -491,6 +491,20 @@ class ReleaseInfo(NamedTuple):
     checksum_url: str
 
 
+class ExtractedRelease(NamedTuple):
+    """download_release()'s success result: extracted dir + install.sh hash.
+
+    install_sh_sha256 lets the caller re-verify install.sh's integrity
+    immediately before executing it via pkexec, narrowing the TOCTOU
+    window between this checksum-verified extraction and actual root
+    execution — the extracted directory lives under the user's own home,
+    writable by that same user.
+    """
+
+    dir: Path
+    install_sh_sha256: str
+
+
 def _https_open(url: str, *, extra_headers: dict[str, str] | None = None):
     """Open *url* over HTTPS with the shared SteamMachine-DIY User-Agent.
 
@@ -679,23 +693,55 @@ def _download_verified_tarball(url: str, expected_sha256: str) -> Any:
     return tmp
 
 
-def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
+def _sha256_file(path: Path) -> str:
+    """SHA-256 hex digest of *path*'s contents."""
+    # Deferred import — see _https_open.
+    # pylint: disable=import-outside-toplevel
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_file_sha256(path: Path, expected_sha256: str) -> bool:
+    """True if *path* exists and its SHA-256 matches *expected_sha256*.
+
+    Used to re-verify a previously-hashed file (e.g. install.sh, right
+    before a pkexec execution) so a tamper window between an earlier
+    verification and actual privileged use is caught rather than trusted
+    blindly.
+    """
+    if not path.is_file():
+        return False
+    return _sha256_file(path) == expected_sha256
+
+
+def download_release(
+    info: ReleaseInfo, dest_root: str | Path
+) -> ExtractedRelease | None:
     """Download, checksum-verify, and unpack *info*'s source tarball.
 
-    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns the
-    inner export directory (the one holding install.sh), or None on any
-    failure. Requires info.checksum_url (the release's SHA256SUMS asset,
-    published alongside every release from 2.1.8 on) and rejects the
-    download outright if it's missing or doesn't match — install.sh
-    inside the tarball runs with elevated privileges, so nothing gets
-    extracted unverified. Older downloads are pruned only after the new
-    tarball is checksum-verified, fully extracted, AND confirmed to
-    contain install.sh — so a corrupted/mismatched download, a failed
-    extraction, or a malformed release tarball never costs the last
-    known-good cached release; the updates folder still never
-    accumulates stale releases in the success case. The "data"
-    extraction filter rejects absolute paths, traversal and special
-    members.
+    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns an
+    ExtractedRelease (the inner export directory holding install.sh, plus
+    install.sh's own SHA-256), or None on any failure. Requires
+    info.checksum_url (the release's SHA256SUMS asset, published
+    alongside every release from 2.1.8 on) and rejects the download
+    outright if it's missing or doesn't match — install.sh inside the
+    tarball runs with elevated privileges, so nothing gets extracted
+    unverified. Older downloads are pruned only after the new tarball is
+    checksum-verified, fully extracted, AND confirmed to contain
+    install.sh — so a corrupted/mismatched download, a failed extraction,
+    or a malformed release tarball never costs the last known-good cached
+    release; the updates folder still never accumulates stale releases in
+    the success case. The "data" extraction filter rejects absolute
+    paths, traversal and special members. The returned install.sh hash is
+    for the caller to re-check via verify_file_sha256() immediately
+    before a pkexec execution (see updater.py) — the tarball checksum
+    alone only covers the moment of extraction, not whatever else might
+    touch the (user-writable) destination directory afterward.
     """
     if not _require_https(info.tarball_url, "UPDATE_DOWNLOAD_FAIL"):
         return None
@@ -720,8 +766,9 @@ def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
         jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
         return None
     for entry in sorted(target.iterdir()):
-        if (entry / "install.sh").is_file():
+        installer = entry / "install.sh"
+        if installer.is_file():
             _prune_downloads(root, keep=target)
-            return entry
+            return ExtractedRelease(entry, _sha256_file(installer))
     jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: install.sh not found", "ERROR")
     return None
