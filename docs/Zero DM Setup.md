@@ -58,7 +58,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 
 A session switch involves three components working in sequence:
 
-1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`). Any argument other than `steam` resolves to `desktop` — `plasma` and `kde` are accepted as synonyms for readability (`steamos-session-select plasma` works identically to `steamos-session-select desktop`).
+1. `session_select.py` writes the new target (`steam` or `desktop`) to `/var/lib/steamos_diy/next_session` atomically, then sends a shutdown signal to the active session (`steam -shutdown` or `qdbus6 org.kde.Shutdown /Shutdown logout`). Only `plasma`, `desktop`, and `kde` resolve to `desktop` (`steamos-session-select plasma` works identically to `steamos-session-select desktop`) — any other argument, including an empty or unrecognized one, resolves to `steam`.
 2. `session_launch.py` detects that its child process has exited, displays a transition message on TTY1, and exits with code `75` (`EX_TEMPFAIL`).
 3. `steamos_diy.service` treats code `75` as a failure (`Restart=on-failure`, `RestartSec=1.0s`) and restarts the launcher, which reads the new target from the state file and spawns the next session. A deliberate stop (`systemctl stop`) exits with `0` and does **not** trigger a restart.
 

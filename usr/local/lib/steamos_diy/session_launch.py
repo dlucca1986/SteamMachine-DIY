@@ -172,12 +172,23 @@ def _build_command_for(target: str, cfg: dict) -> list[str]:
 
 
 def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
-    """Recover to desktop after crash: persist target, notify user, kill proc.
+    """Recover to desktop after an early exit: persist target, notify, kill.
+
+    Deliberate fail-safe: any process exit within the validation window
+    (a real crash, or a switch request that raced it — see
+    _monitor_process) forces "desktop", never "steam", so a broken config
+    always lands where the user can fix it via the Control Center rather
+    than looping back into a session that might not even be launchable.
 
     Returns:
         Always ``"desktop"`` — drives caller's next-target logic.
     """
-    jlog("CORE", "CRASH_DETECTED: RECOVERY", level="ERROR")
+    jlog(
+        "CORE",
+        "EARLY_EXIT_RECOVERY: process exited during the validation "
+        "window (crash, or a switch request raced it) - forcing desktop",
+        level="ERROR",
+    )
     target = "desktop"
     notify("Recovery: Starting Desktop...")
     write_atomic(next_path, target)
