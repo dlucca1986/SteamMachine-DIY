@@ -255,10 +255,6 @@ def _run_session(
         notify("FATAL: Cannot launch session!")
         ret_code = 1
         target = initial_target
-    except subprocess.SubprocessError as err:
-        jlog("CORE", f"SUBPROCESS_ERROR: {err}", level="ERROR")
-        ret_code = 1
-        target = initial_target
     finally:
         proc_holder[0] = None
     return target, ret_code

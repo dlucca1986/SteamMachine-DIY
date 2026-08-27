@@ -208,6 +208,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the global config with no error. Now requires `os.path.isfile`, which keeps the
   intentional "skip past a wrapper like mangohud earlier in argv" behavior (already pinned
   by an existing test) while excluding directories.
+- `session_launch.py`: removed `_run_session`'s `except subprocess.SubprocessError` clause —
+  every subprocess call reachable inside the surrounding `try` block already catches its own
+  `TimeoutExpired` internally (`_monitor_process`, `_terminate_gracefully`), and nothing
+  calls `.run(check=True)`/`.check_call()`/`.check_output()`, so `CalledProcessError` was
+  never possible either. The clause was logically dead code — reachable per syntax, never
+  per actual call pattern — the exact class of issue `vulture` can't catch since it only
+  flags unreferenced code, not unreachable branches. No behavior change.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
