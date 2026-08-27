@@ -152,6 +152,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   nothing would have caught the two silently diverging if either literal were ever edited
   alone, the same class of bug already fixed once for this exact concept earlier in this
   release. Both now derive from a single shared `utils.GAMES_CONF_SUBDIR` constant.
+- `journal.py`: `_split_gamescope_line` stripped the timezone off its parsed timestamp
+  (`.replace(tzinfo=None)`) while `_finalize_export_entry`'s timestamps stayed timezone-aware.
+  `control_center.py`'s `load_logs()` merges and sorts both lists together for the default
+  `ALL` tag (and `STEAM`), so a real session with any gamescope activity raised an uncaught
+  `TypeError: can't compare offset-naive and offset-aware datetimes` inside the worker
+  thread — not covered by the surrounding `except (subprocess.SubprocessError, OSError)`, so
+  it died silently and the Diagnostics tab stayed stuck on "Loading logs..." forever. Found
+  live on a real gamescope session (no prior test merged both entry sources).
+  `journalctl -o short-iso` already includes the UTC offset, so dropping the
+  `.replace(tzinfo=None)` call is sufficient — both sources now stay aware.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`

@@ -340,7 +340,10 @@ def _split_gamescope_line(line: str) -> tuple[datetime, str] | None:
         ps = line.split(" ", 2)
         if len(ps) < 3:
             return None
-        ts = datetime.fromisoformat(ps[0]).replace(tzinfo=None)
+        # Timezone-aware, matching _finalize_export_entry's .astimezone()
+        # entries — load_logs() sorts both lists together (tag ALL/STEAM),
+        # and mixing aware/naive datetimes raises TypeError there.
+        ts = datetime.fromisoformat(ps[0])
         msg = (
             ps[2].split(": ", 1)[1].strip() if ": " in ps[2] else ps[2].strip()
         )

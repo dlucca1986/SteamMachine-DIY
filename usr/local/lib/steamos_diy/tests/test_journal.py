@@ -134,3 +134,44 @@ def test_run_journalctl_iso_returns_empty_on_timeout(monkeypatch):
     monkeypatch.setattr(journal.subprocess, "run", fake_run)
 
     assert journal._run_journalctl_iso() == ""
+
+
+# ---------------------------------------------------------------------------
+# Gamescope/export timestamp mixing (control_center.py's load_logs sorts
+# fetch_tagged_entries + fetch_gamescope_logs together for tag ALL/STEAM).
+#
+# Before the fix, _split_gamescope_line stripped tzinfo from its parsed
+# timestamp while _finalize_export_entry's timestamps stayed timezone-aware
+# (via .astimezone()). Mixing aware/naive datetimes in the same sort() call
+# raises TypeError, uncaught by load_logs's except clause — the Diagnostics
+# tab got stuck on "Loading logs..." forever whenever a real gamescope
+# session ran alongside any CORE/STEAM/SYSTEM activity (the default ALL tag
+# hits this on every normal session).
+# ---------------------------------------------------------------------------
+
+
+def test_split_gamescope_line_returns_timezone_aware_timestamp():
+    ts, _ = journal._split_gamescope_line(
+        "2026-08-27T21:40:00+02:00 host python3[5496]: "
+        "[gamescope] [Info]  console: gamescope version 3.16.25"
+    )
+    assert ts.tzinfo is not None
+
+
+def test_gamescope_and_export_entries_sort_together_without_raising():
+    export_stdout = (
+        "__REALTIME_TIMESTAMP=1700000000000000\n"
+        "SYSLOG_IDENTIFIER=STEAM\n"
+        "MESSAGE=LAUNCH_ARGS: /usr/bin/gamescope --foo"
+    )
+    export_entries = journal.parse_export_format(export_stdout, set())
+    gamescope_entries = [
+        journal._parse_gamescope_line(
+            "2026-08-27T21:40:00+02:00 host python3[5496]: "
+            "[gamescope] [Info]  console: gamescope version 3.16.25",
+            set(),
+        )
+    ]
+    merged = export_entries + gamescope_entries
+    merged.sort(key=lambda x: x[0])  # must not raise TypeError
+    assert len(merged) == 2
