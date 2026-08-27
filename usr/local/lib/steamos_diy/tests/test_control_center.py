@@ -250,6 +250,45 @@ def test_run_pkexec_reports_timeout_distinctly(monkeypatch):
     assert win._pkexec_busy == {"files": True}
 
 
+def test_run_pkexec_non_sticky_timeout_resets_guard(monkeypatch):
+    """Regression: sticky_on_timeout=False (journal vacuum) must reset the
+    guard on a timeout instead of leaving it permanently stuck — a timeout
+    there is far more likely to be a slow polkit prompt than a wedged
+    operation, and vacuum runs are idempotent (code-review finding,
+    2026-08-27)."""
+    win = _FakeWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    emitted = []
+    win.process_finished = SimpleNamespace(
+        emit=lambda *a: emitted.append(a)
+    )
+
+    def fake_run(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="pkexec", timeout=300)
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="vacuum",
+        ok_title="t",
+        ok_msg="m",
+        err_title="ERR",
+        err_msg="generic failure",
+        sticky_on_timeout=False,
+    )
+
+    assert len(emitted) == 1
+    title, msg, is_error = emitted[0]
+    assert title == "ERR"
+    assert "timed out" in msg.lower()
+    assert is_error is True
+    assert win._pkexec_busy == {"vacuum": False}
+
+
 def test_run_pkexec_still_reports_called_process_error_generically(
     monkeypatch,
 ):

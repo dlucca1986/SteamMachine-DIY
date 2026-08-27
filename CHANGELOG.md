@@ -50,6 +50,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `install.sh` is confirmed present, and takes a `keep=target` argument so the
   just-extracted new version is never pruned as if it were a stale one (found during
   this session's second code-review pass, 2026-08-27).
+- **`_run_pkexec`'s sticky-on-timeout lock, narrowed to where it's actually needed**:
+  the 300s pkexec timeout added for checklist item 14 above counts however long the user
+  takes at the polkit password prompt against the same budget as the operation itself —
+  for journal vacuum (idempotent, sub-second real work, no file-overlap risk from a second
+  concurrent run) a timeout there is far more likely to be a slow/abandoned auth prompt
+  than a genuinely wedged operation, so leaving its lock permanently stuck until a Control
+  Center restart was pure downside. `_run_pkexec` gained a `sticky_on_timeout` keyword
+  (default `True`, preserving Backup/Restore's existing "may still be writing files, don't
+  risk a second overlapping run" behavior); `cleanup_logs_privileged` now passes
+  `sticky_on_timeout=False`, so a vacuum timeout resets its lock like any other error
+  instead of requiring a restart (found during this session's second code-review pass,
+  2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s

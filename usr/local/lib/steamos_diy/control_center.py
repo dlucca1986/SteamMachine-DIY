@@ -468,6 +468,7 @@ class SDYControlCenter(QMainWindow):
             ok_msg="Journal wiped.",
             err_title="Error",
             err_msg="Authentication or vacuum failed.",
+            sticky_on_timeout=False,
         )
 
     def validate_config(self):
@@ -1091,6 +1092,7 @@ class SDYControlCenter(QMainWindow):
         ok_msg: str,
         err_title: str,
         err_msg: str,
+        sticky_on_timeout: bool = True,
     ) -> None:
         """Run *cmd* under pkexec in a daemon thread; emit process_finished.
 
@@ -1100,8 +1102,11 @@ class SDYControlCenter(QMainWindow):
         the same files (Backup and Restore, both lock_key="files") can
         never run concurrently — but an operation that shares no files with
         either (journal vacuum, lock_key="vacuum") never blocks or is
-        blocked by them. On a timeout the guard is deliberately left set
-        (see the TimeoutExpired branch below) instead of being cleared.
+        blocked by them. The 300s timeout budget includes however long the
+        user takes at the polkit password prompt, not just cmd's own
+        runtime — for Backup/Restore that time is deliberately left "stuck"
+        on timeout (see sticky_on_timeout below), since the underlying
+        script may genuinely still be writing files.
         """
         if self._pkexec_busy.get(lock_key):
             self.statusBar().showMessage(
@@ -1112,9 +1117,10 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             # Left True (never reset in the finally below) only on a
-            # timeout — every other outcome, expected or not, always
-            # resets it, so an exception this code doesn't even know
-            # to expect can't leave the guard silently stuck.
+            # timeout when sticky_on_timeout is set — every other outcome,
+            # expected or not, always resets it, so an exception this code
+            # doesn't even know to expect can't leave the guard silently
+            # stuck.
             timed_out = False
             try:
                 # cmd is always a fixed literal argv from a call site in
@@ -1130,18 +1136,28 @@ class SDYControlCenter(QMainWindow):
                 # any privileged grandchild it spawned (backup.py,
                 # restore.py, a chown -R) — it may still be writing to
                 # the same files. We have no way to confirm it's actually
-                # gone, so _pkexec_busy[lock_key] is deliberately left True
-                # rather than risk a second privileged run overlapping it;
-                # only a Control Center restart clears it.
-                timed_out = True
-                self.process_finished.emit(
-                    err_title,
+                # gone, so sticky_on_timeout callers (Backup/Restore) leave
+                # _pkexec_busy[lock_key] deliberately True rather than risk
+                # a second privileged run overlapping it; only a Control
+                # Center restart clears it. Non-sticky callers (journal
+                # vacuum: idempotent, no file-overlap risk from a second
+                # concurrent run) reset normally — a timeout there is far
+                # more likely to be a slow/abandoned polkit password
+                # prompt than a genuinely wedged operation, and locking
+                # journal cleanup out until restart over that would be
+                # pure user-hostile downside for zero safety benefit.
+                timed_out = sticky_on_timeout
+                message = (
                     "Operation timed out after 5 minutes. The privileged "
                     "process may still be running — restart Control "
                     "Center before starting another privileged "
-                    "operation.",
-                    True,
+                    "operation."
+                    if sticky_on_timeout
+                    else "Operation timed out after 5 minutes "
+                    "(authentication may have taken too long) — you can "
+                    "try again."
                 )
+                self.process_finished.emit(err_title, message, True)
             except subprocess.CalledProcessError:
                 self.process_finished.emit(err_title, err_msg, True)
             except OSError as err:
