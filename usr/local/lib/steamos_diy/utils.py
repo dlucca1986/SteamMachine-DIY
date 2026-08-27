@@ -512,6 +512,8 @@ def _https_open(url: str, *, extra_headers: dict[str, str] | None = None):
     if extra_headers:
         headers.update(extra_headers)
     req = urllib.request.Request(url, headers=headers)
+    # B310: every caller has already confirmed url is https:// (see this
+    # function's docstring), so the scheme is never attacker-controlled.
     return urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT)  # nosec B310
 
 

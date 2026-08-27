@@ -72,6 +72,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   string-concatenating GUI input into a larger token; a raw, whole GUI-provided value
   passed as its own list element is fine (found during this session's second code-review
   pass, 2026-08-27).
+- **Restored adjacency for `_https_open`'s `# nosec B310` justification**: the reason
+  (every caller already confirms `https://` before calling in) had only been in the
+  function's docstring since the `_https_open()` extraction, several lines above an
+  intervening `# pylint: disable` and `import` statement — CLAUDE.md requires the same
+  one-line-reason-on-the-line convention every other suppression in this codebase
+  follows. `scripts/audit-suppressions.py` now reports zero unjustified markers (found
+  during this session's second code-review pass, 2026-08-27).
 - **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
   `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
   now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
