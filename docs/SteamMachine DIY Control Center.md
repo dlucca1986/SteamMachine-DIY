@@ -138,7 +138,7 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 | Strings | `"..."` / `'...'` | Yellow `#f1c40f` | Normal |
 | List items | `- ...` | Green `#27ae60` | Normal |
 | Numbers | `\d+` | Orange `#e67e22` | Normal |
-| Colons & dashes | `:` `/` `-` | Red `#e74c3c` | **Bold** |
+| Colons & dashes | `:` `-` | Red `#e74c3c` | **Bold** |
 | Error line | — | Red `#e74c3c` α50 | Background |
 | Preceding line | — | Orange `#f39c12` α50 | Background |
 

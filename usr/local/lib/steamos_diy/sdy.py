@@ -219,7 +219,8 @@ def run() -> None:
     Exits with 1 on failure; never returns on success.
     """
     if len(sys.argv) < 2:
-        return
+        jlog("STEAM", "NO_TARGET: sdy invoked with no argv", level="ERROR")
+        sys.exit(1)
 
     raw_args = sys.argv[1:]
 

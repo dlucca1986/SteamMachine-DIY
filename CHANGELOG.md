@@ -223,6 +223,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   rather than hanging — `systemd`'s own `KillMode=mixed` + `TimeoutStopSec` backstop reaps
   the cgroup regardless, so this only affects how promptly the caller's own shutdown/
   recovery flow can proceed, not whether the process eventually goes away.
+- `sdy.py`: `run()`'s docstring states "Exits with 1 on failure; never returns on success,"
+  but the `len(sys.argv) < 2` guard did a plain `return` — neither outcome. Now exits 1 with
+  a logged `NO_TARGET` reason, matching the documented contract.
+- `docs/SteamMachine DIY Control Center.md`: the Diagnostics styling table listed `/` among
+  the characters highlighted red/bold in the YAML editor; `editors.py`'s actual regex only
+  matches `:` and `-` (deliberately — `/` appears in nearly every path value in this
+  project's config, so highlighting it would make paths unreadable rather than clearer).
+  Corrected the table to match the code.
 
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`

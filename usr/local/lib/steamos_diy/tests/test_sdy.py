@@ -199,3 +199,20 @@ def test_get_profile_path_none_when_nothing_matches(tmp_path):
     found = sdy._get_profile_path(str(tmp_path), "220", "start", "MyGame")
 
     assert found is None
+
+
+# ---------------------------------------------------------------------------
+# run() — exit contract (its own docstring: "Exits with 1 on failure; never
+# returns on success" — the no-argv guard used to plainly `return` instead,
+# matching neither outcome; code-review finding, 2026-08-27)
+# ---------------------------------------------------------------------------
+
+
+def test_run_exits_1_when_invoked_with_no_argv(monkeypatch):
+    monkeypatch.setattr(sdy.sys, "argv", ["sdy"])
+
+    try:
+        sdy.run()
+        assert False, "expected SystemExit"
+    except SystemExit as exc:
+        assert exc.code == 1
