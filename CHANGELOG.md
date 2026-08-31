@@ -146,6 +146,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `docs/Utilities Engine.md` still described `download_release()` as returning a bare
+  `Path`/`None`, from before the 2.1.8 TOCTOU fix changed it to return an
+  `ExtractedRelease(dir, install_sh_sha256)`. Updated the function table row and added one
+  for `verify_file_sha256()`, the re-check helper `updater.py` calls right before `pkexec`.
+  Found via a full-file 9-agent review of `journal.py`/`utils.py` (2026-08-31, docs-drift
+  angle).
 - `control_center.py`: `refresh_detected_games`'s journalctl scan decoded output with
   `subprocess.run`'s default strict UTF-8, unlike `journal.py`'s own journalctl calls
   (`fetch_tagged_entries`/`_run_journalctl_iso`), which already use `errors="replace"`
