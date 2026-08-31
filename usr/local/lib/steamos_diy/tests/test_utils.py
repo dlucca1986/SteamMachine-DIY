@@ -348,6 +348,25 @@ def test_download_release_returns_none_when_install_sh_is_missing(
     assert utils.download_release(info, tmp_path) is None
 
 
+def test_download_release_returns_none_for_empty_tarball(
+    tmp_path, monkeypatch
+):
+    """Regression: a checksum-verified tarball with zero members never
+    makes tarfile.extractall() create the destination directory, so
+    target.iterdir() used to raise FileNotFoundError uncaught -- the
+    'None on any failure' contract the docstring promises must hold even
+    for this structurally-empty-but-valid case."""
+    tarball = _make_release_tarball("export-dir", {})
+    digest = hashlib.sha256(tarball).hexdigest()
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(tarball, digest.encode("ascii")),
+    )
+
+    info = _fake_release_info()
+    assert utils.download_release(info, tmp_path) is None
+
+
 def test_download_release_missing_install_sh_preserves_stale_cache(
     tmp_path, monkeypatch
 ):

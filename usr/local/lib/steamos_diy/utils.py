@@ -776,13 +776,13 @@ def download_release(
             return None
         with tmp, tarfile.open(fileobj=tmp, mode="r:gz") as tar:
             tar.extractall(target, filter="data")
+        for entry in sorted(target.iterdir()):
+            installer = entry / "install.sh"
+            if installer.is_file():
+                _prune_downloads(root, keep=target)
+                return ExtractedRelease(entry, _sha256_file(installer))
     except (OSError, ValueError, tarfile.TarError) as err:
         jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
         return None
-    for entry in sorted(target.iterdir()):
-        installer = entry / "install.sh"
-        if installer.is_file():
-            _prune_downloads(root, keep=target)
-            return ExtractedRelease(entry, _sha256_file(installer))
     jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: install.sh not found", "ERROR")
     return None

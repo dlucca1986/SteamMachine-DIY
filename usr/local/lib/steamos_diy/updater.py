@@ -81,9 +81,12 @@ class UpdateManager(QObject):
         self._set_busy(f"⏳ Downloading v{info.version}…")
 
         def worker() -> None:
-            self._download_ready.emit(
-                download_release(info, self._dest_root)
-            )
+            try:
+                result = download_release(info, self._dest_root)
+            # pylint: disable-next=broad-except
+            except Exception:  # noqa: BLE001
+                result = None
+            self._download_ready.emit(result)
 
         threading.Thread(target=worker, daemon=True).start()
 
