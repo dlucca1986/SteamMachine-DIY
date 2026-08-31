@@ -105,7 +105,11 @@ def _check_yaml(path: str) -> CheckResult:
         with open(path, "r", encoding="utf-8") as fh:
             _yaml_probe.load(fh)
         return CheckResult(name, True, "valid")
-    except (OSError, YAMLError) as err:
+    # UnicodeDecodeError (a ValueError) is raised by the text-mode read
+    # itself, before ruamel ever sees the bytes, on a file saved with
+    # non-UTF-8 encoding — as real a "bad config" case as a YAML syntax
+    # error, and must surface as a failed check the same way.
+    except (OSError, YAMLError, UnicodeDecodeError) as err:
         mark = getattr(err, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark else ""
         return CheckResult(name, False, f"{type(err).__name__}{where}")
@@ -163,7 +167,9 @@ def _read_user_config() -> object:
     try:
         with open(user_config, "r", encoding="utf-8") as fh:
             return _yaml_probe.load(fh)
-    except (OSError, YAMLError):
+    # See _check_yaml's comment: non-UTF-8 content raises UnicodeDecodeError
+    # before ruamel gets involved, same "unreadable" contract as the rest.
+    except (OSError, YAMLError, UnicodeDecodeError):
         return _UNREADABLE
 
 

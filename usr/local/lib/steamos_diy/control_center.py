@@ -517,7 +517,17 @@ class SDYControlCenter(QMainWindow):
         """Run preflight checks in a daemon thread; emit preflight_ready."""
 
         def worker() -> None:
-            self.preflight_ready.emit(run_preflight())
+            try:
+                self.preflight_ready.emit(run_preflight())
+            # A daemon thread's uncaught exception has nowhere to go —
+            # stderr is /dev/null when the app is launched detached (see
+            # the journal.py aware/naive-datetime bug) — so this is the
+            # last line of defense against a silently-dead worker, not a
+            # substitute for catching the specific cause upstream
+            # (health.py already does).
+            # pylint: disable-next=broad-except
+            except Exception as err:  # noqa: BLE001
+                self.process_finished.emit("Preflight Error", str(err), True)
 
         threading.Thread(target=worker, daemon=True).start()
 

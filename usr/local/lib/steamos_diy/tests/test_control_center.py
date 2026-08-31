@@ -97,8 +97,11 @@ def test_extract_game_name_returns_bare_name_unchanged():
 
 
 # pylint: disable=invalid-name,too-few-public-methods,unused-argument
+# pylint: disable=too-many-instance-attributes
 # camelCase names below must match Qt's own QStatusBar/QMainWindow API —
 # _run_pkexec calls self.statusBar().showMessage(...) on the real window.
+# _FakeWindow's attribute count tracks the real window's growing set of
+# signals/flags each worker method under test touches, one per method.
 class _FakeStatusBar:
     def __init__(self):
         self.messages = []
@@ -126,10 +129,12 @@ class _FakeWindow:
         self.service_status_ready = SimpleNamespace(emit=lambda *a: None)
         self._lock_key_buttons = {}
         self.pkexec_lock_released = SimpleNamespace(emit=lambda *a: None)
+        self.preflight_ready = SimpleNamespace(emit=lambda *a: None)
 
     def statusBar(self):
         return self._status_bar
 # pylint: enable=invalid-name,too-few-public-methods,unused-argument
+# pylint: enable=too-many-instance-attributes
 
 
 def _fake_thread_factory(started):
@@ -347,6 +352,36 @@ def test_refresh_service_status_resets_guard_after_completion(monkeypatch):
 
     assert emitted == [("status",)]
     assert win._service_status_busy is False
+
+
+# ---------------------------------------------------------------------------
+# validate_config — worker must survive an unexpected exception
+# ---------------------------------------------------------------------------
+
+
+def test_validate_config_worker_survives_unexpected_exception(monkeypatch):
+    """Regression: validate_config's worker previously had no try/except
+    at all — an uncaught exception (e.g. run_preflight() raising) killed
+    the daemon thread silently before emitting anything, exactly like the
+    journal.py aware/naive-datetime bug (nothing printed: stderr is
+    /dev/null when the app is launched detached)."""
+    win = _FakeWindow()
+    finished = []
+    win.process_finished = SimpleNamespace(
+        emit=lambda *a: finished.append(a)
+    )
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+
+    def raising_preflight():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(control_center, "run_preflight", raising_preflight)
+
+    control_center.SDYControlCenter.validate_config(win)
+
+    assert finished == [("Preflight Error", "boom", True)]
 
 
 # ---------------------------------------------------------------------------

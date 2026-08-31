@@ -47,3 +47,36 @@ def test_get_service_status_falls_back_on_timeout(monkeypatch):
     status = health.get_service_status()
 
     assert status == health.ServiceStatus("unknown", "unknown", 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# _check_yaml / _read_user_config — non-UTF-8 content must degrade to a
+# failed CheckResult / _UNREADABLE, not raise UnicodeDecodeError past the
+# except clause. An uncaught exception here previously killed
+# control_center.py's validate_config worker thread silently (nothing
+# printed, no dialog, no log — the app is launched detached with stderr
+# to /dev/null), the same failure mode as the journal.py aware/naive
+# datetime bug.
+# ---------------------------------------------------------------------------
+
+
+def test_check_yaml_reports_non_utf8_content_instead_of_raising(tmp_path):
+    bad = tmp_path / "config.yaml"
+    bad.write_bytes(b"flags: [\xff\xfe invalid utf-8]")
+
+    result = health._check_yaml(str(bad))
+
+    assert result.ok is False
+    assert "UnicodeDecodeError" in result.detail
+
+
+def test_read_user_config_returns_unreadable_for_non_utf8(
+    tmp_path, monkeypatch
+):
+    bad = tmp_path / "config.yaml"
+    bad.write_bytes(b"flags: [\xff\xfe invalid utf-8]")
+    monkeypatch.setattr(health, "get_ssot_var", lambda *a, **k: str(bad))
+
+    result = health._read_user_config()
+
+    assert result is health._UNREADABLE
