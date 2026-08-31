@@ -442,10 +442,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   (`_collect_unknown_flags`) instead of sharing one copy. This is the exact class of code that
   already caused a real crash in this project (the unguarded `shlex.split` fixed in 2.1.7) — a
   future hardening of the fallback logic would otherwise need three independent edits instead
-  of one. `session_launch.py`'s `_schedule_post_start_cmds` keeps its own inline
-  `shlex.split`/`continue`-on-failure handling unchanged: skipping a malformed command entirely
-  is the safer choice there, since a degraded `str.split()` would still get natively exec'd via
-  `spawn_native`, unlike a merely-wrong gamescope flag.
+  of one. `session_launch.py`'s `_schedule_post_start_cmds` initially kept its own inline
+  `shlex.split`/`continue`-on-failure handling unchanged; that divergence was itself unified
+  onto `shlex_split_or_fallback()`'s shared degrade-and-run contract later in this same
+  release (see the entry above).
 - `utils.py`: `check_latest_release()`, `_fetch_expected_sha256()`, and
   `_download_verified_tarball()` each independently rebuilt the same
   `urllib.request.Request`/`urlopen(timeout=...)` plumbing and the same "reject a non-https

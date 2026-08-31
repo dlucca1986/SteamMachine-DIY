@@ -73,7 +73,7 @@ After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.y
 
 This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
 
-* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) is skipped and logged as `BAD_POST_START_CMD` at `WARN`, the remaining commands still fire.
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`.
 
 ---
 

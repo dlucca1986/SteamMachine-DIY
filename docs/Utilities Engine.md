@@ -98,7 +98,7 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 | `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `verify_archive` |
 | `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
 | `control_center.py` | `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `VERSION`, `get_ssot_var`, `spawn_native`, `write_atomic` |
-| `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native` |
+| `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native`, `verify_file_sha256` |
 | `health.py` | `CORE_LIB_PATH`, `DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `clear_ssot_cache`, `get_ssot_var`, `shlex_split_or_fallback` |
 | `journal.py` | `JOURNALCTL_BIN`, `jlog` |
 | Compatibility shims | `run_shim` (which internally calls `jlog`) |
