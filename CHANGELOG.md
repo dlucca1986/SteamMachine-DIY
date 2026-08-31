@@ -302,6 +302,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   project's config, so highlighting it would make paths unreadable rather than clearer).
   Corrected the table to match the code.
 
+### Performance
+- `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
+  content into memory before writing it out. Backups can include large user-data blobs
+  (Steam config/state, save data) via `get_backup_mapping` — now streams via
+  `shutil.copyfileobj(src, dest)` instead, same end result, avoiding an allocation
+  proportional to file size on a resource-constrained handheld. Found via the same full-file
+  8-agent review as the fixes above (2026-08-31).
+
 ### Changed
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
   on an unbalanced quote" pattern was independently reimplemented in `sdy.py` (`_safe_split`),
