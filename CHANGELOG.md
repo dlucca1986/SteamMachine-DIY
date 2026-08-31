@@ -129,6 +129,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `CalledProcessError` and `TimeoutExpired`) instead of just `CalledProcessError`, so the new
   timeout path degrades the same way an existing failure already did, without adding a second
   exception type to every call site.
+- **Symlink-follow on backup/restore's tmp write path**: `restore.py`'s `_ensure_safe_target()`
+  only checked the final extraction target for a pre-existing symlink, never the sibling
+  `<target>.sdy_restore_tmp` path `_write_member` actually opened with a plain `open(...,
+  "wb")`. `backup.py` had the same gap: `tarfile.open(tmp_path, "w:gz")` uses the builtin
+  `open()` internally, which follows symlinks, and `tmp_path` lives in the user-writable
+  `~/.config/steamos_diy/backups/` with a second-granularity timestamp. Both run as root via
+  `pkexec`, so another process running as the same local user could plant a symlink at either
+  predictable path ahead of time and have root write archive content through it to an
+  arbitrary file — deterministic, no race required. Both now open their tmp path with
+  `O_NOFOLLOW` (`backup.py` also adds `O_EXCL`, since its tmp path is freshly derived per run)
+  instead of a plain `open()`/`tarfile.open()`, refusing to follow a pre-existing symlink
+  there; `_write_member` now returns `bool` so `_extract_member` aborts cleanly instead of
+  `chmod`-ing a target that was never written. Found via a full-file 8-agent review of
+  `control_center.py`/`backup.py`/`restore.py`/`health.py` (2026-08-31, none had had this
+  review pass before).
 
 ### Fixed
 - `sdy.py`: `games_conf_dir`'s fallback (used only when the SSoT key is unset) hardcoded
