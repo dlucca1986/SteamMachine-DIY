@@ -146,6 +146,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `restore.py`: `_allowed_prefixes()` was built from `home_real` alone, never consulting
+  `get_backup_mapping()`'s own destination paths — so a `games_conf_dir` (or `next_session`)
+  relocated via the SSoT to somewhere outside `/etc|/usr|/var|home` (e.g. external/SD-card
+  storage, a supported pattern per the `user/games_conf_dir` mapping entry added earlier this
+  cycle) was archived fine by `backup.py` but silently rejected by restore's
+  `_is_path_safe()` check — logged only as a WARN-level `RESTORE_REJECTED_PATH`, with the
+  overall restore still reporting `RESTORE_SUCCESS` since other members matched, so every
+  game profile at the relocated path was silently lost with no visible error. The allow-list
+  is now derived from the same mapping dict `_resolve_target` already consults, instead of
+  maintaining two independently-reasoned path sets. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, cross-file-contracts angle).
 - 3 doc-drift corrections found by the same review: the FAQ pointed at a "Logs" tab (the real
   tab is "Diagnostics"); the Control Center doc's Preflight table implied `user_config`/
   `games_conf_dir` always show as their own passing row (they only surface as a failing one);
