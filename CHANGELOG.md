@@ -146,6 +146,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `updater.py`: three small gaps in the same download/install path — `check()`'s and
+  `_download()`'s `.emit()` calls sat outside (or partially outside) their worker's
+  try/except, so closing the Control Center window while a check/download is still in
+  flight (Qt tears down the signal object) raised `RuntimeError` uncaught in the daemon
+  thread; `_on_download()` discarded `spawn_native()`'s return value (`0` on failure), so a
+  Konsole launch failure left the user seeing "Installing Update..." and then nothing;
+  `verify_file_sha256()`'s TOCTOU re-check had no try/except of its own, so `install.sh`
+  vanishing in that window raised `OSError` uncaught inside a Qt main-thread slot instead of
+  failing closed. All three now degrade instead of crashing/hanging silently. Found via a
+  full-file 9-agent review of `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/
+  `updater.py` (2026-08-31).
 - `session_launch.py`: `_schedule_post_start_cmds`'s daemon thread had no try/except at
   all. A negative `POST_START_DELAY` (a plausible SSoT typo — `get_ssot_num` only validates
   it parses as a float, not that it's non-negative) reached `time.sleep()` raw, raising
