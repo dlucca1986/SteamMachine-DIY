@@ -146,6 +146,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `session_launch.py`: `_schedule_post_start_cmds`'s daemon thread had no try/except at
+  all. A negative `POST_START_DELAY` (a plausible SSoT typo — `get_ssot_num` only validates
+  it parses as a float, not that it's non-negative) reached `time.sleep()` raw, raising
+  `ValueError` uncaught — silently dropping every `post_start_cmds` entry with no
+  diagnostic. Clamped the delay to `0` (a negative value now degrades to "run immediately"
+  instead of skipping the commands) and added a try/except backstop, same pattern already
+  used for `updater.py::_download`'s worker. Found via a full-file 9-agent review of
+  `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31,
+  exception-contract-honesty angle).
 - `sdy.py`: `_header_declares_id` caught only `OSError` around a text-mode `open(...,
   encoding="utf-8")`, the same gap already fixed in `utils.py::read_session_target` this
   cycle — a non-UTF-8 game profile (e.g. hand-edited with an accented name saved in
