@@ -760,3 +760,97 @@ def test_schedule_log_filter_starts_the_debounce_timer():
         win._log_filter_timer.started_with
         == control_center._LOG_FILTER_DEBOUNCE_MS
     )
+
+
+# ---------------------------------------------------------------------------
+# _atomic_save — a saved profile whose YAML root isn't a mapping used to
+# report success while load_yaml_safe() (utils.py) silently degrades that
+# exact shape to {} on the next load, dropping the whole profile.
+# ---------------------------------------------------------------------------
+
+
+class _FakeDocument:  # pylint: disable=too-few-public-methods
+    def __init__(self):
+        self.modified = None
+
+    def setModified(self, value):  # pylint: disable=invalid-name
+        self.modified = value
+
+
+class _FakeEditor:
+    def __init__(self):
+        self._document = _FakeDocument()
+
+    # pylint: disable-next=invalid-name,unused-argument
+    def setExtraSelections(self, sels):
+        pass
+
+    def document(self):
+        return self._document
+
+
+class _FakeMessageBox:  # pylint: disable=too-few-public-methods
+    def __init__(self, calls):
+        self._calls = calls
+
+    def information(self, *args):
+        self._calls.append(("information", args))
+
+    def critical(self, *args):
+        self._calls.append(("critical", args))
+
+
+def _atomic_save_harness(monkeypatch, tmp_path, content):
+    calls = []
+    monkeypatch.setattr(
+        control_center, "QMessageBox", _FakeMessageBox(calls)
+    )
+    written = []
+    monkeypatch.setattr(
+        control_center, "write_atomic", lambda p, c: written.append((p, c))
+    )
+    editor = _FakeEditor()
+    win = SimpleNamespace(_highlight_yaml_error=lambda *a: None)
+
+    control_center.SDYControlCenter._atomic_save(
+        win, str(tmp_path / "profile.yaml"), content, editor
+    )
+    return calls, written, editor
+
+
+def test_atomic_save_rejects_non_mapping_root(monkeypatch, tmp_path):
+    """Regression: _atomic_save only called yaml_parser.load(content) to
+    validate syntax, discarding the result -- a syntactically valid but
+    non-mapping root (e.g. a bare list) reported "Configuration saved!"
+    even though load_yaml_safe() degrades that exact shape to {} on the
+    next load, silently dropping the whole profile (found via a
+    full-file 9-agent review, 2026-08-31)."""
+    calls, written, editor = _atomic_save_harness(
+        monkeypatch, tmp_path, "- one\n- two\n"
+    )
+
+    assert not written
+    assert calls and calls[0][0] == "critical"
+    assert editor.document().modified is None
+
+
+def test_atomic_save_accepts_mapping_root(monkeypatch, tmp_path):
+    calls, written, editor = _atomic_save_harness(
+        monkeypatch, tmp_path, "flags:\n  - -W 1280\n"
+    )
+
+    assert written
+    assert calls and calls[0][0] == "information"
+    assert editor.document().modified is False
+
+
+def test_atomic_save_accepts_empty_content(monkeypatch, tmp_path):
+    """An empty/comments-only document parses to None, not a dict -- must
+    still save (matches beautify_yaml's own None-is-fine handling right
+    above _atomic_save), not be rejected as "not a mapping"."""
+    calls, written, _editor = _atomic_save_harness(
+        monkeypatch, tmp_path, "# just a comment\n"
+    )
+
+    assert written
+    assert calls and calls[0][0] == "information"

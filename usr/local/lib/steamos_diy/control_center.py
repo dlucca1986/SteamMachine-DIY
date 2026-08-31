@@ -768,7 +768,17 @@ class SDYControlCenter(QMainWindow):
         """Validate YAML and persist via the C-Core atomic-write path."""
         editor.setExtraSelections([])
         try:
-            yaml_parser.load(content)
+            parsed = yaml_parser.load(content)
+            if parsed is not None and not isinstance(parsed, dict):
+                # Matches load_yaml_safe()'s own contract (utils.py): a
+                # non-mapping root degrades to {} at load time, silently
+                # dropping the whole profile -- reject it here instead
+                # of reporting a save that will actually vanish on the
+                # next load.
+                raise YAMLError(
+                    "Root must be a mapping (key: value pairs), not a "
+                    f"{type(parsed).__name__}."
+                )
             p_obj = Path(path)
             p_obj.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(p_obj, content)
