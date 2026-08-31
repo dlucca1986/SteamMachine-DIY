@@ -5,6 +5,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
+import pytest
 import restore
 import utils
 
@@ -213,3 +214,55 @@ def test_reload_systemd_swallows_timeout(monkeypatch):
     monkeypatch.setattr(restore.subprocess, "run", fake_run)
 
     restore._reload_systemd()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _extract_payload / _execute_restore — a wrong/foreign archive can pass
+# verify_archive's gzip/tar integrity check yet match nothing in the
+# mapping. Restoring zero members must not be reported as success.
+# ---------------------------------------------------------------------------
+
+
+def test_extract_payload_counts_a_matched_member(tmp_path):
+    mapping = {"user/config": str(tmp_path / "config")}
+    allowed = restore._allowed_prefixes(str(tmp_path))
+
+    with _tar_with_member("user/config/file.txt", b"hello") as tar:
+        restored, links = restore._extract_payload(
+            tar, mapping, allowed, str(tmp_path), "tester"
+        )
+
+    assert restored == 1
+    assert links is None
+
+
+def test_extract_payload_counts_zero_for_foreign_archive(tmp_path):
+    mapping = {"user/config": str(tmp_path / "config")}
+    allowed = restore._allowed_prefixes(str(tmp_path))
+
+    with _tar_with_member("totally/unrelated/path.txt", b"hello") as tar:
+        restored, _links = restore._extract_payload(
+            tar, mapping, allowed, str(tmp_path), "tester"
+        )
+
+    assert restored == 0
+
+
+def test_execute_restore_aborts_when_nothing_matched(tmp_path, monkeypatch):
+    """Regression: previously always logged RESTORE_SUCCESS and returned
+    normally regardless of how many members actually matched, so a
+    foreign/wrong archive silently "succeeded" while changing nothing."""
+    archive = tmp_path / "foreign.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        info = tarfile.TarInfo(name="totally/unrelated/path.txt")
+        info.size = 5
+        tar.addfile(info, io.BytesIO(b"hello"))
+
+    mapping = {"user/config": str(tmp_path / "config")}
+    allowed = restore._allowed_prefixes(str(tmp_path))
+    monkeypatch.setattr(restore, "_reload_systemd", lambda: None)
+
+    with pytest.raises(SystemExit):
+        restore._execute_restore(
+            str(archive), "tester", str(tmp_path), mapping, allowed
+        )

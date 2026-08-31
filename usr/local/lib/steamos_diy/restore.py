@@ -292,24 +292,28 @@ def _extract_payload(
     allowed: tuple[str, ...],
     home_real: str,
     user: str,
-) -> tarfile.TarInfo | None:
+) -> tuple[int, tarfile.TarInfo | None]:
     """Extract safe members; defer the links entry to _restore_links.
 
-    Returns the links TarInfo (manifest, or legacy restore_links.sh) if
-    present, so the caller can hand it straight to _restore_links
-    without a second tar lookup, else None.
+    Returns (restored_count, links_member): the links TarInfo (manifest,
+    or legacy restore_links.sh) if present, so the caller can hand it
+    straight to _restore_links without a second tar lookup, else None;
+    restored_count lets the caller distinguish a real restore from an
+    archive where every member was rejected (wrong tool, foreign layout).
     """
     links_member: tarfile.TarInfo | None = None
+    restored = 0
 
     for member in tar.getmembers():
         if member.name in (BACKUP_MANIFEST_NAME, BACKUP_SCRIPT_NAME):
             links_member = member
             continue
-        _process_member(
+        if _process_member(
             tar, member, mapping, allowed, home_real=home_real, user=user
-        )
+        ):
+            restored += 1
 
-    return links_member
+    return restored, links_member
 
 
 # ---------------------------------------------------------------------------
@@ -442,13 +446,25 @@ def _execute_restore(
 ) -> None:
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
-            links_member = _extract_payload(
+            restored, links_member = _extract_payload(
                 tar, mapping, allowed, home_real, user
             )
             jlog("SYSTEM", "RESTORE_PAYLOAD_DONE", level="DEBUG")
             if links_member is not None:
                 _restore_links(tar, links_member, allowed)
                 jlog("SYSTEM", "RESTORE_LINKS_DONE", level="DEBUG")
+        if restored == 0:
+            # Every member was rejected — a wrong/foreign archive (or one
+            # from an incompatible layout) can pass verify_archive's
+            # gzip/tar integrity check yet match nothing in the mapping.
+            # Reporting that as success would leave the user thinking a
+            # restore actually happened when nothing on disk changed.
+            jlog(
+                "SYSTEM",
+                "RESTORE_EMPTY: no member matched the backup mapping",
+                level="ERROR",
+            )
+            sys.exit(1)
         _reload_systemd()
         jlog("SYSTEM", "RESTORE_SUCCESS: Environment ready.", level="INFO")
     except (tarfile.TarError, OSError) as err:
