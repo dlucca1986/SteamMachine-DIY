@@ -23,7 +23,7 @@ The easiest way to manage your data is through the **Maintenance** tab in the Co
 2. Click on **📦 Create Full System Backup**.
 3. A `pkexec` prompt will ask for your password to access system files.
 4. The system will create a compressed `.tar.gz` archive in `~/.config/steamos_diy/backups/` named `sdy_backup_YYYYMMDD_HHMMSS.tar.gz`. The archive is written atomically: the tool writes to a `.tmp` file first, verifies integrity end-to-end with `verify_archive()`, then renames it to the final path — the previous archive is never touched on failure.
-5. **Rotation**: after every successful backup, archives beyond the `BACKUP_KEEP` count (SSoT key, default `5`) are pruned oldest-first, so the folder never grows unbounded. Set `BACKUP_KEEP=0` to keep everything. Each removal is logged as `BACKUP_PRUNED`.
+5. **Rotation**: after every successful backup, archives beyond the `BACKUP_KEEP` count (SSoT key, default `5`) are pruned oldest-first, so the folder never grows unbounded. Set `BACKUP_KEEP` to `0` (or any negative value) to keep everything. Each removal is logged as `BACKUP_PRUNED`.
 
 ### Restoring the System
 1. Click on **🔄 Restore from Archive**.

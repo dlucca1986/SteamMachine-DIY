@@ -87,7 +87,7 @@ It removes every file and symlink the project deployed (libraries, shims, SSoT, 
 See [Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture) for the complete filesystem hierarchy.
 
 ### 14. Where can I find the logs for debugging?
-We use the **System Journal**. Use the following commands or check the **Logs** tab in the Control Center:
+We use the **System Journal**. Use the following commands or check the **Diagnostics** tab in the Control Center:
 ```bash
 # Session logs (Gaming/Desktop lifecycle, crash recovery)
 journalctl -u steamos_diy.service -f

@@ -68,7 +68,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | :--- | :--- |
 | **SSoT config** | `/etc/default/steamos_diy.conf` exists |
 | **Binary `bin_*`** | each handler (`bin_gs` / `bin_steam` / `bin_plasma` / `bin_dbus`) resolves to an executable |
-| **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped |
+| **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped. Only ever surfaces as its own *failing* row (unset key or missing path); when the path resolves, that outcome folds into the YAML row below instead of a separate passing row |
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
