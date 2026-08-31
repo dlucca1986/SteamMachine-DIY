@@ -75,6 +75,7 @@ from utils import (
     CORE_LIB_DIR,
     GAMES_CONF_SUBDIR,
     JOURNALCTL_BIN,
+    KONSOLE_BIN,
     PYTHON3_BIN,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
@@ -474,7 +475,7 @@ class SDYControlCenter(QMainWindow):
             ("🔄 Restore from Archive", self.run_restore, "files"),
             (
                 "🖥️ Open Konsole Terminal",
-                lambda: spawn_native("/usr/bin/konsole", ["/usr/bin/konsole"]),
+                lambda: spawn_native(KONSOLE_BIN, [KONSOLE_BIN]),
                 None,
             ),
             (

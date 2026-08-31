@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import QMessageBox, QPushButton
 
 # pylint: enable=no-name-in-module
 from utils import (
+    KONSOLE_BIN,
     UPDATES_DIR_NAME,
     USER_CONFIG_REL,
     VERSION,
@@ -196,9 +197,9 @@ class UpdateManager(QObject):
         # then cd's to its own directory for the relative deploy paths).
         script = shlex.quote(str(install_sh))
         pid = spawn_native(
-            "/usr/bin/konsole",
+            KONSOLE_BIN,
             [
-                "/usr/bin/konsole",
+                KONSOLE_BIN,
                 "--workdir",
                 str(src_dir),
                 "-e",

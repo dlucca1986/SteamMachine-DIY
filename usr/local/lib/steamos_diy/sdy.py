@@ -114,8 +114,10 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
             for a in reversed(raw_args)
             if a.startswith("/") and os.path.isfile(a)
         ),
-        os.path.abspath(raw_args[0]),
+        None,
     )
+    if target_path is None:
+        target_path = os.path.abspath(raw_args[0])
 
     p = Path(target_path)
     stem = p.stem
@@ -140,7 +142,7 @@ def _get_profile_path(
         if found:
             return found
 
-    for name in (eff_name, stem):
+    for name in dict.fromkeys((eff_name, stem)):
         candidate = os.path.join(game_conf_dir, f"{name}.yaml")
         if os.path.exists(candidate):
             return candidate
