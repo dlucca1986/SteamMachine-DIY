@@ -146,6 +146,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `control_center.py`: `refresh_detected_games`'s journalctl scan decoded output with
+  `subprocess.run`'s default strict UTF-8, unlike `journal.py`'s own journalctl calls
+  (`fetch_tagged_entries`/`_run_journalctl_iso`), which already use `errors="replace"`
+  because a `MESSAGE` field with an embedded newline flips journalctl's export format to
+  binary-safe encoding, not guaranteed valid UTF-8. An undecodable byte raised
+  `UnicodeDecodeError`, uncaught by the existing `except (SubprocessError, OSError)` clause —
+  silently killing the daemon thread (stderr is `/dev/null` when the app is launched
+  detached) and leaving "Scanning history..." stuck forever. Added `errors="replace"`,
+  matching `journal.py`'s pattern; the now textually-identical 5-line kwargs block triggered
+  pylint's `duplicate-code` check, suppressed with a targeted disable and a one-line reason
+  (a deliberate mirror of an established safety pattern, not independently reimplemented
+  logic worth extracting). Found via a full-file 9-agent review of `journal.py`/`utils.py`
+  (2026-08-31, exception-contract-honesty angle).
 - `helpers/*.py`: each shim's `except ImportError` around `from utils import run_shim` was
   meant to guarantee Steam always gets a well-formed fallback exit code (0 or 7) even when
   the project library is unusable — but `utils.py`'s own module-level guard against a
