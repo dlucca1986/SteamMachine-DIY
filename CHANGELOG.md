@@ -146,6 +146,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `restore.py`: `run_restore()` always logged `RESTORE_SUCCESS` and exited 0 regardless of
+  how many archive members actually matched `get_backup_mapping()` — `verify_archive()` only
+  checks gzip/tar integrity, not content, so a wrong tool's archive (or one from an
+  incompatible layout) could pass it while restoring zero files, and Control Center's
+  "Restore Complete — Restored!" dialog appeared even though nothing on disk changed.
+  `_extract_payload()` now returns a restored-member count alongside the links entry;
+  `_execute_restore()` logs `RESTORE_EMPTY` and exits 1 when that count is 0, which
+  `_run_pkexec`'s existing error handling already surfaces as a "Restore Error" dialog.
+  Found via the same full-file 8-agent review as the fixes above (2026-08-31).
 - `utils.py`: `get_backup_mapping()` only ever mapped `user/config` (`~/.config/
   steamos_diy`), covering `games_conf_dir`'s default location (nested inside it) for free —
   but a `games_conf_dir` relocated via the SSoT (a supported, tested pattern per
