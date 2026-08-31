@@ -311,6 +311,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   8-agent review as the fixes above (2026-08-31).
 
 ### Changed
+- `control_center.py`: collapsed 3 independently-retyped `[PYTHON3_BIN, CORE_LIB_DIR/<script>,
+  *args]` argv constructions (for `session_select.py`, `backup.py`, `restore.py` — all in the
+  same file, each hardcoding `"/usr/bin/python3"` separately) into a shared
+  `_core_script_argv()` helper and a new `utils.PYTHON3_BIN` constant, matching the existing
+  `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` centralization pattern. Pure DRY refactor, no behavior
+  change. Found via the same full-file 8-agent review as the fixes above (2026-08-31).
 - `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
   on an unbalanced quote" pattern was independently reimplemented in `sdy.py` (`_safe_split`),
   `session_launch.py` (the gamescope `flags` loop) and `health.py`
