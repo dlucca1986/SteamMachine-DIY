@@ -266,7 +266,7 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
         with open(path, "r", encoding="utf-8") as fh:
             value = _strip_quotes(fh.readline())
             return value or default
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return default
 
 

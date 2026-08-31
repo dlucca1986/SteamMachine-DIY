@@ -49,6 +49,22 @@ def test_get_ssot_num_falls_back_on_stray_comma(set_ssot):
 
 
 # ---------------------------------------------------------------------------
+# read_session_target — a next_session file with invalid UTF-8 bytes (e.g.
+# restored from a corrupted backup) must degrade to default rather than
+# raise UnicodeDecodeError uncaught into session_launch.py::run(), which
+# wraps nothing around this call — an uncaught exception there would crash
+# the boot path instead of falling back to "steam".
+# ---------------------------------------------------------------------------
+
+
+def test_read_session_target_falls_back_on_invalid_utf8(tmp_path):
+    path = tmp_path / "next_session"
+    path.write_bytes(b"\xff\xfe steam")
+
+    assert utils.read_session_target(str(path), default="steam") == "steam"
+
+
+# ---------------------------------------------------------------------------
 # get_backup_mapping — a games_conf_dir relocated via the SSoT must get its
 # own mapping entry, or it silently drops out of every backup (control_
 # center.py/health.py both already resolve it dynamically the same way).
