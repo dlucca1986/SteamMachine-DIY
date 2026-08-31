@@ -146,6 +146,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `utils.py`/`updater.py`: `download_release()`'s post-extraction loop (`target.iterdir()`,
+  `_sha256_file(installer)`) ran outside the function's own `try`/`except`, so a
+  checksum-verified but structurally empty tarball — `tarfile.extractall()` never creates the
+  destination directory when the archive has zero members — raised `FileNotFoundError`
+  uncaught, contradicting the docstring's "`None` on any failure" contract. Moved the loop
+  inside the existing `try`. Separately, `updater.py`'s `UpdateManager._download` worker had
+  no `try`/`except` at all (unlike `check()`'s worker, safe because `check_latest_release()`
+  never raises) — an uncaught exception there vanishes silently, same class of bug as the
+  `validate_config` fix earlier this cycle, leaving the "⏳ Downloading…" button disabled
+  forever with no error shown. Added a backstop that degrades to emitting `None`, reusing
+  `_on_download`'s existing "failed" warning path. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, exception-contract-honesty angle).
 - `utils.py`: `read_session_target()`'s docstring promises "fall back to *default* on
   failure," but its `except OSError` clause doesn't cover `UnicodeDecodeError` (a `ValueError`
   subclass), raised by the text-mode `open(..., encoding="utf-8")` itself on non-UTF-8 bytes —
