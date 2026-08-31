@@ -72,7 +72,10 @@ class UpdateManager(QObject):
         self._set_busy("⏳ Checking for updates…")
 
         def worker() -> None:
-            self._check_ready.emit(check_latest_release())
+            try:
+                self._check_ready.emit(check_latest_release())
+            except RuntimeError:
+                pass  # window already torn down; nothing to update
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -86,7 +89,10 @@ class UpdateManager(QObject):
             # pylint: disable-next=broad-except
             except Exception:  # noqa: BLE001
                 result = None
-            self._download_ready.emit(result)
+            try:
+                self._download_ready.emit(result)
+            except RuntimeError:
+                pass  # window already torn down; nothing to update
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -173,7 +179,11 @@ class UpdateManager(QObject):
         # anything else already running as that user — this closes the
         # TOCTOU window down to the few ms between this check and exec.
         install_sh = src_dir / "install.sh"
-        if not verify_file_sha256(install_sh, expected_sha256):
+        try:
+            verified = verify_file_sha256(install_sh, expected_sha256)
+        except OSError:
+            verified = False
+        if not verified:
             QMessageBox.critical(
                 self._win,
                 "Update Aborted",
@@ -185,7 +195,7 @@ class UpdateManager(QObject):
         # so a relative ./install.sh would not resolve (the installer
         # then cd's to its own directory for the relative deploy paths).
         script = shlex.quote(str(install_sh))
-        spawn_native(
+        pid = spawn_native(
             "/usr/bin/konsole",
             [
                 "/usr/bin/konsole",
@@ -200,3 +210,10 @@ class UpdateManager(QObject):
                 ),
             ],
         )
+        if pid == 0:
+            QMessageBox.critical(
+                self._win,
+                "Update Failed",
+                "Could not launch a terminal to run the installer.\n"
+                f"Run it manually: sudo bash {install_sh} --update",
+            )
