@@ -612,3 +612,69 @@ def test_refresh_detected_games_resets_guard_after_completion(monkeypatch):
     control_center.SDYControlCenter.refresh_detected_games(win)
 
     assert win._scan_games_busy is False
+
+
+class _FakeTagFilter:  # pylint: disable=too-few-public-methods
+    def __init__(self, text="ALL"):
+        self._text = text
+        self.enabled = True
+
+    def currentText(self):  # pylint: disable=invalid-name
+        return self._text
+
+    def setEnabled(self, value):  # pylint: disable=invalid-name
+        self.enabled = value
+
+
+class _FakeLogDisplay:  # pylint: disable=too-few-public-methods
+    def setPlainText(self, text):  # pylint: disable=invalid-name
+        pass
+
+
+class _FakeLogsWindow:  # pylint: disable=too-few-public-methods
+    """Stand-in for SDYControlCenter: only what load_logs touches."""
+
+    def __init__(self):
+        self.tag_filter = _FakeTagFilter()
+        self.log_display = _FakeLogDisplay()
+        self.logs_ready = SimpleNamespace(emit=lambda *a: None)
+        self._logs_busy = False
+
+
+def test_load_logs_skips_while_already_busy(monkeypatch):
+    """Regression: on_tab_changed calls load_logs unconditionally on every
+    Diagnostics tab (re-)selection — without this guard, switching away
+    and back while a fetch is still in flight starts a second worker, and
+    whichever thread's logs_ready lands last silently overwrites the
+    other's result (same class of guard as _scan_games_busy/
+    _service_status_busy, CLAUDE.md checklist item 17)."""
+    win = _FakeLogsWindow()
+    win._logs_busy = True
+    started = []
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _fake_thread_factory(started)
+    )
+
+    control_center.SDYControlCenter.load_logs(win)
+
+    assert not started
+
+
+def test_load_logs_resets_guard_after_completion(monkeypatch):
+    win = _FakeLogsWindow()
+    emitted = []
+    win.logs_ready = SimpleNamespace(emit=lambda *a: emitted.append(a))
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    monkeypatch.setattr(
+        control_center, "fetch_tagged_entries", lambda *a, **k: []
+    )
+    monkeypatch.setattr(
+        control_center, "fetch_gamescope_logs", lambda *a, **k: []
+    )
+
+    control_center.SDYControlCenter.load_logs(win)
+
+    assert emitted == [([], "ALL")]
+    assert win._logs_busy is False

@@ -265,6 +265,16 @@ class SDYControlCenter(QMainWindow):
         # emits games_detected last (CLAUDE.md checklist item 17).
         self._scan_games_busy = False
 
+        # Guards load_logs against a second fetch starting while one is
+        # still in flight — on_tab_changed calls load_logs unconditionally
+        # every time the Diagnostics tab is (re-)selected, so switching
+        # away and back while a journalctl fetch is still running could
+        # otherwise start a second worker; whichever thread's logs_ready
+        # lands last would silently overwrite the other's result (same
+        # class of guard as _scan_games_busy/_service_status_busy above,
+        # CLAUDE.md checklist item 17).
+        self._logs_busy = False
+
         # Populated by init_maint_tab; declared here so pylint sees it
         # set in __init__ like every other instance attribute.
         self._lock_key_buttons: dict[str, list[QPushButton]] = {}
@@ -972,7 +982,14 @@ class SDYControlCenter(QMainWindow):
     # ── Logs UI flow ───────────────────────────────────────────────────────
 
     def load_logs(self):
-        """Reload logs in a daemon thread; emits logs_ready when done."""
+        """Reload logs in a daemon thread; emits logs_ready when done.
+
+        Skips the request if a previous fetch hasn't returned yet (see
+        _logs_busy's own comment for why that's needed).
+        """
+        if self._logs_busy:
+            return
+        self._logs_busy = True
         tag = self.tag_filter.currentText().strip()
 
         self.log_display.setPlainText("Loading logs...")
@@ -988,6 +1005,8 @@ class SDYControlCenter(QMainWindow):
                 self.logs_ready.emit(ents, tag)
             except (subprocess.SubprocessError, OSError) as err:
                 self.logs_ready.emit([], f"ERROR:{err}")
+            finally:
+                self._logs_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 
