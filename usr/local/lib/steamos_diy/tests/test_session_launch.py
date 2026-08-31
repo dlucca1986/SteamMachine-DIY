@@ -46,6 +46,34 @@ def test_build_gamescope_args_well_formed_unaffected(set_ssot):
     assert "--" in args
 
 
+def test_build_gamescope_args_survives_non_list_flags(set_ssot):
+    """Regression: `flags` used `cfg.get("flags") or []`, which only
+    substitutes the default for a falsy value. A truthy non-list typo
+    (e.g. `flags: true` from a hand-edited config.yaml) made the loop
+    raise TypeError uncaught in run() -- before _run_session's try/except
+    even starts, crash-looping the systemd unit on every Game Mode boot
+    attempt (found via a full-file 9-agent review, 2026-08-31)."""
+    set_ssot()
+    cfg = {"env_vars": {}, "flags": True}
+
+    args = session_launch._build_gamescope_args(cfg)
+
+    assert args[0].endswith("gamescope")
+
+
+def test_get_post_start_cmds_returns_empty_for_non_list(set_ssot):
+    """Same class of bug as the flags test above, for post_start_cmds:
+    a truthy non-list value (e.g. `post_start_cmds: 1`) made the list
+    comprehension raise TypeError uncaught."""
+    set_ssot()
+
+    assert session_launch._get_post_start_cmds({"post_start_cmds": 1}) == []
+    assert (
+        session_launch._get_post_start_cmds({"post_start_cmds": "notify"})
+        == []
+    )
+
+
 def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
     """Matches _build_gamescope_args's degrade-via-str.split() behavior
     for the identical class of hand-edited field, instead of silently

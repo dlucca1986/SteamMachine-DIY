@@ -89,7 +89,8 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
 
     apply_env_map(GAME_MODE_ENV)
     apply_env_map(cfg.get("env_vars"))
-    for flag in cfg.get("flags") or []:
+    flags = cfg.get("flags")
+    for flag in flags if isinstance(flags, list) else []:
         tokens, err = shlex_split_or_fallback(str(flag))
         if err is not None:
             # Unbalanced quote in a hand-edited flag: don't crash the whole
@@ -107,8 +108,8 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
 
 def _get_post_start_cmds(cfg: dict) -> list[str]:
     """Return post_start_cmds from user config; [] if absent or invalid."""
-    cmds = cfg.get("post_start_cmds") or []
-    return [str(c) for c in cmds if c]
+    cmds = cfg.get("post_start_cmds")
+    return [str(c) for c in cmds if c] if isinstance(cmds, list) else []
 
 
 def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
