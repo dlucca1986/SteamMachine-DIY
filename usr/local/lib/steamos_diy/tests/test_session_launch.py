@@ -101,6 +101,52 @@ def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
     ]
 
 
+def test_schedule_post_start_cmds_clamps_negative_delay(monkeypatch):
+    """A negative POST_START_DELAY (a plausible SSoT typo) used to reach
+    time.sleep() raw, raising ValueError uncaught in this daemon thread
+    -- silently dropping every post_start_cmds with no diagnostic (found
+    via a full-file 9-agent review, 2026-08-31). Must clamp to 0 instead
+    of skipping the commands."""
+    slept = []
+    monkeypatch.setattr(session_launch.time, "sleep", slept.append)
+    spawned = []
+    monkeypatch.setattr(
+        session_launch,
+        "spawn_native",
+        lambda path, args: spawned.append(args),
+    )
+
+    session_launch._schedule_post_start_cmds(["notify-send hi"], -1.0)
+
+    assert slept == [0]
+    assert spawned == [["notify-send", "hi"]]
+
+
+def test_schedule_post_start_cmds_survives_unexpected_exception(
+    monkeypatch,
+):
+    """Regression: no try/except at all previously wrapped this daemon
+    thread's body -- any unexpected exception (e.g. spawn_native raising)
+    vanished silently (stderr is /dev/null when the app is launched
+    detached)."""
+    monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
+
+    def raising_spawn(*_a, **_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(session_launch, "spawn_native", raising_spawn)
+    logged = []
+    monkeypatch.setattr(
+        session_launch,
+        "jlog",
+        lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
+    )
+
+    session_launch._schedule_post_start_cmds(["notify-send hi"], 0.0)
+
+    assert ("STEAM", "POST_START_CMDS_FAILED: boom", "ERROR") in logged
+
+
 # ---------------------------------------------------------------------------
 # _monitor_process — crash vs. stable detection (real subprocesses)
 # ---------------------------------------------------------------------------

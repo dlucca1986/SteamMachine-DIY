@@ -120,18 +120,23 @@ def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
     unbalanced quote degrades to a naive str.split() and still runs,
     rather than silently skipping the command entirely.
     """
-    time.sleep(delay)
-    for cmd_str in cmds:
-        parts, err = shlex_split_or_fallback(cmd_str)
-        if err is not None:
-            jlog(
-                "STEAM",
-                f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
-                level="WARN",
-            )
-        if parts:
-            spawn_native(parts[0], parts)
-            jlog("STEAM", f"POST_START_CMD: {cmd_str}")
+    try:
+        time.sleep(max(delay, 0))
+        for cmd_str in cmds:
+            parts, err = shlex_split_or_fallback(cmd_str)
+            if err is not None:
+                jlog(
+                    "STEAM",
+                    f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
+                    level="WARN",
+                )
+            if parts:
+                spawn_native(parts[0], parts)
+                jlog("STEAM", f"POST_START_CMD: {cmd_str}")
+    # A daemon thread's uncaught exception has nowhere to go — stderr is
+    # /dev/null when the app is launched detached.
+    except Exception as err:  # pylint: disable=broad-except  # noqa: BLE001
+        jlog("STEAM", f"POST_START_CMDS_FAILED: {err}", level="ERROR")
 
 
 def _monitor_process(
