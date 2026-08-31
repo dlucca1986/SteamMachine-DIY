@@ -146,6 +146,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `control_center.py`: the Diagnostics log filter (`log_search`) re-rendered the entire log
+  view — clear + one `QTextEdit.append()` per surviving line, each triggering a document
+  relayout — on every keystroke, a real stutter on a session left running for hours/days
+  with a correspondingly large log volume. `textChanged` now (re)starts a single-shot
+  `QTimer` (`_log_filter_timer`, 200ms) via the new `_schedule_log_filter` instead of
+  rendering directly, collapsing a burst of keystrokes into one render. Found via the same
+  full-file 8-agent review as the fixes above (2026-08-31).
 - `backup.py`: `_ensure_backup_dir()`'s `mkdir(parents=True, exist_ok=True)` can raise
   `OSError` (permission denied, full disk, a path component that already exists as a file) —
   unlike every later step in `run_backup()`, this call ran unguarded and before
