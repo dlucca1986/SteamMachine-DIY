@@ -146,6 +146,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `session_launch.py`: `_build_gamescope_args`/`_get_post_start_cmds` both used
+  `cfg.get(key) or []`, which only substitutes the default for a falsy value. A truthy
+  non-list typo in a hand-edited `config.yaml` (e.g. `flags: true` or
+  `post_start_cmds: 1`) made the subsequent iteration raise `TypeError` uncaught — in
+  `run()`, before `_run_session`'s try/except even starts. With `Restart=on-failure` this
+  crash-loops the systemd unit on every Game Mode boot attempt (the default/most common
+  persisted `next_session` state), with no chance for the existing crash-recovery-to-Desktop
+  mechanism to run, since the crash happens before it's ever reached. Guarded both with
+  `isinstance(..., list)`, matching the pattern `utils.py::apply_env_map` already uses one
+  line above for the same class of field. Found independently by two separate review agents
+  (correctness and exception-contract-honesty angles) in a full-file 9-agent review of
+  `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31).
 - `docs/Utilities Engine.md` still described `download_release()` as returning a bare
   `Path`/`None`, from before the 2.1.8 TOCTOU fix changed it to return an
   `ExtractedRelease(dir, install_sh_sha256)`. Updated the function table row and added one
