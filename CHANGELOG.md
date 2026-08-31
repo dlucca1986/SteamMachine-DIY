@@ -146,6 +146,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `helpers/*.py`: each shim's `except ImportError` around `from utils import run_shim` was
+  meant to guarantee Steam always gets a well-formed fallback exit code (0 or 7) even when
+  the project library is unusable — but `utils.py`'s own module-level guard against a
+  missing `libcore.so` raises `SystemExit(127)`, not `ImportError`. A missing/corrupted `.so`
+  (e.g. mid-upgrade) made every shim propagate exit 127 instead of its documented fallback,
+  confusing Steam's own update UI with an unexpected code instead of the intended
+  "OK (Simulated)"/"up to date" signal. Widened each shim's except clause to
+  `(ImportError, SystemExit)`; `utils.py` itself is untouched — real entry points
+  (`session_launch.py`, `control_center.py`, etc.) have no fallback and correctly hard-fail
+  at 127 if the C-Core can't load. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, cross-file-contracts angle).
 - `utils.py`/`updater.py`: `download_release()`'s post-extraction loop (`target.iterdir()`,
   `_sha256_file(installer)`) ran outside the function's own `try`/`except`, so a
   checksum-verified but structurally empty tarball — `tarfile.extractall()` never creates the
