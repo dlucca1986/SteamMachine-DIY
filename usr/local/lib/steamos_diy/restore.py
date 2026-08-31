@@ -13,6 +13,7 @@
 
 import os
 import shlex
+import shutil
 
 # B404: importing subprocess isn't the risk — every call site below
 # passes a fixed argv list, never shell=True or user-controlled input.
@@ -225,7 +226,7 @@ def _write_member(
         )
         return False
     with src, os.fdopen(fd, "wb") as dest:
-        dest.write(src.read())
+        shutil.copyfileobj(src, dest)
     os.replace(tmp, target)
     return True
 
