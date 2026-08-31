@@ -146,6 +146,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `utils.py`: `get_backup_mapping()` only ever mapped `user/config` (`~/.config/
+  steamos_diy`), covering `games_conf_dir`'s default location (nested inside it) for free —
+  but a `games_conf_dir` relocated via the SSoT (a supported, tested pattern per
+  `control_center.py`'s `_resolve_config_paths`) got no mapping entry at all: backup silently
+  skipped every game profile there, and restore had no key to put them back with even if
+  they had been captured. Now adds a `user/games_conf_dir` entry whenever the resolved path
+  differs from the default (`realpath`-compared to avoid a spurious diff from a symlink/
+  trailing slash). Found via the same full-file 8-agent review as the two fixes above
+  (2026-08-31).
 - `control_center.py`: `validate_config`'s worker thread had no try/except at all — the only
   one in the file without it — so an uncaught exception killed it before it could emit
   anything: no dialog, no log, the "Validate Configuration" button visibly doing nothing.
