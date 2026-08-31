@@ -146,6 +146,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `control_center.py`: `_atomic_save` called `yaml_parser.load(content)` only to validate
+  syntax, discarding the parsed result. A syntactically valid YAML document whose root isn't
+  a mapping (e.g. a bare list, from a paste mistake while editing a game profile) reported
+  "Configuration saved!" even though `utils.py::load_yaml_safe()` — the reader
+  `sdy.py`/`session_launch.py` both use — silently degrades that exact shape to `{}` on the
+  next load, dropping the whole profile with only a WARN-level `YAML_NOT_MAPPING` log line
+  the user has no reason to see. Now rejects a parsed-but-non-dict root the same way a YAML
+  syntax error already is — shown as a "Syntax Error" dialog instead of silently writing
+  content that won't load back the way the user expects. Found via a full-file 9-agent
+  review of `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py`
+  (2026-08-31, cross-file-contracts angle).
 - `session_launch.py`: `_build_gamescope_args`/`_get_post_start_cmds` both used
   `cfg.get(key) or []`, which only substitutes the default for a falsy value. A truthy
   non-list typo in a hand-edited `config.yaml` (e.g. `flags: true` or
