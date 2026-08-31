@@ -128,16 +128,21 @@ def test_resolve_target_rejects_outside_allowlist():
 # ---------------------------------------------------------------------------
 
 
-def test_every_backup_mapping_key_resolves_via_restore(tmp_path, monkeypatch):
+def test_every_backup_mapping_key_resolves_via_restore(monkeypatch):
     # The autouse _isolate_ssot_cache fixture points SSOT_CONF_PATH at a
     # nonexistent tmp path (outside /etc/, /usr/, /var/) so no test
     # touches the real conf file — but this test's whole point is to
     # verify the *real* production path actually lands in restore's
-    # allow-list, so it must use the real value here.
+    # allow-list, so it must use the real value here. home must be the
+    # real $HOME too: the real conf's SSoT-read values (e.g.
+    # games_conf_dir) are absolute paths install.sh patched against this
+    # actual home, not a fabricated tmp one — on a machine with no real
+    # conf installed (CI), every SSoT-read key just falls back to its
+    # home-relative default instead, so this stays hermetic either way.
     monkeypatch.setattr(
         utils, "SSOT_CONF_PATH", "/etc/default/steamos_diy.conf"
     )
-    home = str(tmp_path / "home" / "tester")
+    home = str(Path.home())
     mapping = utils.get_backup_mapping(home)
     home_real = str(Path(home).resolve())
     allowed = restore._allowed_prefixes(home_real)
@@ -151,16 +156,14 @@ def test_every_backup_mapping_key_resolves_via_restore(tmp_path, monkeypatch):
         )
 
 
-def test_every_backup_mapping_key_nested_member_resolves(
-    tmp_path, monkeypatch
-):
+def test_every_backup_mapping_key_nested_member_resolves(monkeypatch):
     """Same guarantee one level down — a file *inside* each mapped root
     (not just the root itself) must also resolve and land in the
     allow-list, exactly what a real archive member looks like."""
     monkeypatch.setattr(
         utils, "SSOT_CONF_PATH", "/etc/default/steamos_diy.conf"
     )
-    home = str(tmp_path / "home" / "tester")
+    home = str(Path.home())
     mapping = utils.get_backup_mapping(home)
     home_real = str(Path(home).resolve())
     allowed = restore._allowed_prefixes(home_real)
@@ -171,6 +174,29 @@ def test_every_backup_mapping_key_nested_member_resolves(
         assert resolved == f"{expected_fs_path}/some_file.txt", (
             f"nested member under {archive_key!r} did not resolve safely"
         )
+
+
+def test_relocated_games_conf_dir_round_trips_through_restore(
+    tmp_path, set_ssot
+):
+    """A games_conf_dir relocated (but still under home) must get its own
+    mapping entry (utils.get_backup_mapping) *and* that entry must
+    actually resolve through restore — the two generic round-trip tests
+    above don't exercise this branch on a machine whose real installed
+    conf's games_conf_dir happens to equal the default."""
+    home = str(tmp_path / "home" / "tester")
+    custom = str(Path(home) / "elsewhere" / "games.d")
+    set_ssot(games_conf_dir=custom)
+
+    mapping = utils.get_backup_mapping(home)
+    home_real = str(Path(home).resolve())
+    allowed = restore._allowed_prefixes(home_real)
+
+    assert mapping["user/games_conf_dir"] == custom
+    resolved = restore._resolve_target(
+        "user/games_conf_dir", mapping, allowed
+    )
+    assert resolved == custom
 
 
 # ---------------------------------------------------------------------------

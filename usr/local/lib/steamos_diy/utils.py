@@ -436,13 +436,26 @@ def get_backup_mapping(home: str) -> dict[str, str]:
     when adding members, restore picks it up when mapping them back.
     Order is preserved (3.7+ dict insertion order).
     """
-    return {
+    mapping = {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,
         "system/service": _SERVICE_PATH,
         "source/steamos_diy": CORE_LIB_DIR,
         "user/config": os.path.join(home, USER_CONFIG_REL),
     }
+    # The default games_conf_dir already lives under user/config above, so
+    # it's backed up recursively for free. A games_conf_dir relocated via
+    # the SSoT (control_center.py/health.py both resolve it dynamically,
+    # same as here) does not - without its own entry it silently drops out
+    # of every backup, and restore has no key to put it back even if it
+    # had been captured.
+    default_games_dir = os.path.join(
+        home, USER_CONFIG_REL, GAMES_CONF_SUBDIR
+    )
+    games_dir = get_ssot_var("games_conf_dir", default_games_dir)
+    if os.path.realpath(games_dir) != os.path.realpath(default_games_dir):
+        mapping["user/games_conf_dir"] = games_dir
+    return mapping
 
 
 def verify_archive(

@@ -49,6 +49,33 @@ def test_get_ssot_num_falls_back_on_stray_comma(set_ssot):
 
 
 # ---------------------------------------------------------------------------
+# get_backup_mapping — a games_conf_dir relocated via the SSoT must get its
+# own mapping entry, or it silently drops out of every backup (control_
+# center.py/health.py both already resolve it dynamically the same way).
+# ---------------------------------------------------------------------------
+
+
+def test_get_backup_mapping_omits_games_dir_entry_when_default(tmp_path):
+    """The default games_conf_dir already lives under user/config, which
+    is backed up recursively — a separate entry would just duplicate it
+    in the archive."""
+    mapping = utils.get_backup_mapping(str(tmp_path / "home"))
+
+    assert "user/games_conf_dir" not in mapping
+
+
+def test_get_backup_mapping_adds_games_dir_entry_when_relocated(
+    tmp_path, set_ssot
+):
+    custom = tmp_path / "elsewhere" / "games.d"
+    set_ssot(games_conf_dir=str(custom))
+
+    mapping = utils.get_backup_mapping(str(tmp_path / "home"))
+
+    assert mapping["user/games_conf_dir"] == str(custom)
+
+
+# ---------------------------------------------------------------------------
 # _version_tuple / _release_from_api — pure parsing, no network
 # ---------------------------------------------------------------------------
 
