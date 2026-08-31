@@ -96,6 +96,10 @@ _WINDOW_HEIGHT: int = 700
 _BUTTON_STYLE: str = "height: 40px; text-align: left; padding-left: 15px;"
 _EDITOR_FONT_SIZE: int = 10
 _BUTTON_RESET_MS: int = 2000
+# Redraws the whole log view (clear + one QTextEdit.append() per
+# surviving line) on every keystroke otherwise - a real stutter on a
+# session with hours/days of accumulated journal lines.
+_LOG_FILTER_DEBOUNCE_MS: int = 200
 
 # YAML formatter
 _YAML_WIDTH: int = 4096
@@ -306,6 +310,7 @@ class SDYControlCenter(QMainWindow):
         self.log_search = None
         self.copy_btn = None
         self.support_btn = None
+        self._log_filter_timer = None
         self._log_text = ""  # last fetched logs, cached for live filtering
 
         # Global config tab widgets
@@ -403,7 +408,10 @@ class SDYControlCenter(QMainWindow):
         self.log_search = QLineEdit()
         self.log_search.setPlaceholderText("🔍 Filter logs…")
         self.log_search.setClearButtonEnabled(True)
-        self.log_search.textChanged.connect(self._apply_log_filter)
+        self._log_filter_timer = QTimer(self)
+        self._log_filter_timer.setSingleShot(True)
+        self._log_filter_timer.timeout.connect(self._apply_log_filter)
+        self.log_search.textChanged.connect(self._schedule_log_filter)
         header.addWidget(QLabel("<b>Component Filter:</b>"))
         header.addWidget(self.tag_filter)
         header.addWidget(self.log_search, 1)
@@ -1023,6 +1031,16 @@ class SDYControlCenter(QMainWindow):
         else:
             self._log_text = ""
             self.log_display.setPlainText(f"No {tag} activity.")
+
+    def _schedule_log_filter(self):
+        """Debounce _apply_log_filter (re)starting a single-shot timer.
+
+        Re-rendering on every keystroke (clear + one QTextEdit.append()
+        per surviving line) is a real stutter with hours/days of
+        accumulated journal lines; waiting for a short pause in typing
+        collapses a burst of keystrokes into one render.
+        """
+        self._log_filter_timer.start(_LOG_FILTER_DEBOUNCE_MS)
 
     def _apply_log_filter(self):
         """Re-render the cached logs honouring the search box (live filter)."""

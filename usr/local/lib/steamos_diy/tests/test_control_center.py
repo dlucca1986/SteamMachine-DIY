@@ -678,3 +678,32 @@ def test_load_logs_resets_guard_after_completion(monkeypatch):
 
     assert emitted == [([], "ALL")]
     assert win._logs_busy is False
+
+
+# ---------------------------------------------------------------------------
+# _schedule_log_filter — debounce the live log search box
+# ---------------------------------------------------------------------------
+
+
+class _FakeTimer:  # pylint: disable=too-few-public-methods
+    def __init__(self):
+        self.started_with = None
+
+    def start(self, ms):  # pylint: disable=invalid-name
+        self.started_with = ms
+
+
+def test_schedule_log_filter_starts_the_debounce_timer():
+    """Regression: textChanged used to call _apply_log_filter directly,
+    re-rendering the whole log view (clear + one QTextEdit.append() per
+    surviving line) on every keystroke - a real stutter with hours/days
+    of accumulated journal lines. It must now (re)start a single-shot
+    timer instead of rendering immediately on every character typed."""
+    win = SimpleNamespace(_log_filter_timer=_FakeTimer())
+
+    control_center.SDYControlCenter._schedule_log_filter(win)
+
+    assert (
+        win._log_filter_timer.started_with
+        == control_center._LOG_FILTER_DEBOUNCE_MS
+    )
