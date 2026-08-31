@@ -96,6 +96,7 @@ DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 # re-declaring their own literal.
 SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
 JOURNALCTL_BIN: str = "/usr/bin/journalctl"
+PYTHON3_BIN: str = "/usr/bin/python3"
 
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.

@@ -75,6 +75,7 @@ from utils import (
     CORE_LIB_DIR,
     GAMES_CONF_SUBDIR,
     JOURNALCTL_BIN,
+    PYTHON3_BIN,
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
@@ -213,6 +214,17 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
         )
     )
     return conf_root, games_conf_dir
+
+
+def _core_script_argv(name: str, *args: str) -> list[str]:
+    """argv to run a CORE_LIB_DIR script under PYTHON3_BIN.
+
+    Collapses the [PYTHON3_BIN, CORE_LIB_DIR/name, *args] shape that used
+    to be independently retyped at each of this file's 3 call sites
+    (session_select.py, backup.py, restore.py) — same reasoning as
+    utils.SYSTEMCTL_BIN/JOURNALCTL_BIN's own centralization comment.
+    """
+    return [PYTHON3_BIN, os.path.join(CORE_LIB_DIR, name), *args]
 
 
 # ---------------------------------------------------------------------------
@@ -446,12 +458,8 @@ class SDYControlCenter(QMainWindow):
             (
                 "🎮 Switch to Steam (Game Mode)",
                 lambda: spawn_native(
-                    "/usr/bin/python3",
-                    [
-                        "/usr/bin/python3",
-                        os.path.join(CORE_LIB_DIR, "session_select.py"),
-                        "steam",
-                    ],
+                    PYTHON3_BIN,
+                    _core_script_argv("session_select.py", "steam"),
                 ),
                 None,
             ),
@@ -1296,7 +1304,7 @@ class SDYControlCenter(QMainWindow):
         """Run backup via pkexec in a daemon thread; emits process_finished."""
         QMessageBox.information(self, "Backup", "Backup process started...")
         self._run_pkexec(
-            ["/usr/bin/python3", os.path.join(CORE_LIB_DIR, "backup.py")],
+            _core_script_argv("backup.py"),
             lock_key="files",
             ok_title="Success",
             ok_msg="Backup done!",
@@ -1313,11 +1321,7 @@ class SDYControlCenter(QMainWindow):
             return
         QMessageBox.information(self, "Restore", "Restore process started.")
         self._run_pkexec(
-            [
-                "/usr/bin/python3",
-                os.path.join(CORE_LIB_DIR, "restore.py"),
-                fpath,
-            ],
+            _core_script_argv("restore.py", fpath),
             lock_key="files",
             ok_title="Restore Complete",
             ok_msg="Restored!",

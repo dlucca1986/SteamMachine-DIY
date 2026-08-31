@@ -65,6 +65,32 @@ def test_resolve_config_paths_fallback_follows_games_conf_subdir_constant(
 
 
 # ---------------------------------------------------------------------------
+# _core_script_argv — shared argv builder for the 3 PYTHON3_BIN/
+# CORE_LIB_DIR call sites (session_select.py, backup.py, restore.py)
+# ---------------------------------------------------------------------------
+
+
+def test_core_script_argv_builds_expected_shape(monkeypatch):
+    monkeypatch.setattr(control_center, "CORE_LIB_DIR", "/opt/steamos_diy")
+
+    argv = control_center._core_script_argv("restore.py", "/tmp/x.tar.gz")
+
+    assert argv == [
+        control_center.PYTHON3_BIN,
+        "/opt/steamos_diy/restore.py",
+        "/tmp/x.tar.gz",
+    ]
+
+
+def test_core_script_argv_with_no_extra_args(monkeypatch):
+    monkeypatch.setattr(control_center, "CORE_LIB_DIR", "/opt/steamos_diy")
+
+    argv = control_center._core_script_argv("backup.py")
+
+    assert argv == [control_center.PYTHON3_BIN, "/opt/steamos_diy/backup.py"]
+
+
+# ---------------------------------------------------------------------------
 # _extract_game_name_from_display
 # ---------------------------------------------------------------------------
 
