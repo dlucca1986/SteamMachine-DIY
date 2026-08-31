@@ -146,7 +146,7 @@ def test_every_backup_mapping_key_resolves_via_restore(monkeypatch):
     home = str(Path.home())
     mapping = utils.get_backup_mapping(home)
     home_real = str(Path(home).resolve())
-    allowed = restore._allowed_prefixes(home_real)
+    allowed = restore._allowed_prefixes(home_real, mapping)
 
     assert mapping, "get_backup_mapping returned nothing to verify"
     for archive_key, expected_fs_path in mapping.items():
@@ -167,7 +167,7 @@ def test_every_backup_mapping_key_nested_member_resolves(monkeypatch):
     home = str(Path.home())
     mapping = utils.get_backup_mapping(home)
     home_real = str(Path(home).resolve())
-    allowed = restore._allowed_prefixes(home_real)
+    allowed = restore._allowed_prefixes(home_real, mapping)
 
     for archive_key, expected_fs_path in mapping.items():
         member_name = f"{archive_key}/some_file.txt"
@@ -191,13 +191,36 @@ def test_relocated_games_conf_dir_round_trips_through_restore(
 
     mapping = utils.get_backup_mapping(home)
     home_real = str(Path(home).resolve())
-    allowed = restore._allowed_prefixes(home_real)
+    allowed = restore._allowed_prefixes(home_real, mapping)
 
     assert mapping["user/games_conf_dir"] == custom
     resolved = restore._resolve_target(
         "user/games_conf_dir", mapping, allowed
     )
     assert resolved == custom
+
+
+def test_games_conf_dir_relocated_outside_home_round_trips(
+    tmp_path, set_ssot
+):
+    """Regression: games_conf_dir relocated *outside* home/etc/usr/var
+    (e.g. external/SD-card storage) used to be silently rejected by
+    restore even though backup archived it fine, because the allow-list
+    was built from home_real alone and never consulted the mapping's
+    own (SSoT-relocatable) destination paths."""
+    home = str(tmp_path / "home" / "tester")
+    external = str(tmp_path / "external_storage" / "sdy_profiles")
+    set_ssot(games_conf_dir=external)
+
+    mapping = utils.get_backup_mapping(home)
+    home_real = str(Path(home).resolve())
+    allowed = restore._allowed_prefixes(home_real, mapping)
+
+    assert mapping["user/games_conf_dir"] == external
+    resolved = restore._resolve_target(
+        "user/games_conf_dir", mapping, allowed
+    )
+    assert resolved == external
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +248,7 @@ def test_reload_systemd_swallows_timeout(monkeypatch):
 
 def test_extract_payload_counts_a_matched_member(tmp_path):
     mapping = {"user/config": str(tmp_path / "config")}
-    allowed = restore._allowed_prefixes(str(tmp_path))
+    allowed = restore._allowed_prefixes(str(tmp_path), mapping)
 
     with _tar_with_member("user/config/file.txt", b"hello") as tar:
         restored, links = restore._extract_payload(
@@ -238,7 +261,7 @@ def test_extract_payload_counts_a_matched_member(tmp_path):
 
 def test_extract_payload_counts_zero_for_foreign_archive(tmp_path):
     mapping = {"user/config": str(tmp_path / "config")}
-    allowed = restore._allowed_prefixes(str(tmp_path))
+    allowed = restore._allowed_prefixes(str(tmp_path), mapping)
 
     with _tar_with_member("totally/unrelated/path.txt", b"hello") as tar:
         restored, _links = restore._extract_payload(
@@ -259,7 +282,7 @@ def test_execute_restore_aborts_when_nothing_matched(tmp_path, monkeypatch):
         tar.addfile(info, io.BytesIO(b"hello"))
 
     mapping = {"user/config": str(tmp_path / "config")}
-    allowed = restore._allowed_prefixes(str(tmp_path))
+    allowed = restore._allowed_prefixes(str(tmp_path), mapping)
     monkeypatch.setattr(restore, "_reload_systemd", lambda: None)
 
     with pytest.raises(SystemExit):

@@ -54,9 +54,16 @@ _ALLOWED_PREFIXES_FIXED: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _allowed_prefixes(home_real: str) -> tuple[str, ...]:
+def _allowed_prefixes(
+    home_real: str, mapping: dict[str, str]
+) -> tuple[str, ...]:
+    """Fixed prefixes plus every mapping destination (SSoT-relocatable
+    entries like games_conf_dir/next_session are not necessarily under
+    home/etc/usr/var, but backup already wrote there, so restore must be
+    allowed to write there too)."""
     # Trailing slash prevents "alice" from matching "alicebob".
-    return _ALLOWED_PREFIXES_FIXED + (home_real + "/",)
+    extra = tuple(os.path.realpath(dest) + "/" for dest in mapping.values())
+    return _ALLOWED_PREFIXES_FIXED + (home_real + "/",) + extra
 
 
 # ---------------------------------------------------------------------------
@@ -430,11 +437,12 @@ def _prepare_restore(
     # is what the security allow-list must check against. Not redundant.
     home_str = str(home)
     home_real = str(home.resolve())
+    mapping = get_backup_mapping(home_str)
     return (
         user,
         home_real,
-        get_backup_mapping(home_str),
-        _allowed_prefixes(home_real),
+        mapping,
+        _allowed_prefixes(home_real, mapping),
     )
 
 
