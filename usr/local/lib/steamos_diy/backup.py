@@ -253,7 +253,15 @@ def run_backup() -> None:
     user, home = get_real_user()
     home_str = str(home)
 
-    backup_dir = _ensure_backup_dir(home_str, user)
+    try:
+        backup_dir = _ensure_backup_dir(home_str, user)
+    except OSError as err:
+        # mkdir() itself can fail (permission denied, full disk, a path
+        # component that already exists as a file) - unlike every step
+        # below, this runs before BACKUP_START is even logged, so it
+        # needs its own guard rather than falling through unhandled.
+        jlog("SYSTEM", f"BACKUP_FAILED: {err}", level="ERROR")
+        sys.exit(1)
     final_path, tmp_path = _archive_paths(backup_dir)
 
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")

@@ -222,3 +222,29 @@ def test_run_backup_refuses_symlinked_tmp_path(tmp_path, monkeypatch):
 
     assert victim.read_text() == "do not touch"
     assert not final_path.exists()
+
+
+def test_run_backup_aborts_cleanly_when_backup_dir_creation_fails(
+    tmp_path, monkeypatch
+):
+    """Regression: _ensure_backup_dir() runs before BACKUP_START is even
+    logged and was previously outside any try/except - an OSError from
+    mkdir() (permission denied, full disk, a path component that's
+    already a file) crashed with an unhandled traceback instead of
+    exiting cleanly like every other failure path in run_backup()."""
+    home = tmp_path / "home" / "tester"
+    user_config_dir = home / ".config" / "steamos_diy"
+    user_config_dir.parent.mkdir(parents=True)
+    # A plain file where "backups"'s parent should be a directory makes
+    # mkdir(parents=True) raise NotADirectoryError.
+    user_config_dir.write_text("not a directory")
+
+    ssot_conf = tmp_path / "steamos_diy.conf"
+    ssot_conf.write_text("LOG_LEVEL=ERROR\n")
+
+    monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(ssot_conf))
+    monkeypatch.setattr(backup, "check_root", lambda: None)
+    monkeypatch.setattr(backup, "get_real_user", lambda: ("tester", home))
+
+    with pytest.raises(SystemExit):
+        backup.run_backup()
