@@ -22,8 +22,10 @@ sys.path.insert(
 
 try:
     from utils import run_shim
-except ImportError:
-    # No utils available: simulate success so Steam doesn't stall on this call.
+except (ImportError, SystemExit):
+    # No utils available (missing module, or utils.py's own C-Core load
+    # failure raising SystemExit): simulate success so Steam doesn't
+    # stall on this call.
     sys.exit(0)
 
 if __name__ == "__main__":

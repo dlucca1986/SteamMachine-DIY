@@ -22,9 +22,11 @@ sys.path.insert(
 
 try:
     from utils import run_shim
-except ImportError:
-    # Exit 7 is mandatory even without utils — Steam reads it as
-    # "OS up to date" and skips the real update flow.
+except (ImportError, SystemExit):
+    # No utils available (missing module, or utils.py's own C-Core load
+    # failure raising SystemExit): exit 7 is mandatory even without
+    # utils — Steam reads it as "OS up to date" and skips the real
+    # update flow.
     sys.exit(7)
 
 if __name__ == "__main__":
