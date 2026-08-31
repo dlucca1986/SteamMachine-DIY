@@ -66,7 +66,7 @@ def _header_declares_id(path: str, appid: str) -> bool:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             header = fh.read(_HEADER_READ_BYTES)
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return False
     return any(m.group(1) == appid for m in _ID_LINE.finditer(header))
 

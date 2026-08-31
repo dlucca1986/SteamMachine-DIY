@@ -89,6 +89,18 @@ def test_header_declares_id_missing_file(tmp_path):
     assert not sdy._header_declares_id(str(tmp_path / "nope.yaml"), "220")
 
 
+def test_header_declares_id_tolerates_invalid_utf8(tmp_path):
+    """Regression: a non-UTF-8 profile file (e.g. hand-edited with a
+    Latin-1 accented game name) raised UnicodeDecodeError uncaught,
+    crashing the game launch instead of degrading like the equivalent
+    utils.py::read_session_target() guard already does (found via a
+    full-file 9-agent review, 2026-08-31)."""
+    profile = tmp_path / "game.yaml"
+    profile.write_bytes(b"# SDY_ID: 220\nGAME_WRAPPER: \xe9cran\n")
+
+    assert not sdy._header_declares_id(str(profile), "220")
+
+
 # ---------------------------------------------------------------------------
 # _resolve_effective_name — generic-stem substitution
 # ---------------------------------------------------------------------------
