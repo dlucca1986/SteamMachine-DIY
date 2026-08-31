@@ -5,6 +5,7 @@ import os
 import tarfile
 
 import backup
+import pytest
 import utils
 
 # ---------------------------------------------------------------------------
@@ -174,3 +175,50 @@ def test_run_backup_end_to_end(tmp_path, monkeypatch):
     assert not any(n.startswith("user/config/backups") for n in names)
     assert "source/steamos_diy/backup.py" in names
     assert backup.BACKUP_MANIFEST_NAME in names
+
+
+def test_run_backup_refuses_symlinked_tmp_path(tmp_path, monkeypatch):
+    """A symlink pre-planted at the predictable tmp archive path must not
+    be followed — regression for the TOCTOU where tarfile.open() (via the
+    builtin open()) would write archive content through it as root."""
+    home = tmp_path / "home" / "tester"
+    user_config_dir = home / ".config" / "steamos_diy"
+    user_config_dir.mkdir(parents=True)
+    (user_config_dir / "config.yaml").write_text("flags: []\n")
+    backups_dir = user_config_dir / "backups"
+    backups_dir.mkdir()
+
+    victim = tmp_path / "victim"
+    victim.write_text("do not touch")
+    final_path = backups_dir / "sdy_backup_FIXED.tar.gz"
+    tmp_path_archive = backups_dir / "sdy_backup_FIXED.tar.gz.tmp"
+    tmp_path_archive.symlink_to(victim)
+
+    ssot_conf = tmp_path / "steamos_diy.conf"
+    ssot_conf.write_text("LOG_LEVEL=ERROR\n")
+    core_lib_dir = tmp_path / "core_lib"
+    core_lib_dir.mkdir()
+    next_session = tmp_path / "next_session"
+    next_session.write_text("steam\n")
+    service_file = tmp_path / "steamos_diy.service"
+    service_file.write_text("[Unit]\n")
+
+    monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(ssot_conf))
+    monkeypatch.setattr(utils, "NEXT_SESSION_PATH", str(next_session))
+    monkeypatch.setattr(utils, "CORE_LIB_DIR", str(core_lib_dir))
+    monkeypatch.setattr(utils, "_SERVICE_PATH", str(service_file))
+    monkeypatch.setattr(backup, "check_root", lambda: None)
+    monkeypatch.setattr(backup, "get_real_user", lambda: ("tester", home))
+    monkeypatch.setattr(backup, "fix_ownership", lambda *a, **k: None)
+    monkeypatch.setattr(backup, "_SYMLINK_SEARCH_PATHS", ())
+    monkeypatch.setattr(
+        backup,
+        "_archive_paths",
+        lambda backup_dir: (final_path, tmp_path_archive),
+    )
+
+    with pytest.raises(SystemExit):
+        backup.run_backup()
+
+    assert victim.read_text() == "do not touch"
+    assert not final_path.exists()

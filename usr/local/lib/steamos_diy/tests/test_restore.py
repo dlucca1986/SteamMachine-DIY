@@ -56,6 +56,26 @@ def test_write_member_creates_missing_parent_dirs(tmp_path):
     assert target.read_bytes() == b"hello"
 
 
+def test_write_member_refuses_symlinked_tmp_path(tmp_path):
+    """A symlink planted at the tmp write path (not the target itself)
+    must not be followed — regression for the TOCTOU where only the
+    final target was checked, never the sibling path actually opened
+    for writing."""
+    target = tmp_path / "config.yaml"
+    victim = tmp_path / "victim"
+    victim.write_text("do not touch")
+    tmp = tmp_path / "config.yaml.sdy_restore_tmp"
+    tmp.symlink_to(victim)
+
+    with _tar_with_member("member", b"attacker content") as tar:
+        ok = restore._write_member(tar, tar.getmember("member"), str(target))
+
+    assert ok is False
+    assert victim.read_text() == "do not touch"
+    assert not target.exists()
+    assert tmp.is_symlink()
+
+
 def test_write_member_directory_entry(tmp_path):
     target = tmp_path / "somedir"
     info = tarfile.TarInfo(name="d")

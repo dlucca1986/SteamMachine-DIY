@@ -189,8 +189,8 @@ def _ensure_safe_target(target: str) -> bool:
 
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
-) -> None:
-    """Write member to target via tmp+rename.
+) -> bool:
+    """Write member to target via tmp+rename. False if tmp is a symlink.
 
     Atomic (target either holds the old content or the fully-written new
     one, never missing/truncated on a crash mid-write), and — like
@@ -200,18 +200,34 @@ def _write_member(
     """
     if member.isdir():
         os.makedirs(target, exist_ok=True)
-        return
+        return True
 
     os.makedirs(os.path.dirname(target), exist_ok=True)
 
     src = tar.extractfile(member)
     if src is None:
-        return
+        return True
 
     tmp = f"{target}.sdy_restore_tmp"
-    with src, open(tmp, "wb") as dest:
+    # _ensure_safe_target only checks target itself — this sibling path
+    # is where the write actually lands, so it needs the same guard.
+    # O_NOFOLLOW refuses a symlink planted here by another process
+    # running as this same user, instead of writing through it as root.
+    try:
+        fd = os.open(
+            tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
+        )
+    except OSError as err:
+        jlog(
+            "SYSTEM",
+            f"RESTORE_REJECTED_TMP_SYMLINK: {tmp} - {err}",
+            level="WARN",
+        )
+        return False
+    with src, os.fdopen(fd, "wb") as dest:
         dest.write(src.read())
     os.replace(tmp, target)
+    return True
 
 
 def _extract_member(
@@ -222,10 +238,12 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract member to target; False if target is a pre-existing symlink."""
+    """Extract member to target; False if target or its tmp write path
+    is a pre-existing symlink."""
     if not _ensure_safe_target(target):
         return False
-    _write_member(tar, member, target)
+    if not _write_member(tar, member, target):
+        return False
     # Mask to permission bits only: a crafted archive must not be able
     # to plant setuid/setgid files through a root-run restore.
     os.chmod(target, member.mode & 0o777)

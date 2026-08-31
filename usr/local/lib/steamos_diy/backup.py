@@ -259,7 +259,18 @@ def run_backup() -> None:
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")
 
     try:
-        with tarfile.open(tmp_path, "w:gz") as tar:
+        # tarfile.open() would use the builtin open(), which follows a
+        # symlink planted at tmp_path by another process running as this
+        # same user — O_EXCL|O_NOFOLLOW refuses to write through one
+        # instead of letting root's write land wherever it points.
+        fd = os.open(
+            str(tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+        )
+        with os.fdopen(fd, "wb") as raw, tarfile.open(
+            fileobj=raw, mode="w:gz"
+        ) as tar:
             _add_payload(tar, home_str)
             _add_links_manifest(tar)
     except (OSError, tarfile.TarError) as err:
