@@ -146,6 +146,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- 3 doc-drift corrections found by the same review: the FAQ pointed at a "Logs" tab (the real
+  tab is "Diagnostics"); the Control Center doc's Preflight table implied `user_config`/
+  `games_conf_dir` always show as their own passing row (they only surface as a failing one);
+  the Backup & Recovery doc undersold `BACKUP_KEEP`'s guard (any value `<= 0` disables
+  pruning, not just exactly `0`).
 - `control_center.py`: the Diagnostics log filter (`log_search`) re-rendered the entire log
   view — clear + one `QTextEdit.append()` per surviving line, each triggering a document
   relayout — on every keystroke, a real stutter on a session left running for hours/days
