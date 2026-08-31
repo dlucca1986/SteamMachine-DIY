@@ -437,6 +437,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   8-agent review as the fixes above (2026-08-31).
 
 ### Changed
+- 3 minor cleanups from the full-file 9-agent review of `session_launch.py`/
+  `session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31), all pure refactors
+  with no behavior change: `sdy.py::_resolve_effective_name`'s `os.path.abspath(raw_args[0])`
+  ran unconditionally as `next()`'s default argument (Python has no lazy-default machinery)
+  even when the generator immediately matched and the fallback was discarded unused — now
+  only computed when actually needed; `sdy.py::_get_profile_path` checked the same candidate
+  path twice whenever `eff_name == stem` (the common case for a normally-named game binary),
+  deduped with `dict.fromkeys()`; `"/usr/bin/konsole"` (independently hardcoded in
+  `updater.py` and `control_center.py`, already in agreement) centralized into a new
+  `utils.KONSOLE_BIN` constant, matching the existing `SYSTEMCTL_BIN`/`JOURNALCTL_BIN`/
+  `PYTHON3_BIN` pattern.
 - `control_center.py`: collapsed 3 independently-retyped `[PYTHON3_BIN, CORE_LIB_DIR/<script>,
   *args]` argv constructions (for `session_select.py`, `backup.py`, `restore.py` — all in the
   same file, each hardcoding `"/usr/bin/python3"` separately) into a shared
