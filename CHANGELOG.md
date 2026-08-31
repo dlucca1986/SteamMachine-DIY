@@ -146,6 +146,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- 3 more doc-drift corrections found by the same review: `CHANGELOG.md`'s own
+  `shlex_split_or_fallback()` entry still claimed `_schedule_post_start_cmds` kept its old
+  skip-on-malformed-entry behavior "unchanged," contradicted by a later `Fixed` entry in the
+  same release that unified it onto the shared degrade-and-run contract; `docs/Steamos
+  Session Launch.md` claimed a malformed `post_start_cmds` entry "is skipped" instead of
+  degrading and still running; `docs/Utilities Engine.md`'s `updater.py` import-list table
+  omitted `verify_file_sha256`, added by the 2.1.8 TOCTOU fix.
 - `updater.py`: three small gaps in the same download/install path — `check()`'s and
   `_download()`'s `.emit()` calls sat outside (or partially outside) their worker's
   try/except, so closing the Control Center window while a check/download is still in
