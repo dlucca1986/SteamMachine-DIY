@@ -146,6 +146,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `control_center.py`: `load_logs` was the only worker without a busy-guard, unlike
+  `refresh_detected_games`/`_refresh_service_status` — `on_tab_changed` calls it
+  unconditionally on every Diagnostics tab (re-)selection, so switching away and back while
+  a `journalctl` fetch was still in flight could start a second worker, and whichever
+  thread's `logs_ready` landed last silently overwrote the other's result. Added
+  `_logs_busy`, same shape as the other two guards (CLAUDE.md checklist item 17). Found via
+  the same full-file 8-agent review as the fixes above (2026-08-31).
 - `restore.py`: `run_restore()` always logged `RESTORE_SUCCESS` and exited 0 regardless of
   how many archive members actually matched `get_backup_mapping()` — `verify_archive()` only
   checks gzip/tar integrity, not content, so a wrong tool's archive (or one from an
