@@ -146,6 +146,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `sdy.py`: `_header_declares_id` caught only `OSError` around a text-mode `open(...,
+  encoding="utf-8")`, the same gap already fixed in `utils.py::read_session_target` this
+  cycle — a non-UTF-8 game profile (e.g. hand-edited with an accented name saved in
+  Latin-1) raised `UnicodeDecodeError` uncaught into `sdy.py::run()`, which nothing wraps,
+  crashing the game launch with a raw traceback instead of degrading, and before any `jlog`
+  call so there's no diagnostic trail either. Now also catches `UnicodeDecodeError`. Found
+  via a full-file 9-agent review of `session_launch.py`/`session_select.py`/`sdy.py`/
+  `editors.py`/`updater.py` (2026-08-31, exception-contract-honesty angle).
 - `control_center.py`: `_atomic_save` called `yaml_parser.load(content)` only to validate
   syntax, discarding the parsed result. A syntactically valid YAML document whose root isn't
   a mapping (e.g. a bare list, from a paste mistake while editing a game profile) reported
