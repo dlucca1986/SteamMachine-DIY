@@ -146,6 +146,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `control_center.py`: `validate_config`'s worker thread had no try/except at all — the only
+  one in the file without it — so an uncaught exception killed it before it could emit
+  anything: no dialog, no log, the "Validate Configuration" button visibly doing nothing.
+  Root cause was in `health.py`: `_check_yaml`/`_read_user_config` caught `(OSError,
+  YAMLError)` but not `UnicodeDecodeError`, raised by the text-mode `open()` itself — before
+  ruamel ever sees the bytes — on a config file saved with non-UTF-8 encoding. Same failure
+  mode as the aware/naive datetime crash in `journal.py` earlier this cycle: the app is
+  launched detached with stderr to `/dev/null`, so an uncaught background-thread exception
+  is completely invisible. Both `health.py` except clauses now also catch
+  `UnicodeDecodeError` (fixes it for every caller, including `export_support_log`), and
+  `validate_config`'s worker now has a defensive try/except matching every sibling worker in
+  the file, emitting `process_finished` on failure instead of dying silently. Found via a
+  full-file 8-agent review of `control_center.py`/`backup.py`/`restore.py`/`health.py`
+  (2026-08-31).
 - `sdy.py`: `games_conf_dir`'s fallback (used only when the SSoT key is unset) hardcoded
   `/etc/steamos_diy/games.d` — a directory `install.sh` never creates and nothing else in the
   repo references, i.e. a dead path. `control_center.py` falls back to
