@@ -146,6 +146,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `backup.py`: `_ensure_backup_dir()`'s `mkdir(parents=True, exist_ok=True)` can raise
+  `OSError` (permission denied, full disk, a path component that already exists as a file) —
+  unlike every later step in `run_backup()`, this call ran unguarded and before
+  `BACKUP_START` was even logged, so a failure crashed with a raw traceback instead of a
+  clean, logged exit. A companion `fix_ownership()` call later in the function was initially
+  flagged as a similar gap but turned out to be a false positive: `utils.fix_ownership()`
+  already catches `(OSError, KeyError, SubprocessError)` internally and only WARNs, so it
+  cannot actually raise — no change was needed there. Found via the same full-file 8-agent
+  review as the fixes above (2026-08-31).
 - `control_center.py`: `load_logs` was the only worker without a busy-guard, unlike
   `refresh_detected_games`/`_refresh_service_status` — `on_tab_changed` calls it
   unconditionally on every Diagnostics tab (re-)selection, so switching away and back while
