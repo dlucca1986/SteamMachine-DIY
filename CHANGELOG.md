@@ -146,6 +146,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   review pass before).
 
 ### Fixed
+- `utils.py`: `read_session_target()`'s docstring promises "fall back to *default* on
+  failure," but its `except OSError` clause doesn't cover `UnicodeDecodeError` (a `ValueError`
+  subclass), raised by the text-mode `open(..., encoding="utf-8")` itself on non-UTF-8 bytes —
+  same failure mode as the `health.py` YAML-read gap fixed earlier this cycle, but here the
+  caller, `session_launch.py::run()` (the systemd service's entry point), wraps nothing around
+  the call at all. A `next_session` file containing invalid UTF-8 — plausible after restoring
+  a corrupted or hand-edited backup archive — would crash the session-launcher boot path
+  instead of degrading to the `"steam"` default. Now also catches `UnicodeDecodeError`. Found
+  via a full-file 9-agent review of `journal.py`/`utils.py` (2026-08-31,
+  exception-contract-honesty angle).
 - `restore.py`: `_allowed_prefixes()` was built from `home_real` alone, never consulting
   `get_backup_mapping()`'s own destination paths — so a `games_conf_dir` (or `next_session`)
   relocated via the SSoT to somewhere outside `/etc|/usr|/var|home` (e.g. external/SD-card
