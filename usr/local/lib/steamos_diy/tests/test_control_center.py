@@ -604,6 +604,33 @@ def test_refresh_detected_games_passes_a_timeout(monkeypatch):
     assert captured.get("timeout") is not None
 
 
+def test_refresh_detected_games_passes_errors_replace(monkeypatch):
+    """Regression: journalctl output was decoded with subprocess's default
+    strict UTF-8 handling, unlike journal.py's own journalctl calls (which
+    already use errors="replace" because a MESSAGE field with an embedded
+    newline flips journalctl's export format to binary-safe encoding, not
+    guaranteed valid UTF-8) -- an undecodable byte here raised
+    UnicodeDecodeError uncaught by the except (SubprocessError, OSError)
+    clause, silently killing the daemon thread."""
+    win = _FakeGamesWindow()
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured.update(kwargs)
+        return control_center.subprocess.CompletedProcess(
+            cmd, 0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(control_center.subprocess, "run", fake_run)
+
+    control_center.SDYControlCenter.refresh_detected_games(win)
+
+    assert captured.get("errors") == "replace"
+
+
 def test_refresh_detected_games_skips_scan_while_busy(monkeypatch):
     """Regression: a second click while a scan is in flight must not
     start a new one — the previous, unguarded version let two scans

@@ -944,6 +944,12 @@ class SDYControlCenter(QMainWindow):
                     # Fixed argv, no shell — see this method's docstring
                     # on why journalctl is invoked directly instead of a
                     # shell.
+                    # duplicate-code: these 5 kwargs intentionally mirror
+                    # journal.py::fetch_tagged_entries's own journalctl
+                    # call (errors="replace" for the same binary-safe-
+                    # export-format reason) — not an independent
+                    # reimplementation worth extracting for 5 shared lines.
+                    # pylint: disable=duplicate-code
                     res = subprocess.run(  # nosec B603
                         [
                             JOURNALCTL_BIN,
@@ -954,9 +960,11 @@ class SDYControlCenter(QMainWindow):
                         ],
                         capture_output=True,
                         text=True,
+                        errors="replace",
                         check=True,
                         timeout=10,
                     )
+                    # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)
                     detected = parse_game_logs("\n".join(lines))
                     self.games_detected.emit(detected)
