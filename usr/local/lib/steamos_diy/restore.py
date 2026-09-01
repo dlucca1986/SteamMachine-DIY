@@ -246,15 +246,27 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract member to target; False if target or its tmp write path
-    is a pre-existing symlink."""
+    """Extract member to target; False on any per-member failure (a
+    pre-existing symlink at target/its tmp write path, or a chmod race).
+
+    Per run_restore's own contract, a single member's failure must stay
+    per-member (logged, skipped, restore continues) rather than escalate
+    to the archive-level except in _execute_restore, which aborts the
+    entire restore.
+    """
     if not _ensure_safe_target(target):
         return False
     if not _write_member(tar, member, target):
         return False
-    # Mask to permission bits only: a crafted archive must not be able
-    # to plant setuid/setgid files through a root-run restore.
-    os.chmod(target, member.mode & 0o777)
+    try:
+        # Mask to permission bits only: a crafted archive must not be
+        # able to plant setuid/setgid files through a root-run restore.
+        os.chmod(target, member.mode & 0o777)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_CHMOD_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
     if os.path.realpath(target).startswith(home_real + "/"):
         fix_ownership(target, user)
     return True

@@ -143,6 +143,56 @@ def test_restore_link_rejects_unsafe_target_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# _extract_member — a chmod failure must be a per-member rejection, not
+# escalate to the archive-level except that aborts the whole restore
+# ---------------------------------------------------------------------------
+
+
+def test_extract_member_survives_chmod_failure(tmp_path, monkeypatch):
+    """run_restore's own docstring promises per-member rejections are
+    non-fatal; before the fix, os.chmod's OSError propagated straight
+    through _process_member/_extract_payload into _execute_restore's
+    archive-level except, aborting every other member too."""
+    target = tmp_path / "config.yaml"
+
+    def broken_chmod(path, mode):
+        raise OSError("simulated permission race")
+
+    monkeypatch.setattr(restore.os, "chmod", broken_chmod)
+
+    with _tar_with_member("member", b"content") as tar:
+        ok = restore._extract_member(
+            tar,
+            tar.getmember("member"),
+            str(target),
+            home_real=str(tmp_path),
+            user="root",
+        )
+
+    assert ok is False
+    # _write_member already ran (target exists) - only the chmod step
+    # failed, so the file itself is not rolled back, matching every other
+    # per-member rejection in this file (e.g. _write_member's own).
+    assert target.exists()
+
+
+def test_extract_member_succeeds_when_chmod_ok(tmp_path):
+    target = tmp_path / "config.yaml"
+
+    with _tar_with_member("member", b"content") as tar:
+        ok = restore._extract_member(
+            tar,
+            tar.getmember("member"),
+            str(target),
+            home_real=str(tmp_path),
+            user="root",
+        )
+
+    assert ok is True
+    assert target.read_bytes() == b"content"
+
+
+# ---------------------------------------------------------------------------
 # _resolve_target — traversal/allow-list safety (pure, no I/O beyond realpath)
 # ---------------------------------------------------------------------------
 
