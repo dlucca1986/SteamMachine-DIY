@@ -37,6 +37,31 @@ def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# filter_game_journal_lines — chdir_marker must be boundary-anchored
+# ---------------------------------------------------------------------------
+
+
+def test_filter_game_journal_lines_rejects_sibling_home_dir():
+    """Regression: chdir_marker had no trailing boundary, so
+    home="/home/deck" false-positive-matched a chdir into a DIFFERENT
+    user's home, "/home/deck2/..." (found via the second full-file
+    review pass, 2026-09-02)."""
+    stdout = 'chdir "/home/deck2/.steam/steamapps/common/GameA"'
+
+    matched = journal.filter_game_journal_lines(stdout, "/home/deck")
+
+    assert matched == []
+
+
+def test_filter_game_journal_lines_matches_real_subpath():
+    stdout = 'chdir "/home/deck/.steam/steamapps/common/GameA"'
+
+    matched = journal.filter_game_journal_lines(stdout, "/home/deck")
+
+    assert matched == [stdout]
+
+
 def test_parse_game_logs_attributes_appid_to_its_own_process():
     lines = 'chdir "/home/user/.steam/steamapps/common/GameA"\ngameID 220'
     assert journal.parse_game_logs(lines) == {"GameA": "220"}

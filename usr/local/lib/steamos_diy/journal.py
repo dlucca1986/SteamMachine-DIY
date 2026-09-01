@@ -121,7 +121,10 @@ def extract_game_metadata(line: str) -> tuple[str | None, str | None]:
 
 def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
     """Return last _GAME_LOG_TAIL game-launch lines from journalctl output."""
-    chdir_marker = f'chdir "{home}'
+    # Trailing "/" so a chdir into another user's home ("/home/deck2/...")
+    # can't false-positive-match this user's home ("/home/deck") — same
+    # boundary reasoning as restore.py::_allowed_prefixes.
+    chdir_marker = f'chdir "{home}/'
     matched = [
         line
         for line in stdout.splitlines()
