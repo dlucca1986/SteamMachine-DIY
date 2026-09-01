@@ -219,6 +219,25 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
     return conf_root, games_conf_dir
 
 
+def _safe_emit(signal, *args) -> None:
+    """Emit *signal*, swallowing RuntimeError from a torn-down window.
+
+    Every emit() call from a daemon worker thread in this module goes
+    through here: closing the window while a worker is still in flight
+    (some, like Backup/Restore, run for up to the 300s pkexec budget)
+    deletes the underlying Qt object, and emitting on a deleted signal
+    raises RuntimeError. Uncaught, that would vanish silently — stderr is
+    /dev/null when the app is launched detached (same class of issue
+    already hardened in updater.py's workers) — but there is genuinely
+    nothing left to update at that point, so swallowing it here is correct,
+    not just convenient.
+    """
+    try:
+        signal.emit(*args)
+    except RuntimeError:
+        pass
+
+
 def _core_script_argv(name: str, *args: str) -> list[str]:
     """argv to run a CORE_LIB_DIR script under PYTHON3_BIN.
 
@@ -547,7 +566,7 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             try:
-                self.preflight_ready.emit(run_preflight())
+                _safe_emit(self.preflight_ready, run_preflight())
             # A daemon thread's uncaught exception has nowhere to go —
             # stderr is /dev/null when the app is launched detached (see
             # the journal.py aware/naive-datetime bug) — so this is the
@@ -556,7 +575,9 @@ class SDYControlCenter(QMainWindow):
             # (health.py already does).
             # pylint: disable-next=broad-except
             except Exception as err:  # noqa: BLE001
-                self.process_finished.emit("Preflight Error", str(err), True)
+                _safe_emit(
+                    self.process_finished, "Preflight Error", str(err), True
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -980,9 +1001,9 @@ class SDYControlCenter(QMainWindow):
                     # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)
                     detected = parse_game_logs("\n".join(lines))
-                    self.games_detected.emit(detected)
+                    _safe_emit(self.games_detected, detected)
                 except (subprocess.SubprocessError, OSError):
-                    self.games_detected.emit({})
+                    _safe_emit(self.games_detected, {})
             finally:
                 self._scan_games_busy = False
 
@@ -1039,9 +1060,9 @@ class SDYControlCenter(QMainWindow):
                 if tag in ("ALL", "STEAM"):
                     ents.extend(fetch_gamescope_logs(launches))
                 ents.sort(key=lambda x: x[0])
-                self.logs_ready.emit(ents, tag)
+                _safe_emit(self.logs_ready, ents, tag)
             except (subprocess.SubprocessError, OSError) as err:
-                self.logs_ready.emit([], f"ERROR:{err}")
+                _safe_emit(self.logs_ready, [], f"ERROR:{err}")
             finally:
                 self._logs_busy = False
 
@@ -1168,11 +1189,16 @@ class SDYControlCenter(QMainWindow):
                 Path(dest).write_text(
                     _build_support_report(), encoding="utf-8"
                 )
-                self.process_finished.emit(
-                    "Support Report", f"Saved: {dest}", False
+                _safe_emit(
+                    self.process_finished,
+                    "Support Report",
+                    f"Saved: {dest}",
+                    False,
                 )
             except OSError as err:
-                self.process_finished.emit("Save Error", str(err), True)
+                _safe_emit(
+                    self.process_finished, "Save Error", str(err), True
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1213,7 +1239,7 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             try:
-                self.service_status_ready.emit(get_service_status())
+                _safe_emit(self.service_status_ready, get_service_status())
             finally:
                 self._service_status_busy = False
 
@@ -1288,7 +1314,7 @@ class SDYControlCenter(QMainWindow):
                 subprocess.run(  # nosec B603
                     ["/usr/bin/pkexec", *cmd], check=True, timeout=300
                 )
-                self.process_finished.emit(ok_title, ok_msg, False)
+                _safe_emit(self.process_finished, ok_title, ok_msg, False)
             except subprocess.TimeoutExpired:
                 # pkexec's own PID is killed by subprocess.run(), but not
                 # any privileged grandchild it spawned (backup.py,
@@ -1315,12 +1341,15 @@ class SDYControlCenter(QMainWindow):
                     "(authentication may have taken too long) — you can "
                     "try again."
                 )
-                self.process_finished.emit(err_title, message, True)
+                _safe_emit(self.process_finished, err_title, message, True)
             except subprocess.CalledProcessError:
-                self.process_finished.emit(err_title, err_msg, True)
+                _safe_emit(self.process_finished, err_title, err_msg, True)
             except OSError as err:
-                self.process_finished.emit(
-                    err_title, f"Cannot launch pkexec: {err}", True
+                _safe_emit(
+                    self.process_finished,
+                    err_title,
+                    f"Cannot launch pkexec: {err}",
+                    True,
                 )
             finally:
                 if not timed_out:
@@ -1329,7 +1358,7 @@ class SDYControlCenter(QMainWindow):
                     # background thread — emit and let the main-thread
                     # slot (_on_pkexec_lock_released) do it, same as
                     # process_finished above.
-                    self.pkexec_lock_released.emit(lock_key)
+                    _safe_emit(self.pkexec_lock_released, lock_key)
 
         threading.Thread(target=worker, daemon=True).start()
 

@@ -119,6 +119,25 @@ def test_extract_game_name_returns_bare_name_unchanged():
 
 
 # ---------------------------------------------------------------------------
+# _safe_emit — swallows RuntimeError from a torn-down window's signal
+# ---------------------------------------------------------------------------
+
+
+def test_safe_emit_swallows_runtime_error():
+    signal = SimpleNamespace(
+        emit=lambda *a: (_ for _ in ()).throw(RuntimeError("deleted"))
+    )
+    control_center._safe_emit(signal, "a", "b")  # must not raise
+
+
+def test_safe_emit_forwards_args_on_success():
+    calls = []
+    signal = SimpleNamespace(emit=lambda *a: calls.append(a))
+    control_center._safe_emit(signal, "a", "b", True)
+    assert calls == [("a", "b", True)]
+
+
+# ---------------------------------------------------------------------------
 # _run_pkexec re-entrancy guard
 # ---------------------------------------------------------------------------
 
@@ -538,21 +557,18 @@ def test_run_pkexec_resets_guard_on_an_unforeseen_exception(monkeypatch):
     """Regression: the guard must reset on ANY outcome other than a
     timeout, not just the three explicitly-caught exception types —
     a `finally` guarantees this even for an exception this code doesn't
-    know to expect (e.g. a cross-thread Qt signal emit failing)."""
+    know to expect."""
     win = _FakeWindow()
     monkeypatch.setattr(
         control_center.threading, "Thread", _sync_thread_factory()
     )
 
     def fake_run(*_a, **_k):
-        return None
+        raise MemoryError("simulated unforeseen failure")
 
     monkeypatch.setattr(control_center.subprocess, "run", fake_run)
-    win.process_finished = SimpleNamespace(
-        emit=lambda *a: (_ for _ in ()).throw(RuntimeError("wrapped C/C++"))
-    )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(MemoryError):
         control_center.SDYControlCenter._run_pkexec(
             win,
             ["/bin/true"],
@@ -563,6 +579,44 @@ def test_run_pkexec_resets_guard_on_an_unforeseen_exception(monkeypatch):
             err_msg="generic failure",
         )
 
+    assert win._pkexec_busy == {"files": False}
+
+
+def test_run_pkexec_survives_emit_on_torn_down_window(monkeypatch):
+    """Regression: closing Control Center while a privileged operation is
+    still in flight (Backup/Restore can run for up to the 300s pkexec
+    budget) deletes the underlying Qt object; emitting on it then raises
+    RuntimeError. Before _safe_emit, only TimeoutExpired/
+    CalledProcessError/OSError were caught here — an uncaught RuntimeError
+    from process_finished.emit() propagated straight out of the worker,
+    the exact silent-vanish class already hardened in updater.py's own
+    workers."""
+    win = _FakeWindow()
+
+    def dying_emit(*_a):
+        raise RuntimeError("wrapped C/C++ object has been deleted")
+
+    win.process_finished = SimpleNamespace(emit=dying_emit)
+    win.pkexec_lock_released = SimpleNamespace(emit=dying_emit)
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    monkeypatch.setattr(
+        control_center.subprocess, "run", lambda *a, **k: None
+    )
+
+    # No exception escaping this call is the assertion: both dying emits
+    # (success path, then the lock-released signal in `finally`) must be
+    # swallowed rather than propagate.
+    control_center.SDYControlCenter._run_pkexec(
+        win,
+        ["/bin/true"],
+        lock_key="files",
+        ok_title="t",
+        ok_msg="m",
+        err_title="e",
+        err_msg="m2",
+    )
     assert win._pkexec_busy == {"files": False}
 
 
