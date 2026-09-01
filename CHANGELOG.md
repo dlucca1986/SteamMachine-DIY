@@ -624,6 +624,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   guaranteed invariant when nothing in code enforces that relationship — replaced with a
   description of this cycle's actual crash-skip mechanism. Found via the second full-file
   review pass (2026-09-02).
+- `sdy.py::_find_profile_by_id`: removed the unreachable `not appid` half of its guard —
+  the sole call site (`_get_profile_path`) only invokes this function inside
+  `if steam_appid:`, so that branch was dead code, not a real safety net. Found via the
+  second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
