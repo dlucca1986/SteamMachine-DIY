@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import control_center
 import pytest
+import utils
 
 # ---------------------------------------------------------------------------
 # _resolve_config_paths
@@ -799,6 +800,9 @@ class _FakeMessageBox:  # pylint: disable=too-few-public-methods
     def critical(self, *args):
         self._calls.append(("critical", args))
 
+    def warning(self, *args):
+        self._calls.append(("warning", args))
+
 
 def _atomic_save_harness(monkeypatch, tmp_path, content):
     calls = []
@@ -854,3 +858,69 @@ def test_atomic_save_accepts_empty_content(monkeypatch, tmp_path):
 
     assert written
     assert calls and calls[0][0] == "information"
+
+
+# ---------------------------------------------------------------------------
+# _show_completion_message — refreshes conf_root/games_conf_dir after a
+# restore relocates the SSoT's user_config key, and (the part a naive fix
+# would miss) actually invalidates get_ssot_var's module-level cache first
+# ---------------------------------------------------------------------------
+
+
+def test_show_completion_message_refreshes_stale_ssot_cache_on_success(
+    monkeypatch, tmp_path
+):
+    """Regression: get_ssot_var() caches the SSoT file after its first
+    read (restore.py runs as a separate pkexec'd process, so it can't
+    invalidate Control Center's in-process cache itself). Priming the
+    cache with the pre-restore value, then changing the file on disk
+    without calling clear_ssot_cache(), reproduces exactly what a restore
+    leaves behind - the old code kept self.conf_root pointed at the
+    stale directory until the app restarted."""
+    calls = []
+    monkeypatch.setattr(
+        control_center, "QMessageBox", _FakeMessageBox(calls)
+    )
+    ssot_path = tmp_path / "steamos_diy.conf"
+    old_root = tmp_path / "old_conf"
+    new_root = tmp_path / "relocated_conf"
+    monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(ssot_path))
+
+    ssot_path.write_text(f"user_config={old_root / 'config.yaml'}\n")
+    utils.clear_ssot_cache()
+    assert utils.get_ssot_var("user_config") == str(old_root / "config.yaml")
+
+    # Simulate restore.py (a separate process) overwriting the live SSoT
+    # file - Control Center's cache is still primed with the old value.
+    ssot_path.write_text(f"user_config={new_root / 'config.yaml'}\n")
+
+    win = SimpleNamespace(
+        conf_root=old_root, games_conf_dir=old_root / "games.d"
+    )
+    control_center.SDYControlCenter._show_completion_message(
+        win, "Restore Complete", "Restored!", False
+    )
+
+    assert win.conf_root == new_root
+    assert calls and calls[0][0] == "information"
+    utils.clear_ssot_cache()
+
+
+def test_show_completion_message_leaves_paths_untouched_on_error(
+    monkeypatch, tmp_path
+):
+    calls = []
+    monkeypatch.setattr(
+        control_center, "QMessageBox", _FakeMessageBox(calls)
+    )
+    stale_root = tmp_path / "stale"
+    win = SimpleNamespace(
+        conf_root=stale_root, games_conf_dir=stale_root / "games.d"
+    )
+
+    control_center.SDYControlCenter._show_completion_message(
+        win, "Restore Error", "restore.py failed.", True
+    )
+
+    assert win.conf_root == stale_root
+    assert calls and calls[0][0] == "warning"

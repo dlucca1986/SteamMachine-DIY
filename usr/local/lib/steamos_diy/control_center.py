@@ -81,6 +81,7 @@ from utils import (
     SSOT_CONF_PATH,
     USER_CONFIG_REL,
     VERSION,
+    clear_ssot_cache,
     get_ssot_var,
     spawn_native,
     write_atomic,
@@ -1180,8 +1181,20 @@ class SDYControlCenter(QMainWindow):
     def _show_completion_message(self, title, message, is_error):
         if is_error:
             QMessageBox.warning(self, title, message)
-        else:
-            QMessageBox.information(self, title, message)
+            return
+        # A successful restore can overwrite the SSoT's user_config/
+        # games_conf_dir keys, and get_ssot_var() caches the file after
+        # its first read - without a refresh, saves in the Global
+        # Options/Game Overrides tabs would keep targeting the stale
+        # pre-restore path until the app restarts. process_finished also
+        # fires for backup/vacuum/validate/export, where the SSoT never
+        # changes, so this is a harmless re-read there (small file,
+        # not a hot path).
+        clear_ssot_cache()
+        self.conf_root, self.games_conf_dir = _resolve_config_paths(
+            Path.home() / USER_CONFIG_REL
+        )
+        QMessageBox.information(self, title, message)
 
     def _on_pkexec_lock_released(self, lock_key: str) -> None:
         """Re-enable the button(s) tied to *lock_key* (main-thread slot)."""
