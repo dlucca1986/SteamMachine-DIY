@@ -602,6 +602,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   playable today). The filter silently dropped real journal-based launch detections for
   exactly those games instead of filtering actual noise. Removed the length floor. Found
   via the second full-file review pass (2026-09-02).
+- `control_center.py::edit_ssot_privileged`: called `subprocess.Popen` directly, unlike
+  the other 3 Maintenance-tab buttons (Switch to Steam/Konsole/Browse Config), which all
+  route through `spawn_native`'s `start_new_session=True` detachment. Kate/KWrite stayed
+  attached to Control Center's own process group instead of being properly detached. Now
+  routed through `_launch_or_warn`/`spawn_native` like its siblings. Found via the second
+  full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
