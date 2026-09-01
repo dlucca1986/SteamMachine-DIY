@@ -490,6 +490,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Added a small `_launch_or_warn(bin_path, argv)` wrapper and routed all 3 call sites
   through it. Found via the same cross-file-contracts review as the fixes above
   (2026-09-01).
+- `utils.py`/`restore.py`: `get_backup_mapping()`'s `"user/games_conf_dir"` entry was only
+  added when the *current* system's `games_conf_dir` diverges from its default nesting
+  under `user/config` — correct for `backup.py` (avoids double-archiving), but `restore.py`
+  computed its own mapping the same way, using the current pre-restore SSoT state rather
+  than whatever state the archive was actually made under. This matters for the real
+  backup/restore use case: a "parachute" restore after a from-scratch OS reinstall (system
+  failure, not a project update) lands back on the default SSoT, but the archive being
+  restored may have been made while `games_conf_dir` was relocated (e.g. to an SD card) —
+  the archive's member names are fixed at backup time regardless of the current system's
+  state, so without a matching mapping key those per-game override files were silently
+  dropped on restore, with no error since other members still matched. `get_backup_mapping()`
+  gained a `for_restore` keyword: when set, the entry is always included (a harmless no-op
+  match when the archive's own `games_conf_dir` was nested, the common case) — `backup.py`'s
+  own call is unaffected, and `restore.py`'s `_prepare_restore` now passes
+  `for_restore=True`. `system/next_session` was left as-is (a fixed system path, not a
+  user-facing "where are my files" setting, so not similarly relocation-sensitive in
+  practice). Found via a dedicated cross-file-contracts review across the full 11-file
+  production `.py` tree (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
