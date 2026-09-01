@@ -148,6 +148,19 @@ deploy_files() {
                 install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
                 warn "SSoT template changed: review ${SSOT_CONF}.new"
             fi
+        elif [ -f "$SSOT_CONF" ]; then
+            # A plain (non --update) run on top of an already-installed
+            # system: same "don't silently clobber user edits" risk as
+            # the YAML configs below, so it gets the same confirm prompt
+            # instead of overwriting unconditionally.
+            warn "Existing SSoT config found at $SSOT_CONF"
+            read -r -p "Overwrite it with the template? Your customizations will be lost. (y/N): " overwrite_ssot
+            if [[ "$overwrite_ssot" =~ ^[Yy]$ ]]; then
+                info "Overwriting SSoT as requested..."
+                install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
+            else
+                info "Preserving existing SSoT config."
+            fi
         else
             info "Patching SSoT with User Home: $USER_HOME"
             install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
@@ -282,10 +295,7 @@ setup_shim_links() {
 # --- 5. Boot & Systemd Configuration ---
 setup_systemd_lockdown() {
     info "Configuring Systemd for Console Lockdown (TTY1)..."
-    
-    # Prevent Getty from interfering with Gamescope on TTY1
-    systemctl mask getty@tty1.service
-    
+
     # Deploy and personalize the main service
     if [ -f etc/systemd/system/steamos_diy.service ]; then
         cp -f etc/systemd/system/steamos_diy.service "$SERVICE_FILE"
@@ -297,6 +307,18 @@ setup_systemd_lockdown() {
     systemctl daemon-reload
     systemctl enable steamos_diy.service
     systemctl set-default graphical.target
+
+    # Mask Getty on TTY1 (so it can't interfere with Gamescope) only AFTER
+    # the replacement session launcher is confirmed enabled -- masking
+    # first (the previous order) meant a missing service file or a failed
+    # `systemctl enable` above (either aborts the script under
+    # set -eo pipefail) left TTY1 masked with no working replacement,
+    # requiring a manual `systemctl unmask` from another VT/SSH to
+    # recover. uninstall.sh's own cleanup_services() already applies this
+    # same "confirm the safe state first" discipline in the other
+    # direction (unmask/enable Getty before touching anything else).
+    info "Locking down TTY1 (Getty) now that the session launcher is active..."
+    systemctl mask getty@tty1.service
 }
 
 # --- 6. Cleanup ---
