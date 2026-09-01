@@ -527,6 +527,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `try/except OSError`, logs `RESTORE_WRITE_FAIL`, returns `False`, same pattern already
   used by `_restore_link` and `_extract_member`'s chmod guard. Found via the second
   full-file review pass, cross-confirmed independently by 2 different agents (2026-09-02).
+- `utils.py`: `_load_ssot_cache()` only caught `OSError` while iterating the SSoT file,
+  unlike its siblings `read_session_target`/`load_yaml_safe` (both already catch
+  `UnicodeDecodeError` too). Since `get_ssot_var()` is called from virtually every module
+  (including `jlog()` itself), a hand-edited SSoT conf saved with a non-UTF-8 byte would
+  crash the very first `get_ssot_var()` call anywhere instead of degrading. Now also
+  catches `UnicodeDecodeError`. Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
