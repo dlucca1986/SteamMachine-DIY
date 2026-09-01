@@ -577,6 +577,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   path with a raw traceback instead of the documented graceful degrade. Same
   "hand-edited config crashes the boot path" class already fixed repeatedly elsewhere.
   Found via the second full-file review pass (2026-09-02).
+- `journal.py::filter_game_journal_lines`: `chdir_marker` had no trailing boundary
+  character, so `home="/home/deck"` false-positive-matched a chdir into a DIFFERENT
+  user's home, `"/home/deck2/..."`. Added a trailing `"/"`, same boundary reasoning
+  already used by `restore.py::_allowed_prefixes` (`"/etcfoo"` must not match `"/etc"`).
+  Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
