@@ -564,6 +564,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   config dir. Now falls back to the default when `os.path.dirname()` returns empty,
   matching `get_ssot_num`'s own degrade-safely contract. Found via the second full-file
   review pass (2026-09-02).
+- `session_launch.py`: `_schedule_post_start_cmds`'s daemon thread had no link to session
+  outcome — it fired its configured commands even after `_monitor_process` detected an
+  early crash and `_handle_recovery` had already switched to desktop. Added a
+  `threading.Event`, set by `_run_session` the moment a crash is detected, checked by the
+  daemon thread once after its delay elapses before firing anything. Found via the second
+  full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
