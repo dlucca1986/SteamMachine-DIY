@@ -463,6 +463,18 @@ def get_backup_mapping(
             os.path.join(default_conf_dir, CONFIG_FILE_NAME),
         )
     )
+    if not conf_dir:
+        # A hand-edited user_config with no directory component (e.g. a
+        # bare "config.yaml") makes os.path.dirname() return "".
+        # os.path.realpath("") resolves to the process's CURRENT WORKING
+        # DIRECTORY, not a config path — restore.py's _allowed_prefixes
+        # would otherwise add that unmodified to its allow-list of
+        # privileged (root, under pkexec) write destinations. Degrade to
+        # the same default used when user_config is unset entirely,
+        # matching get_ssot_num's own degrade-safely contract, instead of
+        # silently widening the restore write surface to an unpredictable
+        # cwd.
+        conf_dir = default_conf_dir
     mapping = {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,

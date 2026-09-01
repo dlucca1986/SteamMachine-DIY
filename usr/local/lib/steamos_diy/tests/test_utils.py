@@ -136,6 +136,24 @@ def test_get_backup_mapping_follows_relocated_user_config(
     assert mapping["user/config"] == str(custom_dir)
 
 
+def test_get_backup_mapping_degrades_when_user_config_has_no_dirname(
+    tmp_path, set_ssot
+):
+    """Regression: a hand-edited user_config with no directory component
+    (a bare "config.yaml") made os.path.dirname() return "" -- passed
+    unmodified to restore.py's _allowed_prefixes, os.path.realpath("")
+    resolves to the process's CURRENT WORKING DIRECTORY, silently
+    widening the privileged (root, under pkexec) restore write allow-list
+    to an unpredictable cwd instead of degrading to the default config
+    dir (found via the second full-file review pass, 2026-09-02)."""
+    set_ssot(user_config="config.yaml")
+    home = tmp_path / "home"
+
+    mapping = utils.get_backup_mapping(str(home))
+
+    assert mapping["user/config"] == str(home / ".config/steamos_diy")
+
+
 def test_get_backup_mapping_adds_games_dir_entry_when_user_config_moves(
     tmp_path, set_ssot
 ):
