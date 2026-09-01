@@ -639,6 +639,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `systemctl enable` left TTY1 masked with no working replacement. Reordered to mask
   Getty only after the replacement is confirmed enabled, matching the "confirm safe state
   first" discipline `uninstall.sh`'s own `cleanup_services()` already applies in reverse.
+- `steamos_diy_core.c::c_write_atomic`: two gaps found by the same deferred-files review.
+  `open(tmp_path, ...)` had no `O_NOFOLLOW`, unlike the equivalent Python-side TOCTOU
+  guard already applied this cycle (`restore.py::_write_member`) — a symlink planted at
+  `tmp_path` by another process running as the same user would be followed and written
+  through instead of refused; no current caller crosses a privilege boundary, but this is
+  an exported, generically-loaded primitive with no privilege check of its own, so it
+  shouldn't rely on today's call graph to stay safe. `fdatasync(fd)`'s return value was
+  discarded before `rename()`, unlike the function's own header comment promising
+  "hardware durability" — now logs a `WARNING` via syslog on failure (matching the
+  existing rename-failure log pattern) without changing control flow. Verified by
+  rebuilding `libcore.so` with `install.sh`'s exact compile command, re-running
+  `scripts/audit-c-core.sh`/`scripts/audit-ctypes-abi.py` (no ABI change), and a
+  functional smoke test confirming normal writes still work and a symlinked tmp path is
+  now refused without touching its target.
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
