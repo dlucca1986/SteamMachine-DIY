@@ -473,6 +473,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   fires harmlessly for backup/vacuum/validate/export success, where the SSoT never
   changes (a cheap re-read of a small file, not a hot path). Found via the same
   cross-file-contracts review as the three fixes above (2026-09-01).
+- `control_center.py`: every daemon-worker `signal.emit()` call lacked the `RuntimeError`
+  guard `updater.py`'s own workers already have. Closing Control Center while a privileged
+  operation is still in flight (Backup/Restore can run for up to the 300s pkexec budget)
+  deletes the underlying Qt object; emitting on it then raises `RuntimeError`, which
+  propagated uncaught out of the worker thread — silently, since stderr is `/dev/null` when
+  the app is launched detached, the same silent-vanish class already hardened elsewhere.
+  Added a shared `_safe_emit(signal, *args)` helper and routed all 13 emit() call sites
+  through it (`_run_pkexec`'s worker, `validate_config`, `refresh_detected_games`,
+  `load_logs`, `export_support_log`, `_refresh_service_status`). Found via the same
+  cross-file-contracts review as the fixes above (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
