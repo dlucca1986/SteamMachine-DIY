@@ -318,3 +318,32 @@ def test_run_session_missing_binary_keeps_initial_target(tmp_path):
 
     assert target == "steam"
     assert ret_code == 127
+
+
+def test_run_session_survives_embedded_null_byte_in_argv(
+    tmp_path, monkeypatch
+):
+    """Regression: subprocess.Popen raises ValueError, not OSError, for a
+    malformed argv element (e.g. an embedded null byte from a
+    hand-edited flags/env_vars entry) -- uncaught by the previous
+    except OSError, crashing the whole session launcher instead of
+    degrading like every other malformed-config path in this file
+    (found via the second full-file review pass, 2026-09-02)."""
+
+    def raising_popen(*_a, **_k):
+        raise ValueError("embedded null byte")
+
+    monkeypatch.setattr(session_launch.subprocess, "Popen", raising_popen)
+    proc_holder = [None]
+
+    target, ret_code = session_launch._run_session(
+        ["game", "a\x00b"],
+        str(tmp_path / "next_session"),
+        "steam",
+        1.0,
+        proc_holder,
+        [],
+    )
+
+    assert target == "steam"
+    assert ret_code == 1

@@ -11,6 +11,7 @@ bug where searching for AppID "220" also matched a profile declaring
 "SDY_ID: 2201290") and a future edit could silently reintroduce that
 class of bug without a regression test pinning the exact-match contract."""
 
+import pytest
 import sdy
 
 
@@ -56,6 +57,37 @@ def test_build_command_well_formed_unaffected():
         "-foo",
         "bar",
     ]
+
+
+# ---------------------------------------------------------------------------
+# _exec_game — degrade instead of crashing on a malformed argv
+# ---------------------------------------------------------------------------
+
+
+def test_exec_game_survives_embedded_null_byte(monkeypatch):
+    """Regression: os.execvpe raises ValueError, not OSError, for a
+    malformed argv element (e.g. an embedded null byte from a
+    hand-edited GAME_WRAPPER/GAME_EXTRA_ARGS entry) -- uncaught by the
+    previous except OSError, crashing sdy.py's run() with a raw
+    traceback instead of the documented graceful exit(1) (found via the
+    second full-file review pass, 2026-09-02)."""
+
+    def raising_execvpe(*_a, **_k):
+        raise ValueError("embedded null byte")
+
+    monkeypatch.setattr(sdy.os, "execvpe", raising_execvpe)
+    logged = []
+    monkeypatch.setattr(
+        sdy,
+        "jlog",
+        lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        sdy._exec_game(["game", "a\x00b"], "game", None)
+
+    assert exc_info.value.code == 1
+    assert any("EXECUTION_FAILED" in msg for _tag, msg, _lvl in logged)
 
 
 # ---------------------------------------------------------------------------

@@ -293,6 +293,16 @@ def _run_session(
         notify("FATAL: Cannot launch session!")
         ret_code = 1
         target = initial_target
+    except ValueError as err:
+        # subprocess.Popen raises ValueError, not OSError, for a
+        # malformed argv element (e.g. an embedded null byte from a
+        # hand-edited flags/env_vars entry) -- same class of bug as
+        # sdy.py::_exec_game's equivalent os.execvpe gap, fixed the
+        # same way.
+        jlog("CORE", f"BAD_LAUNCH_ARGV: {err}", level="ERROR")
+        notify("FATAL: Cannot launch session!")
+        ret_code = 1
+        target = initial_target
     finally:
         proc_holder[0] = None
     return target, ret_code

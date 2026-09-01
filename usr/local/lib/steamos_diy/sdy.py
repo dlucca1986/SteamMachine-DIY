@@ -196,7 +196,10 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
 def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     """execvpe the game, replacing this process. Never returns on success.
 
-    Exits with 1 on binary-not-found, permission denied, or OS failure.
+    Exits with 1 on binary-not-found, permission denied, OS failure, or a
+    malformed argv (os.execvpe raises ValueError, not OSError, for an
+    embedded null byte — e.g. from a hand-edited GAME_WRAPPER/
+    GAME_EXTRA_ARGS entry).
     """
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
@@ -204,7 +207,7 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
         # extra args), not from network or other-user input — same trust
         # level as a shell alias the user wrote for themselves.
         os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
-    except OSError as err:
+    except (OSError, ValueError) as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
         sys.exit(1)
 
