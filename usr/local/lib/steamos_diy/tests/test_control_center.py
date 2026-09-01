@@ -119,22 +119,39 @@ def test_extract_game_name_returns_bare_name_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# _safe_emit — swallows RuntimeError from a torn-down window's signal
+# _launch_or_warn — reports a spawn_native() exec failure instead of the
+# button silently doing nothing (Switch to Steam/Konsole/Browse Config)
 # ---------------------------------------------------------------------------
 
 
-def test_safe_emit_swallows_runtime_error():
-    signal = SimpleNamespace(
-        emit=lambda *a: (_ for _ in ()).throw(RuntimeError("deleted"))
-    )
-    control_center._safe_emit(signal, "a", "b")  # must not raise
-
-
-def test_safe_emit_forwards_args_on_success():
+def test_launch_or_warn_reports_exec_failure(monkeypatch):
     calls = []
-    signal = SimpleNamespace(emit=lambda *a: calls.append(a))
-    control_center._safe_emit(signal, "a", "b", True)
-    assert calls == [("a", "b", True)]
+    monkeypatch.setattr(control_center, "spawn_native", lambda *a: 0)
+    monkeypatch.setattr(
+        control_center, "QMessageBox", _FakeMessageBox(calls)
+    )
+    win = SimpleNamespace()
+
+    control_center.SDYControlCenter._launch_or_warn(
+        win, "/usr/bin/konsole", ["/usr/bin/konsole"]
+    )
+
+    assert calls and calls[0][0] == "critical"
+
+
+def test_launch_or_warn_silent_on_success(monkeypatch):
+    calls = []
+    monkeypatch.setattr(control_center, "spawn_native", lambda *a: 1234)
+    monkeypatch.setattr(
+        control_center, "QMessageBox", _FakeMessageBox(calls)
+    )
+    win = SimpleNamespace()
+
+    control_center.SDYControlCenter._launch_or_warn(
+        win, "/usr/bin/konsole", ["/usr/bin/konsole"]
+    )
+
+    assert not calls
 
 
 # ---------------------------------------------------------------------------

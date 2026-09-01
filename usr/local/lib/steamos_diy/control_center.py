@@ -479,7 +479,7 @@ class SDYControlCenter(QMainWindow):
         tools = [
             (
                 "🎮 Switch to Steam (Game Mode)",
-                lambda: spawn_native(
+                lambda: self._launch_or_warn(
                     PYTHON3_BIN,
                     _core_script_argv("session_select.py", "steam"),
                 ),
@@ -496,12 +496,12 @@ class SDYControlCenter(QMainWindow):
             ("🔄 Restore from Archive", self.run_restore, "files"),
             (
                 "🖥️ Open Konsole Terminal",
-                lambda: spawn_native(KONSOLE_BIN, [KONSOLE_BIN]),
+                lambda: self._launch_or_warn(KONSOLE_BIN, [KONSOLE_BIN]),
                 None,
             ),
             (
                 "📂 Browse Config Folder",
-                lambda: spawn_native(
+                lambda: self._launch_or_warn(
                     "/usr/bin/xdg-open",
                     ["/usr/bin/xdg-open", str(self.conf_root)],
                 ),
@@ -536,6 +536,19 @@ class SDYControlCenter(QMainWindow):
         layout.addWidget(QLabel("<b>Documentation & Support</b>"))
         layout.addWidget(wiki_btn)
         self.maint_tab.setLayout(layout)
+
+    def _launch_or_warn(self, bin_path: str, argv: list[str]) -> None:
+        """spawn_native() wrapper for unguarded Maintenance-tab buttons.
+
+        spawn_native() returns 0 on exec failure (missing binary, broken
+        PATH) — previously discarded here, so those buttons silently did
+        nothing. Reports it instead, matching updater.py's own pid==0
+        handling for the same call.
+        """
+        if spawn_native(bin_path, argv) == 0:
+            QMessageBox.critical(
+                self, "Launch Failed", f"Could not start {bin_path}."
+            )
 
     def edit_ssot_privileged(self):
         """Open SSoT in Kate, falling back to KWrite."""
