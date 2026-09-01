@@ -540,6 +540,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   out of a Qt slot instead of degrading. All three now catch `(OSError, UnicodeDecodeError)`
   and show a status-bar message, matching `beautify_yaml`'s existing lightweight degrade
   pattern. Found via the second full-file review pass (2026-09-02).
+- `backup.py`: `get_ssot_num()` already degrades a non-numeric SSoT value, but `"nan"`/
+  `"inf"` parse as valid floats (`float()` accepts them) — `int()` is what actually rejects
+  them (`nan` raises `ValueError`, `inf` raises `OverflowError`), uncaught in
+  `_prune_old_archives`. This runs AFTER `run_backup()` already logged `BACKUP_SUCCESS`, so
+  the crash reported a false "Backup Error" for an archive that's actually fine. Now
+  wrapped in `try/except (ValueError, OverflowError)`, degrades to `_BACKUP_KEEP_DEFAULT`
+  with a `BAD_BACKUP_KEEP` warning log. Found via the second full-file review pass
+  (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
