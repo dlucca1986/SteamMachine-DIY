@@ -758,12 +758,14 @@ class SDYControlCenter(QMainWindow):
                 self.global_save_btn,
                 self.global_temp_btn,
                 self.global_hl,
+                self.combo_global_files,
             )
         return (
             self.game_editor,
             self.game_save_btn,
             self.game_temp_btn,
             self.game_hl,
+            self.combo_games,
         )
 
     def _template_path_for(self, context):
@@ -780,7 +782,7 @@ class SDYControlCenter(QMainWindow):
         return self.conf_root / fname
 
     def _enter_template_mode(self, context, state, widgets):
-        editor, save_btn, tmp_btn, hl = widgets
+        editor, save_btn, tmp_btn, hl, target_combo = widgets
         t_path = self._template_path_for(context)
         if not t_path.exists():
             return
@@ -789,15 +791,25 @@ class SDYControlCenter(QMainWindow):
         tmp_btn.setText("⬅️ Back to Editor")
         state["is_template"] = True
         save_btn.setEnabled(False)
+        # Switching the target file mid-preview would trigger
+        # load_global_file/load_game_file (wired to the combo's own
+        # change signal) while is_template/cache still point at the
+        # PREVIOUS file — exiting template mode afterwards would then
+        # restore that stale cache over the newly-selected file's
+        # content, and a Save would write it to the wrong path.
+        # Disabling the combo for the duration of the preview removes
+        # the desync entirely instead of reconciling it after the fact.
+        target_combo.setEnabled(False)
         hl.rehighlight()
         editor.document().setModified(False)
 
     def _exit_template_mode(self, state, widgets):
-        editor, save_btn, tmp_btn, hl = widgets
+        editor, save_btn, tmp_btn, hl, target_combo = widgets
         editor.setPlainText(state["cache"])
         tmp_btn.setText("📄 View Template")
         state["is_template"] = False
         save_btn.setEnabled(True)
+        target_combo.setEnabled(True)
         hl.rehighlight()
         editor.document().setModified(False)
 
