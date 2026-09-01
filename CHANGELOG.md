@@ -533,6 +533,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   (including `jlog()` itself), a hand-edited SSoT conf saved with a non-UTF-8 byte would
   crash the very first `get_ssot_var()` call anywhere instead of degrading. Now also
   catches `UnicodeDecodeError`. Found via the second full-file review pass (2026-09-02).
+- `control_center.py`: `load_global_file`, `load_game_file`, and `_enter_template_mode`
+  all called `Path.read_text(encoding="utf-8")` with zero try/except, unlike every other
+  hand-edited-file reader in this codebase. A non-UTF-8 game profile or global config (or
+  a TOCTOU delete after the `exists()` check) crashed the load with an uncaught exception
+  out of a Qt slot instead of degrading. All three now catch `(OSError, UnicodeDecodeError)`
+  and show a status-bar message, matching `beautify_yaml`'s existing lightweight degrade
+  pattern. Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
