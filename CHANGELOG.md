@@ -556,6 +556,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   come from Steam/gamescope's own captured output, not this project's `jlog()` tags. Added
   `-n 5000` instead — generous enough to still catch real launches over 24h, but bounded.
   Found via the second full-file review pass (2026-09-02).
+- `utils.py::get_backup_mapping`: a hand-edited `user_config` with no directory component
+  (a bare `"config.yaml"`) made `os.path.dirname()` return `""`. Passed unmodified to
+  `restore.py`'s `_allowed_prefixes`, `os.path.realpath("")` resolves to the process's
+  CURRENT WORKING DIRECTORY, silently widening the privileged (root, under `pkexec`)
+  restore write allow-list to an unpredictable cwd instead of degrading to the default
+  config dir. Now falls back to the default when `os.path.dirname()` returns empty,
+  matching `get_ssot_num`'s own degrade-safely contract. Found via the second full-file
+  review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
