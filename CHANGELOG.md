@@ -518,6 +518,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   combo, disabled for the duration of the preview in `_enter_template_mode` and re-enabled
   in `_exit_template_mode`. Found via a second full-file review pass across the same
   11-file production tree (2026-09-02).
+- `restore.py`: `_write_member`'s `os.makedirs`/`shutil.copyfileobj`/`os.replace` calls had
+  no try/except at all. Any `OSError` there (e.g. a crafted archive member whose target's
+  parent path collides with an existing file from another mapping key, or `ENOSPC`
+  mid-copy) escaped all the way to `_execute_restore`'s archive-level `except`, aborting
+  the ENTIRE restore — contradicting `run_restore`'s own documented per-member-isolation
+  contract ("Per-member rejections are logged but non-fatal"). Now wrapped in
+  `try/except OSError`, logs `RESTORE_WRITE_FAIL`, returns `False`, same pattern already
+  used by `_restore_link` and `_extract_member`'s chmod guard. Found via the second
+  full-file review pass, cross-confirmed independently by 2 different agents (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
