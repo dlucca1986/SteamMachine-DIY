@@ -357,7 +357,12 @@ def _iter_link_pairs(name: str, text: str):
 
 
 def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
-    """Recreate one symlink after allow-list validation of both ends."""
+    """Recreate one symlink after allow-list validation of both ends.
+
+    Atomic via tmp symlink + os.replace, same reasoning as _write_member:
+    a kill between unlink and symlink would leave a critical shim (e.g. a
+    session-select polkit helper) missing entirely rather than stale.
+    """
     if not (
         _is_path_safe(link, allowed) and _is_path_safe(target, allowed)
     ):
@@ -367,11 +372,13 @@ def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
             level="WARN",
         )
         return
+    tmp = f"{link}.sdy_restore_tmp"
     try:
         os.makedirs(os.path.dirname(link), exist_ok=True)
-        if os.path.lexists(link):
-            os.unlink(link)
-        os.symlink(target, link)
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        os.symlink(target, tmp)
+        os.replace(tmp, link)
     except OSError as err:
         jlog("SYSTEM", f"RESTORE_LINK_FAIL: {link} - {err}", level="WARN")
 

@@ -1,6 +1,7 @@
 """Tests for restore.py: atomic member writes and target-resolution safety."""
 
 import io
+import os
 import subprocess
 import tarfile
 from pathlib import Path
@@ -85,6 +86,60 @@ def test_write_member_directory_entry(tmp_path):
     restore._write_member(None, info, str(target))
 
     assert target.is_dir()
+
+
+# ---------------------------------------------------------------------------
+# _restore_link — atomic tmp-symlink + rename swap
+# ---------------------------------------------------------------------------
+
+
+def test_restore_link_creates_new_symlink(tmp_path):
+    link = tmp_path / "shim"
+    target = str(tmp_path / "real_target")
+    allowed = (str(tmp_path) + "/",)
+
+    restore._restore_link(str(link), target, allowed)
+
+    assert link.is_symlink()
+    assert os.readlink(link) == target
+    assert not (tmp_path / "shim.sdy_restore_tmp").exists()
+
+
+def test_restore_link_replaces_existing_symlink_via_os_replace(
+    tmp_path, monkeypatch
+):
+    """Pins the mechanism, not just the end state: the pre-fix code did
+    os.unlink() then os.symlink() as two separate syscalls, so a kill in
+    between left the link path missing entirely rather than stale. A
+    passing test that only checks the final readlink() would pass against
+    that old code too — assert os.replace() is actually what swaps it,
+    same discipline as _write_member's own atomicity test above."""
+    link = tmp_path / "shim"
+    link.symlink_to(tmp_path / "old_target")
+    new_target = str(tmp_path / "new_target")
+    allowed = (str(tmp_path) + "/",)
+    calls = []
+    real_replace = restore.os.replace
+
+    def spy_replace(src, dst):
+        calls.append((src, dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(restore.os, "replace", spy_replace)
+
+    restore._restore_link(str(link), new_target, allowed)
+
+    assert calls == [(f"{link}.sdy_restore_tmp", str(link))]
+    assert os.readlink(link) == new_target
+    assert not (tmp_path / "shim.sdy_restore_tmp").exists()
+
+
+def test_restore_link_rejects_unsafe_target_path(tmp_path):
+    link = tmp_path / "shim"
+    restore._restore_link(
+        str(link), "/root/outside/allowlist", (str(tmp_path) + "/",)
+    )
+    assert not link.exists()
 
 
 # ---------------------------------------------------------------------------
