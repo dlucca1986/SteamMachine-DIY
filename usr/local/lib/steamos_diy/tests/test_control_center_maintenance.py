@@ -4,9 +4,11 @@
 Split out of test_control_center.py (which was already at the pylint
 too-many-lines ceiling) rather than trimming other tests to make room."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import control_center
+from test_control_center import _sync_thread_factory
 
 
 class _FakeMessageBox:  # pylint: disable=too-few-public-methods
@@ -68,3 +70,47 @@ def test_edit_ssot_privileged_reports_spawn_failure(monkeypatch):
     win.edit_ssot_privileged()
 
     assert calls and calls[0][0] == "critical"
+
+
+# ---------------------------------------------------------------------------
+# export_support_log — re-entrancy guard (two fast clicks on the SAME
+# destination could otherwise race two workers writing to that file)
+# ---------------------------------------------------------------------------
+
+
+def test_export_support_log_skips_while_already_busy():
+    """Regression: export_support_log had no re-entrancy guard at all,
+    unlike refresh_detected_games/load_logs's established _busy pattern
+    (found via the second full-file review pass, 2026-09-02)."""
+    win = SimpleNamespace(_export_busy=True)
+
+    # Must return before ever touching QFileDialog/threading — no
+    # AttributeError on either (neither is set on this bare fake) means
+    # the guard returned early as intended.
+    control_center.SDYControlCenter.export_support_log(win)
+
+
+def test_export_support_log_resets_guard_after_completion(
+    monkeypatch, tmp_path
+):
+    dest = str(tmp_path / "support.log")
+    monkeypatch.setattr(
+        control_center.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: (dest, ""),
+    )
+    monkeypatch.setattr(
+        control_center, "_build_support_report", lambda: "report"
+    )
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    win = SimpleNamespace(
+        _export_busy=False,
+        process_finished=SimpleNamespace(emit=lambda *a: None),
+    )
+
+    control_center.SDYControlCenter.export_support_log(win)
+
+    assert win._export_busy is False
+    assert Path(dest).read_text(encoding="utf-8") == "report"

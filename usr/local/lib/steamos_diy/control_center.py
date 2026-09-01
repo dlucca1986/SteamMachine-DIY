@@ -313,6 +313,15 @@ class SDYControlCenter(QMainWindow):
         # CLAUDE.md checklist item 17).
         self._logs_busy = False
 
+        # Guards export_support_log against a second export starting
+        # while one is still in flight — the save dialog is modal, so
+        # this only matters for two fast successive clicks picking the
+        # SAME destination path; without it, two worker threads could
+        # race writing to that file with plain write_text() (not the
+        # atomic write_atomic() path, since this is a diagnostic export,
+        # not a config file).
+        self._export_busy = False
+
         # Populated by init_maint_tab; declared here so pylint sees it
         # set in __init__ like every other instance attribute.
         self._lock_key_buttons: dict[str, list[QPushButton]] = {}
@@ -1241,8 +1250,11 @@ class SDYControlCenter(QMainWindow):
 
         Unlike the clipboard copy, this does not export the on-screen
         view: the report is rebuilt from scratch in a worker thread so
-        it is complete regardless of the active filter.
+        it is complete regardless of the active filter. Skips the export
+        if one is already in flight (see _export_busy's own comment).
         """
+        if self._export_busy:
+            return
         now = datetime.now().astimezone()
         default = f"sdy_support_{now:%Y%m%d_%H%M%S}.log"
         dest, _ = QFileDialog.getSaveFileName(
@@ -1250,6 +1262,7 @@ class SDYControlCenter(QMainWindow):
         )
         if not dest:
             return
+        self._export_busy = True
 
         def worker() -> None:
             try:
@@ -1266,6 +1279,8 @@ class SDYControlCenter(QMainWindow):
                 _safe_emit(
                     self.process_finished, "Save Error", str(err), True
                 )
+            finally:
+                self._export_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
 
