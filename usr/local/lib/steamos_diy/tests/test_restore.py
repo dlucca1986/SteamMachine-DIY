@@ -88,6 +88,60 @@ def test_write_member_directory_entry(tmp_path):
     assert target.is_dir()
 
 
+def test_write_member_survives_makedirs_failure(tmp_path):
+    """Regression: os.makedirs(dirname(target), ...) had no try/except at
+    all — a crafted archive entry whose target's parent path collides
+    with an existing file from another mapping key (e.g. a member named
+    "system/steamos_diy.conf/evil" when "system/steamos_diy.conf" is a
+    plain-file mapping key) raised NotADirectoryError uncaught, which
+    escaped all the way to _execute_restore's archive-level except and
+    aborted the ENTIRE restore instead of just rejecting this one member
+    (found via the second full-file review pass, 2026-09-02)."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("i am a file, not a directory")
+    target = blocker / "evil"
+
+    with _tar_with_member("m", b"payload") as tar:
+        ok = restore._write_member(tar, tar.getmember("m"), str(target))
+
+    assert ok is False
+    assert blocker.read_text() == "i am a file, not a directory"
+
+
+def test_write_member_directory_entry_survives_collision(tmp_path):
+    """Same isolation guarantee as the makedirs test above, for the
+    isdir() branch: a directory member colliding with an existing
+    regular file raises FileExistsError (exist_ok only suppresses an
+    already-a-directory collision, not a file one)."""
+    target = tmp_path / "somedir"
+    target.write_text("i am a file, not a directory")
+    info = tarfile.TarInfo(name="d")
+    info.type = tarfile.DIRTYPE
+
+    ok = restore._write_member(None, info, str(target))
+
+    assert ok is False
+    assert target.read_text() == "i am a file, not a directory"
+
+
+def test_write_member_survives_copy_failure(tmp_path, monkeypatch):
+    """Regression: shutil.copyfileobj()/os.replace() had no try/except —
+    an OSError mid-copy (e.g. ENOSPC on a full disk) escaped the same way
+    as the makedirs failure above."""
+    target = tmp_path / "config.yaml"
+
+    def broken_copy(_src, _dest):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(restore.shutil, "copyfileobj", broken_copy)
+
+    with _tar_with_member("m", b"payload") as tar:
+        ok = restore._write_member(tar, tar.getmember("m"), str(target))
+
+    assert ok is False
+    assert not target.exists()
+
+
 # ---------------------------------------------------------------------------
 # _restore_link — atomic tmp-symlink + rename swap
 # ---------------------------------------------------------------------------

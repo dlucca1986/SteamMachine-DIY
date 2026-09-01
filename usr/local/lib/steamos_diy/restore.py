@@ -198,19 +198,33 @@ def _ensure_safe_target(target: str) -> bool:
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
 ) -> bool:
-    """Write member to target via tmp+rename. False if tmp is a symlink.
+    """Write member to target via tmp+rename. False on any failure (a
+    symlink planted at target's tmp write path, or an OSError from
+    makedirs/copy/replace).
 
     Atomic (target either holds the old content or the fully-written new
     one, never missing/truncated on a crash mid-write), and — like
     backup.py's archive write — os.replace also sidesteps ETXTBSY: it
     swaps the directory entry to a new inode instead of truncating the
     file in place, so replacing a currently-running binary still works.
-    """
-    if member.isdir():
-        os.makedirs(target, exist_ok=True)
-        return True
 
-    os.makedirs(os.path.dirname(target), exist_ok=True)
+    Per-member isolation is this function's own contract (see
+    run_restore's docstring): an OSError here (e.g. a crafted archive
+    entry whose parent path collides with an existing file from another
+    mapping key) must degrade to a rejected member, not escape to
+    _execute_restore's archive-level except and abort the whole restore.
+    """
+    try:
+        if member.isdir():
+            os.makedirs(target, exist_ok=True)
+            return True
+
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
 
     src = tar.extractfile(member)
     if src is None:
@@ -232,9 +246,15 @@ def _write_member(
             level="WARN",
         )
         return False
-    with src, os.fdopen(fd, "wb") as dest:
-        shutil.copyfileobj(src, dest)
-    os.replace(tmp, target)
+    try:
+        with src, os.fdopen(fd, "wb") as dest:
+            shutil.copyfileobj(src, dest)
+        os.replace(tmp, target)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
     return True
 
 
@@ -247,7 +267,8 @@ def _extract_member(
     user: str,
 ) -> bool:
     """Extract member to target; False on any per-member failure (a
-    pre-existing symlink at target/its tmp write path, or a chmod race).
+    pre-existing symlink at target/its tmp write path, a write I/O
+    error, or a chmod race).
 
     Per run_restore's own contract, a single member's failure must stay
     per-member (logged, skipped, restore continues) rather than escalate
