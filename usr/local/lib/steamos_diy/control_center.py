@@ -551,16 +551,18 @@ class SDYControlCenter(QMainWindow):
             )
 
     def edit_ssot_privileged(self):
-        """Open SSoT in Kate, falling back to KWrite."""
+        """Open SSoT in Kate, falling back to KWrite.
+
+        Routed through _launch_or_warn/spawn_native like the other
+        Maintenance-tab buttons, instead of its own bare subprocess.Popen:
+        spawn_native's start_new_session=True detaches the editor from
+        Control Center's own process group (a raw Popen here previously
+        didn't), so a signal delivered to Control Center's session can't
+        also reach Kate/KWrite.
+        """
         kate = "/usr/bin/kate"
         editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
-        try:
-            # The editor must keep running after this call returns — a
-            # `with` block would wait for it to close before continuing.
-            # pylint: disable=consider-using-with
-            subprocess.Popen([editor, SSOT_CONF_PATH])  # nosec B603
-        except OSError as err:
-            QMessageBox.critical(self, "Error", f"Failed to launch: {err}")
+        self._launch_or_warn(editor, [editor, SSOT_CONF_PATH])
 
     def cleanup_logs_privileged(self):
         """Vacuum journal via pkexec; emits process_finished."""
