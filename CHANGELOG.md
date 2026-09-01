@@ -595,6 +595,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the typed text before clearing and restores it via `setEditText()` if it doesn't already
   match one of the freshly repopulated items. Found via the second full-file review pass
   (2026-09-02).
+- `journal.py::parse_game_logs`: `_MIN_APPID_LEN = 3` discarded any ID under 3 digits as
+  "noise", but `extract_game_metadata` only ever matches an ID after a literal
+  `"gameID"`/`"AppID = "` token, and several of Valve's own early AppIDs are genuinely 1-2
+  digits (10 = Counter-Strike, 20 = Team Fortress Classic, 70 = Half-Life, all still
+  playable today). The filter silently dropped real journal-based launch detections for
+  exactly those games instead of filtering actual noise. Removed the length floor. Found
+  via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
