@@ -452,6 +452,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   symlink at a temp path first, then `os.replace()`s it onto the real link path, mirroring
   `_write_member`'s existing pattern. Found via the same cross-file-contracts review as the
   fix above (2026-09-01).
+- `restore.py`: `_extract_member`'s `os.chmod()` call was the only step not wrapped in its
+  own error handling — an `OSError` there (e.g. a race where the target is removed or has
+  its permissions changed between `_write_member`'s `os.replace()` and this `chmod`)
+  propagated all the way up into `_execute_restore`'s archive-level `except`, which exits 1
+  and aborts the *entire* restore — contradicting `run_restore`'s own docstring, which
+  promises per-member rejections are logged but non-fatal, and inconsistent with every
+  other per-member failure path in this file (symlink guards, allow-list checks), which
+  already degrades gracefully. Now logs `RESTORE_CHMOD_FAIL` and returns `False` for that
+  member only, same as the others. Found via the same cross-file-contracts review as the
+  two fixes above (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
