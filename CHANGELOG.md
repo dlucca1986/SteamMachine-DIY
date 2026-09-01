@@ -483,6 +483,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   through it (`_run_pkexec`'s worker, `validate_config`, `refresh_detected_games`,
   `load_logs`, `export_support_log`, `_refresh_service_status`). Found via the same
   cross-file-contracts review as the fixes above (2026-09-01).
+- `control_center.py`: "Switch to Steam", "Open Konsole Terminal", and "Browse Config
+  Folder" all discarded `spawn_native()`'s return value, unlike `updater.py`'s own call to
+  the same function (which checks `pid == 0` and shows a warning). A missing binary or
+  broken `PATH` made the button click silently do nothing, with zero user-visible feedback.
+  Added a small `_launch_or_warn(bin_path, argv)` wrapper and routed all 3 call sites
+  through it. Found via the same cross-file-contracts review as the fixes above
+  (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
