@@ -628,6 +628,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the sole call site (`_get_profile_path`) only invokes this function inside
   `if steam_appid:`, so that branch was dead code, not a real safety net. Found via the
   second full-file review pass (2026-09-02).
+- `install.sh`: two real gaps found extending the full-file review methodology to the
+  files deferred until this cycle (`install.sh`/`uninstall.sh`/`steamos_diy_core.c`,
+  never reviewed at this depth before). `deploy_files()`: a plain (non `--update`) run on
+  top of an already-installed system unconditionally overwrote the live SSoT config with
+  the template, unlike the YAML config deploy step right below it which already prompts
+  before overwriting — now gets the same confirm prompt. `setup_systemd_lockdown()`:
+  masked `getty@tty1.service` *before* confirming `steamos_diy.service` was successfully
+  deployed and enabled; under `set -eo pipefail` a missing service file or a failed
+  `systemctl enable` left TTY1 masked with no working replacement. Reordered to mask
+  Getty only after the replacement is confirmed enabled, matching the "confirm safe state
+  first" discipline `uninstall.sh`'s own `cleanup_services()` already applies in reverse.
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
