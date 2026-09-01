@@ -85,9 +85,12 @@ def _find_profile_by_id(directory: str, appid: str) -> str | None:
     """Scan YAML headers for STEAM_APPID/SDY_ID match without full parsing.
 
     Reads only _HEADER_READ_BYTES per file — IDs live at the top by convention,
-    full parsing would be pure waste.
+    full parsing would be pure waste. Callers must already have a truthy
+    appid — the sole call site (_get_profile_path) only invokes this
+    inside `if steam_appid:`, so a `not appid` guard here would be dead
+    code, not a real safety net.
     """
-    if not appid or not os.path.isdir(directory):
+    if not os.path.isdir(directory):
         return None
 
     for entry in _iter_yaml_files(directory):
