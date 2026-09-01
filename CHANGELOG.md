@@ -588,6 +588,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   this function's own docstring) — just for pid-less lines instead of present ones. A
   pid-less NAME line still lands in `det` as a self-reference; a pid-less ID line is no
   longer attributed to any name. Found via the second full-file review pass (2026-09-02).
+- `control_center.py::_update_game_combo_ui`: `combo_games.clear()` also resets the
+  editable combo's line-edit text, not just its item list. A "Scan History" click
+  finishing while the user was still typing a manually-added game's name wiped that text;
+  a subsequent Save then silently no-oped on the now-empty `currentText()`. Now captures
+  the typed text before clearing and restores it via `setEditText()` if it doesn't already
+  match one of the freshly repopulated items. Found via the second full-file review pass
+  (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
