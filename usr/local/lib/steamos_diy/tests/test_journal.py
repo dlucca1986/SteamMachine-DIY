@@ -63,8 +63,38 @@ def test_filter_game_journal_lines_matches_real_subpath():
 
 
 def test_parse_game_logs_attributes_appid_to_its_own_process():
-    lines = 'chdir "/home/user/.steam/steamapps/common/GameA"\ngameID 220'
+    # Realistic journalctl short-format lines (syslog-identifier[pid]:) —
+    # the [pid]: suffix is what parse_game_logs correlates NAME/ID lines
+    # by; see the pid-less-lines regression test below for why a fixture
+    # lacking it doesn't exercise this function's real matching path.
+    lines = (
+        'steam[1001]: chdir "/home/user/.steam/steamapps/common/GameA"\n'
+        "steam[1001]: gameID 220"
+    )
     assert journal.parse_game_logs(lines) == {"GameA": "220"}
+
+
+def test_parse_game_logs_does_not_cross_attribute_pidless_lines():
+    """Regression: pid = pid_match.group(1) if pid_match else "" made
+    every line lacking a [pid]: suffix share the SAME cur_by_pid[""]
+    bucket, reintroducing the exact cross-attribution the pid-keyed
+    tracking exists to prevent -- just for pid-less lines instead of
+    present ones (found via the second full-file review pass,
+    2026-09-02)."""
+    lines = (
+        'chdir "/home/user/.steam/steamapps/common/GameA"\n'
+        "gameID 220\n"
+        'chdir "/home/user/.steam/steamapps/common/GameB"\n'
+        "gameID 730"
+    )
+
+    detected = journal.parse_game_logs(lines)
+
+    # Neither pid-less ID line is attributed to a name (both GameA/GameB
+    # entries stay self-referential rather than picking up the WRONG or
+    # a stale AppID).
+    assert detected["GameA"] == "GameA"
+    assert detected["GameB"] == "GameB"
 
 
 def test_parse_game_logs_does_not_cross_attribute_interleaved_processes():

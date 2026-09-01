@@ -140,19 +140,29 @@ def parse_game_logs(res: str) -> dict[str, str]:
     Tracks the last-seen NAME per source pid rather than one shared
     "current" name, so interleaved lines from two concurrently-running
     processes (e.g. two games launched close together) can't misattribute
-    one game's AppID to another's name.
+    one game's AppID to another's name. A line with no [pid]: suffix at
+    all is not tracked for correlation either way (a shared "" fallback
+    key would reintroduce the exact cross-attribution this function
+    exists to prevent, just for pid-less lines instead of present ones)
+    — its NAME still lands in det as a self-reference, but a pid-less ID
+    line is simply not attributed to any name.
     """
     det: dict[str, str] = {}
     cur_by_pid: dict[str, str] = {}
     for line in res.splitlines():
         kind, value = extract_game_metadata(line)
         pid_match = _PID_FROM_LINE.search(line)
-        pid = pid_match.group(1) if pid_match else ""
         if kind == "NAME" and value:
             det[value] = value
-            cur_by_pid[pid] = value
-        elif kind == "ID" and value and len(value) >= _MIN_APPID_LEN:
-            cur = cur_by_pid.get(pid)
+            if pid_match:
+                cur_by_pid[pid_match.group(1)] = value
+        elif (
+            kind == "ID"
+            and value
+            and len(value) >= _MIN_APPID_LEN
+            and pid_match
+        ):
+            cur = cur_by_pid.get(pid_match.group(1))
             if cur:
                 det[cur] = value
     return det
