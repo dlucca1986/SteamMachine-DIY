@@ -462,6 +462,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   already degrades gracefully. Now logs `RESTORE_CHMOD_FAIL` and returns `False` for that
   member only, same as the others. Found via the same cross-file-contracts review as the
   two fixes above (2026-09-01).
+- `control_center.py`: `self.conf_root`/`self.games_conf_dir` were resolved once in
+  `__init__` and never revisited. A restore that relocates the SSoT's `user_config`/
+  `games_conf_dir` keys runs as a separate `pkexec`'d process, so it can't invalidate
+  Control Center's in-process `get_ssot_var()` cache — without an explicit
+  `clear_ssot_cache()`, the paths stayed pointed at the stale pre-restore location until
+  the app was restarted, silently misdirecting any Global Options/Game Overrides save made
+  right after a restore. `_show_completion_message` now clears the SSoT cache and
+  re-resolves both paths whenever a privileged operation completes without error — also
+  fires harmlessly for backup/vacuum/validate/export success, where the SSoT never
+  changes (a cheap re-read of a small file, not a hot path). Found via the same
+  cross-file-contracts review as the three fixes above (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
