@@ -125,6 +125,41 @@ def test_prune_old_archives_ignores_in_flight_tmp_files(tmp_path, set_ssot):
     ]
 
 
+def test_prune_old_archives_survives_nan_backup_keep(tmp_path, set_ssot):
+    """Regression: get_ssot_num() already degrades a non-numeric value,
+    but "nan" parses as a valid float (float() accepts it) — int(nan)
+    is what actually raises (ValueError), uncaught, AFTER run_backup()
+    already logged BACKUP_SUCCESS, reporting a false "Backup Error" for
+    an archive that's actually fine (found via the second full-file
+    review pass, 2026-09-02)."""
+    set_ssot(BACKUP_KEEP="nan")
+    names = [
+        "sdy_backup_20260101_000000.tar.gz",
+        "sdy_backup_20260102_000000.tar.gz",
+        "sdy_backup_20260103_000000.tar.gz",
+        "sdy_backup_20260104_000000.tar.gz",
+        "sdy_backup_20260105_000000.tar.gz",
+        "sdy_backup_20260106_000000.tar.gz",
+    ]
+    for name in names:
+        (tmp_path / name).write_text("x")
+
+    backup._prune_old_archives(tmp_path)  # must not raise
+
+    # Degrades to _BACKUP_KEEP_DEFAULT (5): oldest of 6 archives pruned.
+    remaining = sorted(p.name for p in tmp_path.iterdir())
+    assert remaining == names[-5:]
+
+
+def test_prune_old_archives_survives_inf_backup_keep(tmp_path, set_ssot):
+    """Same class of bug as the nan test above, for OverflowError:
+    int(float("inf")) raises OverflowError, not ValueError."""
+    set_ssot(BACKUP_KEEP="inf")
+    (tmp_path / "sdy_backup_20260101_000000.tar.gz").write_text("x")
+
+    backup._prune_old_archives(tmp_path)  # must not raise
+
+
 # ---------------------------------------------------------------------------
 # run_backup() — end to end against a fully faked environment
 # ---------------------------------------------------------------------------

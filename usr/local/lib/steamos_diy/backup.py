@@ -218,7 +218,20 @@ def _prune_old_archives(backup_dir: Path) -> None:
     timestamped naming makes lexicographic order chronological, and the
     glob cannot match in-flight *.tmp files.
     """
-    keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
+    try:
+        keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
+    except (ValueError, OverflowError) as err:
+        # get_ssot_num() already degrades a non-numeric value, but "nan"/
+        # "inf" parse as valid floats (float() accepts them) — int() is
+        # what actually rejects them (nan raises ValueError, inf raises
+        # OverflowError), so the degrade-to-default has to happen here
+        # instead. This runs AFTER run_backup() already logged
+        # BACKUP_SUCCESS — letting this escape would report a false
+        # "Backup Error" for an archive that's actually fine.
+        jlog(
+            "SYSTEM", f"BAD_BACKUP_KEEP: {err} - using default", level="WARN"
+        )
+        keep = _BACKUP_KEEP_DEFAULT
     if keep <= 0:
         return
     archives = sorted(
