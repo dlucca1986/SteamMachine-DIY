@@ -74,6 +74,21 @@ def test_parse_game_logs_attributes_appid_to_its_own_process():
     assert journal.parse_game_logs(lines) == {"GameA": "220"}
 
 
+def test_parse_game_logs_keeps_short_valve_appids():
+    """Regression: _MIN_APPID_LEN = 3 discarded any ID under 3 digits as
+    "noise" -- but extract_game_metadata only matches an ID after a
+    literal "gameID"/"AppID = " token, and several of Valve's own early
+    AppIDs are genuinely 1-2 digits (10 = Counter-Strike, 70 = Half-Life,
+    still playable today). The filter silently dropped real detections
+    for exactly those games (found via the second full-file review pass,
+    2026-09-02)."""
+    lines = (
+        'steam[1001]: chdir "/home/user/.steam/steamapps/common/Half-Life"\n'
+        "steam[1001]: gameID 70"
+    )
+    assert journal.parse_game_logs(lines) == {"Half-Life": "70"}
+
+
 def test_parse_game_logs_does_not_cross_attribute_pidless_lines():
     """Regression: pid = pid_match.group(1) if pid_match else "" made
     every line lacking a [pid]: suffix share the SAME cur_by_pid[""]

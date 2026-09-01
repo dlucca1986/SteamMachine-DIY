@@ -28,7 +28,6 @@ from utils import JOURNALCTL_BIN, jlog
 # ---------------------------------------------------------------------------
 
 _GAME_LOG_TAIL: int = 2000
-_MIN_APPID_LEN: int = 3  # exclude single/double-digit noise values
 _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
@@ -146,6 +145,13 @@ def parse_game_logs(res: str) -> dict[str, str]:
     exists to prevent, just for pid-less lines instead of present ones)
     — its NAME still lands in det as a self-reference, but a pid-less ID
     line is simply not attributed to any name.
+
+    No minimum-length filter on the ID value: extract_game_metadata only
+    ever matches it after a literal "gameID"/"AppID = " token, and a
+    handful of Valve's own early AppIDs are genuinely 1-2 digits (10 =
+    Counter-Strike, 20 = Team Fortress Classic, 70 = Half-Life, still
+    playable today) — a length floor would silently drop real detections
+    for exactly those games, not filter noise.
     """
     det: dict[str, str] = {}
     cur_by_pid: dict[str, str] = {}
@@ -156,12 +162,7 @@ def parse_game_logs(res: str) -> dict[str, str]:
             det[value] = value
             if pid_match:
                 cur_by_pid[pid_match.group(1)] = value
-        elif (
-            kind == "ID"
-            and value
-            and len(value) >= _MIN_APPID_LEN
-            and pid_match
-        ):
+        elif kind == "ID" and value and pid_match:
             cur = cur_by_pid.get(pid_match.group(1))
             if cur:
                 det[cur] = value
