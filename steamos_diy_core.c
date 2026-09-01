@@ -63,12 +63,20 @@ void c_write_atomic(const char *path, const char *val) {
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     // O_CLOEXEC: keep this transient fd out of any concurrently forked child.
+    // O_NOFOLLOW: refuse to write through a symlink planted at tmp_path by
+    // another process running as this same user, instead of truncating
+    // whatever it points at — same TOCTOU guard already applied on the
+    // Python side (restore.py::_write_member). No current caller of
+    // write_atomic() crosses a privilege boundary (all three run as the
+    // invoking user, never root), but this is an exported, generically-
+    // loaded primitive with no caller-specific privilege check of its
+    // own, so it shouldn't rely on today's call graph to stay safe.
     // Mode 0644 always applies to the new inode, regardless of the target
     // file's previous permissions (tmp+rename replaces the inode outright,
     // it can't "preserve" the old one) — fine for every current caller
     // (next_session marker, user config YAML), none of which need anything
     // stricter, but worth this note for whoever adds the next one.
-    int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0644);
     if (fd < 0) return;
     size_t len = strlen(val);
     ssize_t written = write(fd, val, len);
@@ -77,7 +85,17 @@ void c_write_atomic(const char *path, const char *val) {
         unlink(tmp_path);
         return;
     }
-    fdatasync(fd);
+    // Best-effort durability note, not a correctness requirement: unlike
+    // the rename() below (whose failure aborts the write outright),
+    // fdatasync() failing here doesn't change the control flow — the
+    // data is already fully written to the page cache and proceeding to
+    // rename() is still strictly better than discarding a completed
+    // write over an unconfirmed flush. Logged so a failing/degrading
+    // storage device leaves a trace instead of silently not honoring
+    // the "hardware durability" this function's own header promises.
+    if (fdatasync(fd) != 0) {
+        syslog(LOG_WARNING, "c_write_atomic: fdatasync %s: %m", tmp_path);
+    }
     close(fd);
     if (rename(tmp_path, path) != 0) {
         syslog(LOG_ERR, "c_write_atomic: rename %s -> %s: %m", tmp_path, path);
