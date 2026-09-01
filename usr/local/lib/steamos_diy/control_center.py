@@ -786,8 +786,15 @@ class SDYControlCenter(QMainWindow):
         t_path = self._template_path_for(context)
         if not t_path.exists():
             return
+        try:
+            content = t_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as err:
+            self.statusBar().showMessage(
+                f"Could not load {t_path.name}: {err}", 3000
+            )
+            return
         state["cache"] = editor.toPlainText()
-        editor.setPlainText(t_path.read_text(encoding="utf-8"))
+        editor.setPlainText(content)
         tmp_btn.setText("⬅️ Back to Editor")
         state["is_template"] = True
         save_btn.setEnabled(False)
@@ -864,7 +871,14 @@ class SDYControlCenter(QMainWindow):
         """Load the selected global YAML file into the editor."""
         path = self.conf_root / self.combo_global_files.currentText()
         if path.exists():
-            self.global_editor.setPlainText(path.read_text(encoding="utf-8"))
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as err:
+                self.statusBar().showMessage(
+                    f"Could not load {path.name}: {err}", 3000
+                )
+                return
+            self.global_editor.setPlainText(content)
             if self.global_hl:
                 self.global_hl.rehighlight()
             self.global_editor.document().setModified(False)
@@ -887,7 +901,14 @@ class SDYControlCenter(QMainWindow):
         name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
-            self.game_editor.setPlainText(path.read_text(encoding="utf-8"))
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as err:
+                self.statusBar().showMessage(
+                    f"Could not load {path.name}: {err}", 3000
+                )
+                return
+            self.game_editor.setPlainText(content)
         else:
             scaffold = self._scaffold_game_profile(raw, name)
             self.game_editor.setPlainText(scaffold)
