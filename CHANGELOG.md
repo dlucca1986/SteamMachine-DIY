@@ -427,6 +427,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   matches `:` and `-` (deliberately — `/` appears in nearly every path value in this
   project's config, so highlighting it would make paths unreadable rather than clearer).
   Corrected the table to match the code.
+- `utils.py`: `get_backup_mapping()`'s `user/config` entry was hardcoded to
+  `~/.config/steamos_diy`, unlike `games_conf_dir`'s entry above (fixed 2026-08-26), which
+  already resolves dynamically via the SSoT. A `user_config` relocated to a different
+  directory (a supported, tested pattern — see CLAUDE.md's confirmed-intentional note on
+  `control_center.py`'s Global Options tab) caused `backup.py` to silently archive the
+  stale default directory instead of the live one; restoring that archive left the user's
+  actual active config untouched, with no error anywhere in the flow. Now resolves the
+  same way `control_center.py::_resolve_config_paths` already does, via a new shared
+  `CONFIG_FILE_NAME` constant so the two can't independently drift on the fallback value.
+  Also fixes a latent interaction this exposed: the check for whether `games_conf_dir` is
+  "already nested under user/config, backed up for free" compared against the *fixed*
+  default directory, not the actual (now possibly relocated) `user/config` entry — a
+  `games_conf_dir` left at its own default while `user_config` alone moved elsewhere would
+  have silently dropped out of the backup too. Replaced the equality check with a real
+  nesting check against the resolved `user/config` directory. Found via a dedicated
+  cross-file-contracts review across the full 11-file production `.py` tree (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
