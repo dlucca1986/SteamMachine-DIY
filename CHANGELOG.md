@@ -570,6 +570,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `threading.Event`, set by `_run_session` the moment a crash is detected, checked by the
   daemon thread once after its delay elapses before firing anything. Found via the second
   full-file review pass (2026-09-02).
+- `sdy.py`/`session_launch.py`: `os.execvpe` (`sdy.py::_exec_game`) and `subprocess.Popen`
+  (`session_launch.py::_run_session`) both raise `ValueError`, not `OSError`, for an
+  embedded null byte in argv (e.g. from a hand-edited `GAME_WRAPPER`/`GAME_EXTRA_ARGS`/
+  `flags` entry) — uncaught by either function's `except OSError`, crashing the launch
+  path with a raw traceback instead of the documented graceful degrade. Same
+  "hand-edited config crashes the boot path" class already fixed repeatedly elsewhere.
+  Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
