@@ -92,6 +92,52 @@ def test_get_backup_mapping_adds_games_dir_entry_when_relocated(
 
 
 # ---------------------------------------------------------------------------
+# get_backup_mapping — a relocated user_config must back up its actual
+# (live) directory, not the hardcoded default, or the active config is
+# silently omitted from every backup. Mirrors the games_conf_dir coverage
+# above; a relocated user_config also changes what "nested under user/
+# config" means for the games_conf_dir entry, so that interaction is
+# covered too.
+# ---------------------------------------------------------------------------
+
+
+def test_get_backup_mapping_uses_default_config_dir_when_unset(tmp_path):
+    home = tmp_path / "home"
+
+    mapping = utils.get_backup_mapping(str(home))
+
+    assert mapping["user/config"] == str(home / ".config/steamos_diy")
+
+
+def test_get_backup_mapping_follows_relocated_user_config(
+    tmp_path, set_ssot
+):
+    custom_dir = tmp_path / "elsewhere" / "conf"
+    set_ssot(user_config=str(custom_dir / "config.yaml"))
+
+    mapping = utils.get_backup_mapping(str(tmp_path / "home"))
+
+    assert mapping["user/config"] == str(custom_dir)
+
+
+def test_get_backup_mapping_adds_games_dir_entry_when_user_config_moves(
+    tmp_path, set_ssot
+):
+    """games_conf_dir left at ITS OWN default is no longer nested under
+    user/config once user_config alone is relocated elsewhere - it needs
+    its own entry or it silently drops out of the backup."""
+    custom_dir = tmp_path / "elsewhere" / "conf"
+    set_ssot(user_config=str(custom_dir / "config.yaml"))
+    home = tmp_path / "home"
+
+    mapping = utils.get_backup_mapping(str(home))
+
+    assert mapping["user/games_conf_dir"] == str(
+        home / ".config/steamos_diy/games.d"
+    )
+
+
+# ---------------------------------------------------------------------------
 # _version_tuple / _release_from_api — pure parsing, no network
 # ---------------------------------------------------------------------------
 

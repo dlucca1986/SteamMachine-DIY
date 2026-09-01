@@ -76,6 +76,12 @@ USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 BACKUP_MANIFEST_NAME: str = "links.txt"
 
+# Basename of the global config file under user_config's directory.
+# Shared by get_backup_mapping (below) and control_center.py's
+# _resolve_config_paths so the two can't independently drift on what a
+# relocated user_config's directory is computed relative to.
+CONFIG_FILE_NAME: str = "config.yaml"
+
 # Where downloaded release tarballs are unpacked, relative to the user
 # config dir. Shared with backup.py, which must exclude it from archives.
 UPDATES_DIR_NAME: str = "updates"
@@ -438,24 +444,39 @@ def get_backup_mapping(home: str) -> dict[str, str]:
     when adding members, restore picks it up when mapping them back.
     Order is preserved (3.7+ dict insertion order).
     """
+    # user_config is SSoT-relocatable to a different *directory* (the
+    # basename always stays CONFIG_FILE_NAME - see CLAUDE.md's confirmed-
+    # intentional note on control_center.py's Global Options tab). Without
+    # resolving it the same way control_center.py's _resolve_config_paths
+    # does, a relocated config would silently back up the wrong (default)
+    # directory instead of the live one.
+    default_conf_dir = os.path.join(home, USER_CONFIG_REL)
+    conf_dir = os.path.dirname(
+        get_ssot_var(
+            "user_config",
+            os.path.join(default_conf_dir, CONFIG_FILE_NAME),
+        )
+    )
     mapping = {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,
         "system/service": _SERVICE_PATH,
         "source/steamos_diy": CORE_LIB_DIR,
-        "user/config": os.path.join(home, USER_CONFIG_REL),
+        "user/config": conf_dir,
     }
-    # The default games_conf_dir already lives under user/config above, so
-    # it's backed up recursively for free. A games_conf_dir relocated via
-    # the SSoT (control_center.py/health.py both resolve it dynamically,
-    # same as here) does not - without its own entry it silently drops out
-    # of every backup, and restore has no key to put it back even if it
-    # had been captured.
+    # A games_conf_dir is backed up recursively for free only when it's
+    # actually nested under the (possibly relocated) user/config entry
+    # above - otherwise, whether relocated itself or just left at its own
+    # default while user_config moved elsewhere, it needs its own entry or
+    # it silently drops out of every backup, and restore has no key to put
+    # it back even if it had been captured.
     default_games_dir = os.path.join(
         home, USER_CONFIG_REL, GAMES_CONF_SUBDIR
     )
     games_dir = get_ssot_var("games_conf_dir", default_games_dir)
-    if os.path.realpath(games_dir) != os.path.realpath(default_games_dir):
+    games_real = os.path.realpath(games_dir) + os.sep
+    conf_real = os.path.realpath(conf_dir) + os.sep
+    if not games_real.startswith(conf_real):
         mapping["user/games_conf_dir"] = games_dir
     return mapping
 

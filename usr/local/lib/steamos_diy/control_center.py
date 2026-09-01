@@ -72,6 +72,7 @@ from PyQt6.QtWidgets import (
 from ruamel.yaml import YAML, YAMLError
 from updater import UpdateManager
 from utils import (
+    CONFIG_FILE_NAME,
     CORE_LIB_DIR,
     GAMES_CONF_SUBDIR,
     JOURNALCTL_BIN,
@@ -207,7 +208,7 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
     names.
     """
     conf_root = Path(
-        get_ssot_var("user_config", str(default_root / "config.yaml"))
+        get_ssot_var("user_config", str(default_root / CONFIG_FILE_NAME))
     ).parent
     games_conf_dir = Path(
         get_ssot_var(
