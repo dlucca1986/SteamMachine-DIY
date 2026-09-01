@@ -614,6 +614,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   destination — without a guard, two worker threads could race writing to that file with
   plain `write_text()` (not the atomic `write_atomic()` path, since this is a diagnostic
   export, not a config file). Found via the second full-file review pass (2026-09-02).
+- 3 more doc/comment-drift corrections found by the same review: `docs/Backup &
+  Recovery.md`'s link-reconstruction description still said restore recreates symlinks via
+  a plain `os.symlink` call, unaware of this cycle's `_restore_link` atomicity fix;
+  `control_center.py::_show_completion_message`'s comment listed "validate" among the ops
+  that reach its cache-refresh code on success, but `validate_config` uses a separate
+  `preflight_ready` signal on success and never reaches this method at all;
+  `docs/Steamos Session Launch.md` stated `POST_START_DELAY < VALIDATION_TIMEOUT` as a
+  guaranteed invariant when nothing in code enforces that relationship — replaced with a
+  description of this cycle's actual crash-skip mechanism. Found via the second full-file
+  review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
