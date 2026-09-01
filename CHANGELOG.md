@@ -508,6 +508,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   user-facing "where are my files" setting, so not similarly relocation-sensitive in
   practice). Found via a dedicated cross-file-contracts review across the full 11-file
   production `.py` tree (2026-09-01).
+- `control_center.py`: `toggle_template` never disabled the target combo
+  (`combo_global_files`/`combo_games`) while a template preview was showing. Switching the
+  target file mid-preview fired `load_global_file`/`load_game_file` (wired to the combo's
+  own change signal) while `is_template`/`cache` still tracked the PREVIOUS file; exiting
+  template mode afterwards restored that stale cache over the newly-selected file, and a
+  subsequent Save silently wrote it to the wrong path — real data corruption of a game or
+  global config profile. `_template_widgets_for` now also returns the context's target
+  combo, disabled for the duration of the preview in `_enter_template_mode` and re-enabled
+  in `_exit_template_mode`. Found via a second full-file review pass across the same
+  11-file production tree (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
