@@ -1295,9 +1295,12 @@ class SDYControlCenter(QMainWindow):
         # its first read - without a refresh, saves in the Global
         # Options/Game Overrides tabs would keep targeting the stale
         # pre-restore path until the app restarts. process_finished also
-        # fires for backup/vacuum/validate/export, where the SSoT never
-        # changes, so this is a harmless re-read there (small file,
-        # not a hot path).
+        # fires for backup/vacuum/export success, where the SSoT never
+        # changes, so this is a harmless re-read there (small file, not
+        # a hot path). validate_config uses a separate preflight_ready
+        # signal on success and never reaches this method at all — its
+        # only path here is a worker exception, which is_error routes
+        # through the early return above instead.
         clear_ssot_cache()
         self.conf_root, self.games_conf_dir = _resolve_config_paths(
             Path.home() / USER_CONFIG_REL

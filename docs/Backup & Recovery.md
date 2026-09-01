@@ -53,7 +53,7 @@ The utility targets specific paths to maintain a minimal backup footprint. The m
 > [!IMPORTANT]
 > **Link Reconstruction**
 >
-> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated with `os.symlink` — the archive never carries executable code. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
+> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated atomically (a temporary symlink is created next to the target, then swapped into place with `os.replace`) — the archive never carries executable code. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
 
 ---
 

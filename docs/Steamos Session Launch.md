@@ -69,11 +69,11 @@ These are **panel-independent** — the control is always safe to expose; only i
 ---
 
 ## ⚙️ Post-Start Hook
-After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **daemon thread** is started that sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then fires each command via `spawn_native` (detached, `start_new_session=True`). The delay is shorter than `VALIDATION_TIMEOUT`, so all commands are executed before the session is declared stable.
+After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **daemon thread** is started that sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then fires each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by the time the delay elapses, in which case the commands are skipped entirely instead of firing for a session that already failed over (see Watchdog & Recovery below). `POST_START_DELAY` and `VALIDATION_TIMEOUT` are independently configurable SSoT values with no enforced ordering between them — the crash-skip check, not a fixed timing guarantee, is what keeps a failed session from still firing its post-start commands even on a hand-edited config where the delay happens to exceed the timeout.
 
 This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
 
-* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`.
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`; skipped entirely after a detected crash, logged as `POST_START_CMDS_SKIPPED` at `DEBUG`.
 
 ---
 
