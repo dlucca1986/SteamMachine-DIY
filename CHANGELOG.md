@@ -548,6 +548,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   wrapped in `try/except (ValueError, OverflowError)`, degrades to `_BACKUP_KEEP_DEFAULT`
   with a `BAD_BACKUP_KEEP` warning log. Found via the second full-file review pass
   (2026-09-02).
+- `control_center.py`: `refresh_detected_games`'s journalctl invocation had no `-n` line
+  cap, unlike `journal.py`'s own bounded `get_journal_cmd()` pattern (`-n 300` with
+  `--since "12 hours ago"`). Every "Scan History" click pulled the WHOLE 24h system
+  journal unbounded, mostly discarded by the Python-side filter. Can't narrow by `-t` like
+  `journal.py` does: the chdir/gameID/AppID lines `filter_game_journal_lines` looks for
+  come from Steam/gamescope's own captured output, not this project's `jlog()` tags. Added
+  `-n 5000` instead — generous enough to still catch real launches over 24h, but bounded.
+  Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
