@@ -608,6 +608,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   attached to Control Center's own process group instead of being properly detached. Now
   routed through `_launch_or_warn`/`spawn_native` like its siblings. Found via the second
   full-file review pass (2026-09-02).
+- `control_center.py::export_support_log`: had no re-entrancy guard at all, unlike
+  `refresh_detected_games`/`load_logs`'s established `_busy` pattern. The save dialog is
+  modal, so this only mattered for two fast successive clicks picking the SAME
+  destination — without a guard, two worker threads could race writing to that file with
+  plain `write_text()` (not the atomic `write_atomic()` path, since this is a diagnostic
+  export, not a config file). Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
