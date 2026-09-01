@@ -16,6 +16,8 @@ most safety-critical behavior in the whole project, and previously
 untested."""
 
 import subprocess
+import threading
+import time
 
 import session_launch
 
@@ -90,7 +92,7 @@ def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
     )
 
     session_launch._schedule_post_start_cmds(
-        ['echo "unterminated', "notify-send hello"], 0.0
+        ['echo "unterminated', "notify-send hello"], 0.0, threading.Event()
     )
 
     # First entry degrades via str.split() and still runs; second is
@@ -116,7 +118,9 @@ def test_schedule_post_start_cmds_clamps_negative_delay(monkeypatch):
         lambda path, args: spawned.append(args),
     )
 
-    session_launch._schedule_post_start_cmds(["notify-send hi"], -1.0)
+    session_launch._schedule_post_start_cmds(
+        ["notify-send hi"], -1.0, threading.Event()
+    )
 
     assert slept == [0]
     assert spawned == [["notify-send", "hi"]]
@@ -142,7 +146,9 @@ def test_schedule_post_start_cmds_survives_unexpected_exception(
         lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
     )
 
-    session_launch._schedule_post_start_cmds(["notify-send hi"], 0.0)
+    session_launch._schedule_post_start_cmds(
+        ["notify-send hi"], 0.0, threading.Event()
+    )
 
     assert ("STEAM", "POST_START_CMDS_FAILED: boom", "ERROR") in logged
 
@@ -248,6 +254,37 @@ def test_run_session_crash_recovers_to_desktop(tmp_path, set_ssot):
     assert target == "desktop"
     assert ret_code == 0
     assert proc_holder[0] is None  # cleared in the finally block
+
+
+def test_run_session_skips_post_start_cmds_after_crash(
+    tmp_path, set_ssot, monkeypatch
+):
+    """Regression: the post_start_cmds daemon thread had no link to
+    session outcome -- it fired its configured commands even after
+    _monitor_process detected an early crash and _handle_recovery had
+    already switched to desktop (found via the second full-file review
+    pass, 2026-09-02)."""
+    set_ssot(TERM_TIMEOUT="1.0", POST_START_DELAY="0.05")
+    spawned = []
+    monkeypatch.setattr(
+        session_launch,
+        "spawn_native",
+        lambda path, args: spawned.append(args),
+    )
+    proc_holder = [None]
+
+    target, _ret_code = session_launch._run_session(
+        ["/bin/true"],
+        str(tmp_path / "next_session"),
+        "steam",
+        1.0,
+        proc_holder,
+        ["notify-send should-not-run"],
+    )
+    time.sleep(0.2)  # let the daemon thread's POST_START_DELAY elapse
+
+    assert target == "desktop"
+    assert not spawned
 
 
 def test_run_session_stable_process_keeps_target(tmp_path, set_ssot):

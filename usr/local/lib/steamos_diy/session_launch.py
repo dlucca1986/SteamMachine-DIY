@@ -112,16 +112,31 @@ def _get_post_start_cmds(cfg: dict) -> list[str]:
     return [str(c) for c in cmds if c] if isinstance(cmds, list) else []
 
 
-def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
+def _schedule_post_start_cmds(
+    cmds: list[str], delay: float, crashed: threading.Event
+) -> None:
     """Sleep *delay* seconds, then fire each cmd via spawn_native.
 
     Uses shlex_split_or_fallback like every other hand-edited shell-like
     field in this codebase (flags, GAME_WRAPPER, GAME_EXTRA_ARGS) — an
     unbalanced quote degrades to a naive str.split() and still runs,
     rather than silently skipping the command entirely.
+
+    crashed is set by _run_session the moment _monitor_process detects an
+    early exit — checked once after the sleep so commands meant to run
+    "after the game starts" don't fire for a session that had already
+    failed and switched to desktop by the time this thread woke up.
     """
     try:
         time.sleep(max(delay, 0))
+        if crashed.is_set():
+            jlog(
+                "STEAM",
+                "POST_START_CMDS_SKIPPED: session crashed before delay "
+                "elapsed",
+                level="DEBUG",
+            )
+            return
         for cmd_str in cmds:
             parts, err = shlex_split_or_fallback(cmd_str)
             if err is not None:
@@ -255,14 +270,16 @@ def _run_session(
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
             proc_holder[0] = proc
+            crashed = threading.Event()
             if post_start_cmds:
                 delay = get_ssot_num("POST_START_DELAY", 2.0)
                 threading.Thread(
                     target=_schedule_post_start_cmds,
-                    args=(post_start_cmds, delay),
+                    args=(post_start_cmds, delay, crashed),
                     daemon=True,
                 ).start()
             if not _monitor_process(proc, v_timeout, next_path, target):
+                crashed.set()
                 target = _handle_recovery(proc, next_path)
             proc.wait()
             ret_code = proc.returncode
