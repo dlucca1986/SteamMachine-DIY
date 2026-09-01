@@ -305,6 +305,32 @@ def test_relocated_games_conf_dir_round_trips_through_restore(
     assert resolved == custom
 
 
+def test_fresh_install_restore_places_archived_relocated_games_dir(
+    tmp_path,
+):
+    """The "parachute" scenario: OS reinstalled from scratch after a
+    system failure, current SSoT is back to default (games_conf_dir
+    nested under user/config), but the archive being restored was made
+    on a system where games_conf_dir was relocated (e.g. to an SD card).
+    The archive's members are named "user/games_conf_dir/..." regardless
+    of where this system currently resolves that to - restore's mapping
+    must still route them there via the for_restore=True mapping, or
+    they're silently dropped (found via a dedicated cross-file-contracts
+    review, 2026-09-02)."""
+    home = str(tmp_path / "home" / "tester")
+    mapping = utils.get_backup_mapping(home, for_restore=True)
+    home_real = str(Path(home).resolve())
+    allowed = restore._allowed_prefixes(home_real, mapping)
+
+    resolved = restore._resolve_target(
+        "user/games_conf_dir/mygame.yaml", mapping, allowed
+    )
+
+    assert resolved == str(
+        Path(home) / ".config/steamos_diy/games.d/mygame.yaml"
+    )
+
+
 def test_games_conf_dir_relocated_outside_home_round_trips(
     tmp_path, set_ssot
 ):
@@ -326,6 +352,37 @@ def test_games_conf_dir_relocated_outside_home_round_trips(
         "user/games_conf_dir", mapping, allowed
     )
     assert resolved == external
+
+
+# ---------------------------------------------------------------------------
+# _prepare_restore — must build the mapping with for_restore=True, or the
+# unconditional games_conf_dir entry above never actually gets wired in
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_restore_requests_for_restore_mapping(tmp_path, monkeypatch):
+    calls = []
+    real_get_backup_mapping = restore.get_backup_mapping
+
+    def spy_get_backup_mapping(home, **kwargs):
+        calls.append(kwargs)
+        return real_get_backup_mapping(home, **kwargs)
+
+    archive = tmp_path / "backup.tar.gz"
+    archive.write_bytes(b"not a real archive, verify_archive is mocked")
+    monkeypatch.setattr(restore, "check_root", lambda: None)
+    monkeypatch.setattr(restore, "require_ssot_conf", lambda tag: None)
+    monkeypatch.setattr(restore, "verify_archive", lambda *a, **k: True)
+    monkeypatch.setattr(
+        restore, "get_real_user", lambda: ("tester", tmp_path / "home")
+    )
+    monkeypatch.setattr(
+        restore, "get_backup_mapping", spy_get_backup_mapping
+    )
+
+    restore._prepare_restore(str(archive))
+
+    assert calls == [{"for_restore": True}]
 
 
 # ---------------------------------------------------------------------------

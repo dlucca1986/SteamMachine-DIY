@@ -436,13 +436,19 @@ def require_ssot_conf(tag: str) -> None:
         sys.exit(1)
 
 
-def get_backup_mapping(home: str) -> dict[str, str]:
+def get_backup_mapping(
+    home: str, *, for_restore: bool = False
+) -> dict[str, str]:
     """Archive-path → filesystem-path map. Single source of truth for the
     backup format used by both backup.py and restore.py.
 
     Adding a new entry here propagates to both sides: backup picks it up
     when adding members, restore picks it up when mapping them back.
     Order is preserved (3.7+ dict insertion order).
+
+    for_restore always includes the "user/games_conf_dir" entry - see
+    that entry's own comment below for why restore can't use the same
+    "only if it needs one" optimization backup does.
     """
     # user_config is SSoT-relocatable to a different *directory* (the
     # basename always stays CONFIG_FILE_NAME - see CLAUDE.md's confirmed-
@@ -476,7 +482,17 @@ def get_backup_mapping(home: str) -> dict[str, str]:
     games_dir = get_ssot_var("games_conf_dir", default_games_dir)
     games_real = os.path.realpath(games_dir) + os.sep
     conf_real = os.path.realpath(conf_dir) + os.sep
-    if not games_real.startswith(conf_real):
+    nested = games_real.startswith(conf_real)
+    # On restore, the archive's member names were fixed by whatever this
+    # same nesting check evaluated to AT BACKUP TIME on a possibly
+    # different system state (e.g. a from-scratch reinstall after a
+    # system failure, restoring onto a fresh default SSoT from an
+    # archive made while games_conf_dir was relocated to an SD card) -
+    # this process has no way to know that before opening the tar, so
+    # the entry is included unconditionally here; it only ever matches
+    # archive members that actually exist under that prefix, so it's a
+    # harmless no-op for an archive where nesting still holds.
+    if for_restore or not nested:
         mapping["user/games_conf_dir"] = games_dir
     return mapping
 

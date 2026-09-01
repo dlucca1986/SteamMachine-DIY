@@ -137,6 +137,28 @@ def test_get_backup_mapping_adds_games_dir_entry_when_user_config_moves(
     )
 
 
+def test_get_backup_mapping_for_restore_always_includes_games_dir_entry(
+    tmp_path,
+):
+    """The "parachute" scenario: a from-scratch OS reinstall lands back
+    on the default (nested) games_conf_dir, but the archive being
+    restored may have been made while it was relocated (e.g. to an SD
+    card) - restore can't know that before opening the tar, so
+    for_restore=True must include the entry unconditionally (it's a
+    harmless no-op match for an archive where nesting still holds)."""
+    home = tmp_path / "home"
+
+    default_mapping = utils.get_backup_mapping(str(home))
+    restore_mapping = utils.get_backup_mapping(
+        str(home), for_restore=True
+    )
+
+    assert "user/games_conf_dir" not in default_mapping
+    assert restore_mapping["user/games_conf_dir"] == str(
+        home / ".config/steamos_diy/games.d"
+    )
+
+
 # ---------------------------------------------------------------------------
 # _version_tuple / _release_from_api — pure parsing, no network
 # ---------------------------------------------------------------------------

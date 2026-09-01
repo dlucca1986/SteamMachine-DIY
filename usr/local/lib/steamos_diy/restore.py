@@ -456,7 +456,7 @@ def _prepare_restore(
     # is what the security allow-list must check against. Not redundant.
     home_str = str(home)
     home_real = str(home.resolve())
-    mapping = get_backup_mapping(home_str)
+    mapping = get_backup_mapping(home_str, for_restore=True)
     return (
         user,
         home_real,
