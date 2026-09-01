@@ -443,6 +443,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   have silently dropped out of the backup too. Replaced the equality check with a real
   nesting check against the resolved `user/config` directory. Found via a dedicated
   cross-file-contracts review across the full 11-file production `.py` tree (2026-09-01).
+- `restore.py`: `_restore_link` recreated a symlink via `os.unlink()` then `os.symlink()`
+  as two separate syscalls, unlike every other write path in this file (`_write_member`
+  already goes tmp+`os.replace()`). A kill between the two calls — plausible given
+  `control_center.py`'s own 300s pkexec timeout, or a handheld losing power mid-restore —
+  left the symlink missing entirely rather than stale, silently dropping a critical shim
+  (e.g. a session-select polkit helper) with no log of the gap. Now creates the new
+  symlink at a temp path first, then `os.replace()`s it onto the real link path, mirroring
+  `_write_member`'s existing pattern. Found via the same cross-file-contracts review as the
+  fix above (2026-09-01).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
