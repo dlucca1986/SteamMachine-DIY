@@ -1035,6 +1035,16 @@ class SDYControlCenter(QMainWindow):
                             JOURNALCTL_BIN,
                             "--since",
                             "24 hours ago",
+                            # Unlike journal.py's tag-filtered log viewer,
+                            # this can't narrow by -t: the chdir/gameID/
+                            # AppID lines filter_game_journal_lines looks
+                            # for come from Steam/gamescope's own captured
+                            # output, not this project's jlog() tags. -n
+                            # bounds it instead — generous enough to still
+                            # catch real launches over 24h, but not the
+                            # whole unbounded system journal on every click.
+                            "-n",
+                            "5000",
                             "--no-hostname",
                             "--no-pager",
                         ],
