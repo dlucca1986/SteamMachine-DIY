@@ -1071,6 +1071,13 @@ class SDYControlCenter(QMainWindow):
         Args:
             detected: {name: appid_or_name}; empty dict triggers placeholder.
         """
+        # A scan can finish mid-edit (a "Scan History" click while the
+        # user is still typing a manually-added game's name into this
+        # editable combo) — clear() resets the line-edit text along with
+        # the item list, and a subsequent Save silently no-ops on the
+        # now-empty currentText(). Restore whatever the user had typed
+        # instead of discarding it.
+        typed = self.combo_games.currentText()
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
         self.combo_games.clear()
@@ -1078,6 +1085,8 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.addItems(items)
         else:
             self.combo_games.setPlaceholderText("Journal unavailable.")
+        if typed and typed not in items:
+            self.combo_games.setEditText(typed)
 
     def _merge_on_disk_profiles(self, detected):
         gdir = self.games_conf_dir
