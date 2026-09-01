@@ -48,6 +48,22 @@ def test_get_ssot_num_falls_back_on_stray_comma(set_ssot):
     assert utils.get_ssot_num("POST_START_DELAY", 2.0) == 2.0
 
 
+def test_get_ssot_var_survives_non_utf8_conf_file(tmp_path, monkeypatch):
+    """Regression: _load_ssot_cache only caught OSError while iterating
+    the SSoT file, unlike its siblings read_session_target/load_yaml_safe
+    (both already catch UnicodeDecodeError too). Since get_ssot_var is
+    called from virtually every module (including jlog() itself), a
+    hand-edited SSoT conf saved with a non-UTF-8 byte would crash the
+    very first get_ssot_var() call anywhere instead of degrading (found
+    via the second full-file review pass, 2026-09-02)."""
+    conf_path = tmp_path / "steamos_diy.conf"
+    conf_path.write_bytes(b"\xff\xfe not valid utf-8\n")
+    monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
+    utils.clear_ssot_cache()
+
+    assert utils.get_ssot_var("TERM_TIMEOUT", "5.0") == "5.0"
+
+
 # ---------------------------------------------------------------------------
 # read_session_target — a next_session file with invalid UTF-8 bytes (e.g.
 # restored from a corrupted backup) must degrade to default rather than

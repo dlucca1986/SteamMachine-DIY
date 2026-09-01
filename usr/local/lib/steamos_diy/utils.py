@@ -218,7 +218,7 @@ def _load_ssot_cache() -> None:
                     continue
                 key, _, raw = line.partition("=")
                 _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
-    except OSError as err:
+    except (OSError, UnicodeDecodeError) as err:
         jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
     os.environ.update(_SSOT_CACHE)
 
