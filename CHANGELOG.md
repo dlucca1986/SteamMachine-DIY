@@ -582,6 +582,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   user's home, `"/home/deck2/..."`. Added a trailing `"/"`, same boundary reasoning
   already used by `restore.py::_allowed_prefixes` (`"/etcfoo"` must not match `"/etc"`).
   Found via the second full-file review pass (2026-09-02).
+- `journal.py::parse_game_logs`: `pid = pid_match.group(1) if pid_match else ""` made
+  every line lacking a `[pid]:` suffix share the SAME `cur_by_pid[""]` bucket,
+  reintroducing the exact cross-attribution the pid-keyed tracking exists to prevent (per
+  this function's own docstring) — just for pid-less lines instead of present ones. A
+  pid-less NAME line still lands in `det` as a self-reference; a pid-less ID line is no
+  longer attributed to any name. Found via the second full-file review pass (2026-09-02).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
