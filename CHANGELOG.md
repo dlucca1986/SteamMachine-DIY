@@ -790,6 +790,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   explaining why it deliberately skips a malformed line via a bare `shlex.split()`/`except
   ValueError` instead of the shared `shlex_split_or_fallback()`: a degraded `str.split()` there
   could pair the wrong link/target and recreate a bogus symlink, worse than skipping the entry.
+- `utils.py`: added `safe_emit(signal, *args)` — `control_center.py`'s `_safe_emit` (swallow
+  `RuntimeError` from emitting on a torn-down window) was reimplemented inline in
+  `updater.py`'s two workers instead of reused, since `updater.py` is imported *by*
+  `control_center.py` and couldn't import it back without a cycle. Moved to `utils.py`, which
+  both already import from; every call site updated. Found via a full periodic
+  KISS/centralization audit re-run (2026-09-03, first full re-run since 2026-08-26) — a
+  second candidate from the same audit (4 identically-shaped busy-guard flags in
+  `control_center.py`, crossing the "extract only if a third appears" threshold a prior audit
+  set) was reviewed and deliberately left alone: the guard itself is 3 obvious lines per site,
+  and a shared helper would need `getattr`/`setattr` on string attribute names to save very
+  little, plus one site (`export_support_log`) sets its flag after a synchronous dialog rather
+  than before, unlike the other three.
 
 ---
 
