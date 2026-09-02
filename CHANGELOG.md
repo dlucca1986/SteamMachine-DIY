@@ -691,6 +691,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   against a rebuilt `libcore.so`: normal write, overwrite, symlink attack, FIFO with no
   reader, and FIFO with an attached reader all behave as intended, none hang. Found via a
   third full-file review pass (4 parallel agents, 2026-09-03).
+- `updater.py::_on_download`: called `self._set_idle()` unconditionally at the top, before
+  the checksum re-verify and before Konsole/pkexec even launched — the "Check for Updates"
+  button was clickable again well before the privileged install (a detached process this
+  handler never awaits) actually finished, so a second click could start a second concurrent
+  `pkexec install.sh --update` against the same files (checklist item 15). Now only re-idles
+  on the failure paths (download failed, verify failed, spawn failed); on success it stays
+  disabled with an "Installing..." label since a reboot is imminent. Found via a third
+  full-file review pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
