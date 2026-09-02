@@ -699,6 +699,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   on the failure paths (download failed, verify failed, spawn failed); on success it stays
   disabled with an "Installing..." label since a reboot is imminent. Found via a third
   full-file review pass (4 parallel agents, 2026-09-03).
+- `health.py::_check_binaries`: `os.access(path, os.X_OK)` alone is true for a traversable
+  directory, not just an executable file — a SSoT `bin_*` key mistakenly pointed at a
+  directory passed this preflight as "OK" even though `session_launch.py` can't actually
+  exec it. Now also requires `os.path.isfile()`. Found via a third full-file review pass (4
+  parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
