@@ -87,6 +87,10 @@ class UpdateManager(QObject):
         def worker() -> None:
             try:
                 result = download_release(info, self._dest_root)
+            # A daemon thread's uncaught exception has nowhere to go
+            # (stderr is /dev/null when the app is launched detached) and
+            # would skip the emit() below entirely, leaving the button
+            # stuck on "Downloading..." forever with no error shown.
             # pylint: disable-next=broad-except
             except Exception:  # noqa: BLE001
                 result = None
