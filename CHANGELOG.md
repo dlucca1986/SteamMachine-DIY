@@ -653,6 +653,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `scripts/audit-c-core.sh`/`scripts/audit-ctypes-abi.py` (no ABI change), and a
   functional smoke test confirming normal writes still work and a symlinked tmp path is
   now refused without touching its target.
+- `control_center.py::closeEvent`: a failed save (a YAML syntax error, or an `OSError` from
+  `_atomic_save`) on the "Save before closing?" prompt still closed the window right after
+  the save loop — `_atomic_save` swallows both exceptions internally (shows its own error
+  dialog) and gives `closeEvent` no success/failure signal, so "Save" silently behaved like
+  "Discard" whenever the save actually failed. Now re-checks `_dirty_editors()` after the
+  save loop and calls `event.ignore()` if anything is still dirty, instead of accepting
+  unconditionally. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
