@@ -146,6 +146,51 @@ def test_on_download_shows_error_when_konsole_fails_to_spawn(monkeypatch):
     updater.UpdateManager._on_download(mgr, result)
 
     assert any(kind == "critical" for kind, _args in calls)
+    assert mgr.button.enabled is True
+
+
+# ---------------------------------------------------------------------------
+# _on_download — re-entrancy: the button must stay disabled from download
+# through the privileged install actually starting, not re-idle at the top
+# of the handler (a second click could launch a second concurrent
+# `install.sh --update` against the same files, checklist item 15)
+# ---------------------------------------------------------------------------
+
+
+def test_on_download_stays_busy_through_a_successful_install(monkeypatch):
+    """Regression: _on_download called self._set_idle() unconditionally
+    at the top, before the checksum re-verify and before Konsole/pkexec
+    even launched -- the button was clickable again well before the
+    privileged install (a detached process this handler never awaits)
+    actually finished, letting a second click start a second concurrent
+    `pkexec install.sh --update` (found via a third full-file review
+    pass, 2026-09-03)."""
+    monkeypatch.setattr(updater, "QMessageBox", _FakeMessageBox([]))
+    monkeypatch.setattr(
+        updater, "verify_file_sha256", lambda *_a, **_k: True
+    )
+    monkeypatch.setattr(updater, "spawn_native", lambda *_a, **_k: 1234)
+
+    mgr = _FakeManager([])
+    mgr._set_busy("⏳ Downloading v9.9.9…")
+    result = (Path("/tmp/unused"), "0" * 64)
+
+    updater.UpdateManager._on_download(mgr, result)
+
+    assert mgr.button.enabled is False
+    assert mgr.button.text == "🚀 Installing…"
+
+
+def test_on_download_reidles_when_download_result_is_none(monkeypatch):
+    calls = []
+    monkeypatch.setattr(updater, "QMessageBox", _FakeMessageBox(calls))
+    mgr = _FakeManager([])
+    mgr._set_busy("⏳ Downloading v9.9.9…")
+
+    updater.UpdateManager._on_download(mgr, None)
+
+    assert mgr.button.enabled is True
+    assert calls and calls[0][0] == "warning"
 
 
 def test_on_download_treats_verify_oserror_as_verification_failed(
@@ -174,4 +219,5 @@ def test_on_download_treats_verify_oserror_as_verification_failed(
     updater.UpdateManager._on_download(mgr, result)  # must not raise
 
     assert not spawned
+    assert mgr.button.enabled is True
     assert calls[-1][0] == "critical"

@@ -158,8 +158,15 @@ class UpdateManager(QObject):
         polkit auth popup) — a long silent root operation would be both
         bad UX and undiagnosable when it fails.
         """
-        self._set_idle()
+        # Deliberately NOT re-idled here: the button must stay disabled
+        # from download through the privileged install actually starting,
+        # or a second click while Konsole/pkexec is still running (a
+        # detached process this handler never awaits) can launch a second
+        # concurrent `install.sh --update` against the same files. Every
+        # return path below either re-idles explicitly (failure — let the
+        # user retry) or leaves it busy (success — a reboot is imminent).
         if result is None:
+            self._set_idle()
             QMessageBox.warning(
                 self._win,
                 "Update Download",
@@ -185,6 +192,7 @@ class UpdateManager(QObject):
         except OSError:
             verified = False
         if not verified:
+            self._set_idle()
             QMessageBox.critical(
                 self._win,
                 "Update Aborted",
@@ -212,9 +220,12 @@ class UpdateManager(QObject):
             ],
         )
         if pid == 0:
+            self._set_idle()
             QMessageBox.critical(
                 self._win,
                 "Update Failed",
                 "Could not launch a terminal to run the installer.\n"
                 f"Run it manually: sudo bash {install_sh} --update",
             )
+            return
+        self._set_busy("🚀 Installing…")
