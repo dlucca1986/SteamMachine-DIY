@@ -618,3 +618,25 @@ def test_fix_ownership_swallows_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr(utils.subprocess, "run", fake_run)
 
     utils.fix_ownership(tmp_path, "someuser")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# write_atomic — forwards c_write_atomic's success/failure signal as bool
+# ---------------------------------------------------------------------------
+
+
+def test_write_atomic_returns_true_on_success(monkeypatch, tmp_path):
+    """Regression: c_write_atomic used to be void, so write_atomic() gave
+    callers no way to learn a write failed (symlink/FIFO refused at
+    tmp_path, a short write, a failed rename) short of grepping syslog.
+    Now forwards the C-side int return as bool (found via a third
+    full-file review pass, 2026-09-03)."""
+    monkeypatch.setattr(utils._LIB, "c_write_atomic", lambda *_a: 1)
+
+    assert utils.write_atomic(tmp_path / "f", "content") is True
+
+
+def test_write_atomic_returns_false_on_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(utils._LIB, "c_write_atomic", lambda *_a: 0)
+
+    assert utils.write_atomic(tmp_path / "f", "content") is False

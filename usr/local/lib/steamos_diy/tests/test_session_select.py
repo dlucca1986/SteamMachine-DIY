@@ -85,9 +85,12 @@ def test_select_persists_state_even_when_dispatch_fails(
         session_select.sys, "argv", ["session_select.py", "steam"]
     )
     writes = []
-    monkeypatch.setattr(
-        session_select, "write_atomic", lambda *a: writes.append(a)
-    )
+
+    def fake_write_atomic(*a):
+        writes.append(a)
+        return True
+
+    monkeypatch.setattr(session_select, "write_atomic", fake_write_atomic)
     monkeypatch.setattr(
         session_select, "spawn_native", lambda path, args: 0
     )
@@ -101,3 +104,36 @@ def test_select_persists_state_even_when_dispatch_fails(
     session_select.select()
 
     assert writes == [(next_session_path, "steam")]
+
+
+def test_select_logs_when_write_atomic_fails(monkeypatch, tmp_path):
+    """Regression: write_atomic() used to be void, so a persist failure
+    (symlink/FIFO at the tmp path, a failed rename) was invisible to
+    select() -- the DISPATCH_FAILED log's "state persisted" claim could
+    be a lie. Now logs NEXT_SESSION_WRITE_FAILED separately when the
+    write itself didn't land (found via a third full-file review pass,
+    2026-09-03)."""
+    monkeypatch.setattr(
+        session_select.sys, "argv", ["session_select.py", "steam"]
+    )
+    monkeypatch.setattr(session_select, "write_atomic", lambda *a: False)
+    monkeypatch.setattr(session_select, "spawn_native", lambda path, args: 1)
+    logs = []
+    monkeypatch.setattr(
+        session_select,
+        "jlog",
+        lambda tag, msg, level="INFO": logs.append((tag, msg, level)),
+    )
+    next_session_path = str(tmp_path / "next_session")
+    monkeypatch.setattr(
+        session_select, "get_ssot_var", lambda key, default: (
+            next_session_path if key == "next_session" else default
+        )
+    )
+
+    session_select.select()
+
+    assert any(
+        "NEXT_SESSION_WRITE_FAILED" in msg and level == "ERROR"
+        for _tag, msg, level in logs
+    )

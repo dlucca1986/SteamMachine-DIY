@@ -90,7 +90,15 @@ def select() -> None:
     target = _resolve_target(sys.argv[1])
 
     next_session_path = get_ssot_var("next_session", NEXT_SESSION_PATH)
-    write_atomic(next_session_path, target)
+    if not write_atomic(next_session_path, target):
+        # DISPATCH_FAILED's "state persisted" message below would be a lie
+        # if this didn't actually land — surface it separately so the two
+        # failure modes (persist vs. dispatch) aren't conflated in the log.
+        jlog(
+            "CORE",
+            f"NEXT_SESSION_WRITE_FAILED: {next_session_path}",
+            level="ERROR",
+        )
     jlog("CORE", f"SWITCH_REQUEST: {target}")
     notify(f"Switching to {target.capitalize()}...")
 

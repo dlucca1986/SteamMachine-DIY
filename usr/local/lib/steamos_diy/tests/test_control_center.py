@@ -835,9 +835,9 @@ def test_schedule_log_filter_starts_the_debounce_timer():
 
 
 # ---------------------------------------------------------------------------
-# _atomic_save — a saved profile whose YAML root isn't a mapping used to
-# report success while load_yaml_safe() (utils.py) silently degrades that
-# exact shape to {} on the next load, dropping the whole profile.
+# Shared editor/document/message-box fakes — used here by the
+# _show_completion_message tests below, and imported by
+# test_control_center_atomic_save.py and test_control_center_close.py.
 # ---------------------------------------------------------------------------
 
 
@@ -876,62 +876,6 @@ class _FakeMessageBox:  # pylint: disable=too-few-public-methods
 
     def warning(self, *args):
         self._calls.append(("warning", args))
-
-
-def _atomic_save_harness(monkeypatch, tmp_path, content):
-    calls = []
-    monkeypatch.setattr(
-        control_center, "QMessageBox", _FakeMessageBox(calls)
-    )
-    written = []
-    monkeypatch.setattr(
-        control_center, "write_atomic", lambda p, c: written.append((p, c))
-    )
-    editor = _FakeEditor()
-    win = SimpleNamespace(_highlight_yaml_error=lambda *a: None)
-
-    control_center.SDYControlCenter._atomic_save(
-        win, str(tmp_path / "profile.yaml"), content, editor
-    )
-    return calls, written, editor
-
-
-def test_atomic_save_rejects_non_mapping_root(monkeypatch, tmp_path):
-    """Regression: _atomic_save only called yaml_parser.load(content) to
-    validate syntax, discarding the result -- a syntactically valid but
-    non-mapping root (e.g. a bare list) reported "Configuration saved!"
-    even though load_yaml_safe() degrades that exact shape to {} on the
-    next load, silently dropping the whole profile (found via a
-    full-file 9-agent review, 2026-08-31)."""
-    calls, written, editor = _atomic_save_harness(
-        monkeypatch, tmp_path, "- one\n- two\n"
-    )
-
-    assert not written
-    assert calls and calls[0][0] == "critical"
-    assert editor.document().modified is None
-
-
-def test_atomic_save_accepts_mapping_root(monkeypatch, tmp_path):
-    calls, written, editor = _atomic_save_harness(
-        monkeypatch, tmp_path, "flags:\n  - -W 1280\n"
-    )
-
-    assert written
-    assert calls and calls[0][0] == "information"
-    assert editor.document().modified is False
-
-
-def test_atomic_save_accepts_empty_content(monkeypatch, tmp_path):
-    """An empty/comments-only document parses to None, not a dict -- must
-    still save (matches beautify_yaml's own None-is-fine handling right
-    above _atomic_save), not be rejected as "not a mapping"."""
-    calls, written, _editor = _atomic_save_harness(
-        monkeypatch, tmp_path, "# just a comment\n"
-    )
-
-    assert written
-    assert calls and calls[0][0] == "information"
 
 
 # ---------------------------------------------------------------------------

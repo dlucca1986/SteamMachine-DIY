@@ -848,7 +848,15 @@ class SDYControlCenter(QMainWindow):
                 )
             p_obj = Path(path)
             p_obj.parent.mkdir(parents=True, exist_ok=True)
-            write_atomic(p_obj, content)
+            if not write_atomic(p_obj, content):
+                # Refused/failed at the C-Core level (symlink or FIFO at
+                # the tmp path, a short write, a failed rename) — already
+                # logged via syslog there, but the editor must stay dirty
+                # so closeEvent's unsaved-changes guard still catches it.
+                QMessageBox.critical(
+                    self, "Save Error", "Write failed — see system logs."
+                )
+                return
             editor.document().setModified(False)
             QMessageBox.information(self, "Success", "Configuration saved!")
         except YAMLError as exc:

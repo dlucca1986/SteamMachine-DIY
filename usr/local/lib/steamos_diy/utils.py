@@ -47,6 +47,7 @@ try:
     _LIB.c_jlog.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
     _LIB.c_notify.argtypes = [ctypes.c_char_p, ctypes.c_int]
     _LIB.c_write_atomic.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    _LIB.c_write_atomic.restype = ctypes.c_int
     _LIB.c_sd_notify_ready.argtypes = []
 
 except OSError as err:
@@ -330,9 +331,20 @@ def shlex_split_or_fallback(value: str) -> tuple[list[str], ValueError | None]:
         return value.split(), err
 
 
-def write_atomic(path: str | Path, val: str) -> None:
-    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable)."""
-    _LIB.c_write_atomic(str(path).encode("utf-8"), str(val).encode("utf-8"))
+def write_atomic(path: str | Path, val: str) -> bool:
+    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable).
+
+    Returns True on success, False on any failure (symlink/FIFO refused at
+    tmp_path, a short write, or a failed rename) — already logged via
+    syslog on the C side, but callers that need to react (not just have a
+    trace to grep for later) can now check the result instead of assuming
+    the write landed.
+    """
+    return bool(
+        _LIB.c_write_atomic(
+            str(path).encode("utf-8"), str(val).encode("utf-8")
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

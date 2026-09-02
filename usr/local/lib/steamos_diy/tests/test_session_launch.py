@@ -179,6 +179,33 @@ def test_monitor_process_detects_survival_as_stable(tmp_path, set_ssot):
         proc.kill()
 
 
+def test_monitor_process_logs_when_write_atomic_fails(
+    tmp_path, set_ssot, monkeypatch
+):
+    """Regression: write_atomic() used to be void, so a persist failure
+    on the stable path (symlink/FIFO at the tmp path, a failed rename)
+    was invisible here (found via a third full-file review pass,
+    2026-09-03)."""
+    set_ssot()
+    monkeypatch.setattr(session_launch, "write_atomic", lambda *a: False)
+    logged = []
+    monkeypatch.setattr(
+        session_launch,
+        "jlog",
+        lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
+    )
+    with subprocess.Popen(["/bin/sleep", "2"]) as proc:
+        session_launch._monitor_process(
+            proc, 0.15, str(tmp_path / "next_session"), "steam"
+        )
+        proc.kill()
+
+    assert any(
+        "NEXT_SESSION_WRITE_FAILED" in msg and level == "ERROR"
+        for _tag, msg, level in logged
+    )
+
+
 # ---------------------------------------------------------------------------
 # _terminate_gracefully — SIGTERM, then SIGKILL escalation on timeout
 # ---------------------------------------------------------------------------
@@ -254,6 +281,30 @@ def test_run_session_crash_recovers_to_desktop(tmp_path, set_ssot):
     assert target == "desktop"
     assert ret_code == 0
     assert proc_holder[0] is None  # cleared in the finally block
+
+
+def test_handle_recovery_logs_when_write_atomic_fails(set_ssot, monkeypatch):
+    """Regression: this is the single most important write_atomic() call
+    in the file (persists the desktop fallback after a crash) -- a
+    silent failure here used to mean the next boot could re-read
+    whatever next_session already held, possibly the same target that
+    just crashed (found via a third full-file review pass, 2026-09-03)."""
+    set_ssot(TERM_TIMEOUT="1.0")
+    monkeypatch.setattr(session_launch, "write_atomic", lambda *a: False)
+    logged = []
+    monkeypatch.setattr(
+        session_launch,
+        "jlog",
+        lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
+    )
+    with subprocess.Popen(["/bin/true"]) as proc:
+        proc.wait()
+        session_launch._handle_recovery(proc, "/tmp/does-not-matter")
+
+    assert any(
+        "NEXT_SESSION_WRITE_FAILED" in msg and level == "ERROR"
+        for _tag, msg, level in logged
+    )
 
 
 def test_run_session_skips_post_start_cmds_after_crash(
