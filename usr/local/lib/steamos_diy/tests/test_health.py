@@ -80,3 +80,22 @@ def test_read_user_config_returns_unreadable_for_non_utf8(
     result = health._read_user_config()
 
     assert result is health._UNREADABLE
+
+
+def test_check_binaries_rejects_a_directory(tmp_path, monkeypatch):
+    """Regression: os.access(path, os.X_OK) alone is true for a
+    traversable directory, not just an executable file -- a SSoT binary
+    key mistakenly pointed at a directory passed this preflight as "OK"
+    even though session_launch.py can't actually exec it (found via a
+    third full-file review pass, 2026-09-03)."""
+    fake_dir = tmp_path / "not-a-binary"
+    fake_dir.mkdir()
+    monkeypatch.setattr(health, "get_ssot_var", lambda key, default: (
+        str(fake_dir) if key == "bin_gs" else default
+    ))
+
+    results = health._check_binaries()
+
+    gs_result = next(r for r in results if r.name == "Binary bin_gs")
+    assert gs_result.ok is False
+    assert "not executable" in gs_result.detail

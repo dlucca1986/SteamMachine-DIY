@@ -293,7 +293,10 @@ def _check_binaries() -> list[CheckResult]:
     results: list[CheckResult] = []
     for key, default in _BINARY_KEYS:
         path = get_ssot_var(key, default)
-        ok = bool(path) and os.access(path, os.X_OK)
+        # os.access(X_OK) alone is true for a traversable directory, not
+        # just an executable file -- a SSoT key mistakenly pointed at a
+        # directory would otherwise pass this preflight as "OK".
+        ok = bool(path) and os.path.isfile(path) and os.access(path, os.X_OK)
         detail = path if ok else f"not executable: {path}"
         results.append(CheckResult(f"Binary {key}", ok, detail))
     return results
