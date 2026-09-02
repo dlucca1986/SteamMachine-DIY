@@ -709,6 +709,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   became `/.config/steamos_diy` and the "delete user data" step silently targeted an
   unintended root-level path instead of failing loudly. Now exits with an error, matching
   `install.sh`. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `updater.py`: `_download`'s bare `# noqa: BLE001` on its broad-except lacked the one-line
+  justification CLAUDE.md's suppression-comment discipline requires. Added: an uncaught
+  exception in this daemon thread's worker would skip the `.emit()` below it entirely,
+  leaving the update button stuck on "Downloading..." forever with nothing printed. Found
+  via a third full-file review pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
