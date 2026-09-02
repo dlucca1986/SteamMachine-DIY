@@ -714,6 +714,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   exception in this daemon thread's worker would skip the `.emit()` below it entirely,
   leaving the update button stuck on "Downloading..." forever with nothing printed. Found
   via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `health.py::_check_gamescope_flags`: built an "allowed flags" set by text-parsing
+  `gamescope --help`, then diffed the configured flags against it — but gamescope accepts
+  some flags it never documents in `--help` (found live on real hardware: `--fade-out-duration`
+  is used successfully in every real launch, yet the preflight always flagged it
+  "unrecognised"). Now runs the configured flags through gamescope's own parser
+  (`gamescope <flags> --help`) and checks its own error output instead of reimplementing one
+  — exactly as side-effect-free as before (`--help` still exits immediately without touching
+  display/DRM), and simpler code (removes `_gamescope_options()`/`_collect_unknown_flags()`
+  entirely). `getopt_long` stops at the first bad option, so only the first one is ever
+  reported per run — still strictly better than false-flagging a valid flag. Verified against
+  a real installed gamescope (3.16.28): a config using `--fade-out-duration` now passes, a
+  genuinely invalid flag is still correctly rejected. Found during a real-hardware test round
+  (2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
