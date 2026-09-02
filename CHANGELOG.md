@@ -704,6 +704,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   directory passed this preflight as "OK" even though `session_launch.py` can't actually
   exec it. Now also requires `os.path.isfile()`. Found via a third full-file review pass (4
   parallel agents, 2026-09-03).
+- `uninstall.sh`: had no guard against an unresolved `USER_HOME`, unlike `install.sh`'s
+  mirror-image check. A stale/invalid `SUDO_USER` left `USER_HOME` empty, so `user_cfg`
+  became `/.config/steamos_diy` and the "delete user data" step silently targeted an
+  unintended root-level path instead of failing loudly. Now exits with an error, matching
+  `install.sh`. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
