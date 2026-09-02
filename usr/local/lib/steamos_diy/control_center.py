@@ -1012,6 +1012,12 @@ class SDYControlCenter(QMainWindow):
         if reply == QMessageBox.StandardButton.Save:
             for save in dirty:
                 save()
+            if self._dirty_editors():
+                # _atomic_save() left the document modified: it hit a
+                # YAMLError/OSError and already showed the error dialog.
+                # Don't discard the edit by closing anyway.
+                event.ignore()
+                return
         event.accept()
 
     # ── Game discovery (background thread) ─────────────────────────────────

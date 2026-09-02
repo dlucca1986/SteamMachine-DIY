@@ -848,6 +848,9 @@ class _FakeDocument:  # pylint: disable=too-few-public-methods
     def setModified(self, value):  # pylint: disable=invalid-name
         self.modified = value
 
+    def isModified(self):  # pylint: disable=invalid-name
+        return bool(self.modified)
+
 
 class _FakeEditor:
     def __init__(self):
