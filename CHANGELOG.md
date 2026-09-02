@@ -675,6 +675,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   bug for anyone who answers "N" to the prompt on a legacy 0600 SSoT. Now heals the
   permissions regardless of the user's answer. Found via a third full-file review pass (4
   parallel agents, 2026-09-03), verified with a standalone smoke test of the branch logic.
+- `steamos_diy_core.c::c_write_atomic`: two related gaps fixed together. It was `void`, so
+  every failure (symlink refused, short write, failed rename) was only visible in syslog,
+  never to the Python caller — `write_atomic()` now forwards the C side's int return as
+  `bool`, and all 4 call sites react to `False` instead of assuming the write landed;
+  `control_center.py::_atomic_save` is the one users actually see: it now reports a Save
+  Error and leaves the document dirty instead of lying "Configuration saved!", which is
+  also what makes the recent `closeEvent` fix effective for a C-level write failure, not
+  just a Python-level `YAMLError`/`OSError`. Separately, `open()` on the tmp path had no
+  `O_NONBLOCK`: a same-user process planting a FIFO there (same threat model as the
+  existing `O_NOFOLLOW` symlink guard) blocked every caller forever waiting for a reader —
+  `O_NONBLOCK` now makes a reader-less FIFO fail immediately (`ENXIO`), and a new
+  `fstat`/`S_ISREG` check refuses the case where an attacker keeps a reader attached (which
+  would otherwise let the FIFO get renamed onto the real config file). Verified functionally
+  against a rebuilt `libcore.so`: normal write, overwrite, symlink attack, FIFO with no
+  reader, and FIFO with an attached reader all behave as intended, none hang. Found via a
+  third full-file review pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
