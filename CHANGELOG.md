@@ -660,6 +660,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   "Discard" whenever the save actually failed. Now re-checks `_dirty_editors()` after the
   save loop and calls `event.ignore()` if anything is still dirty, instead of accepting
   unconditionally. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `session_launch.py`: `_schedule_post_start_cmds`'s docstring overclaimed its own crash
+  guard — it only catches a crash within `[0, POST_START_DELAY]`, but `_monitor_process`
+  keeps watching up to `VALIDATION_TIMEOUT`, longer than `POST_START_DELAY` under the
+  shipped SSoT defaults (2.0s vs 5.0s). A crash in `(POST_START_DELAY, VALIDATION_TIMEOUT]`
+  still fires `post_start_cmds` before recovery-to-desktop engages. Documented as a
+  deliberately accepted tradeoff rather than fixed in code: closing it fully would delay
+  every session's `post_start_cmds` up to `VALIDATION_TIMEOUT`, even when healthy, to guard
+  against a narrow, low-harm edge case (stray command state on a session about to be
+  recovered anyway — not data loss or a security issue). Found via a third full-file review
+  pass (4 parallel agents, 2026-09-03).
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire

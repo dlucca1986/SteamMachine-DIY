@@ -126,6 +126,20 @@ def _schedule_post_start_cmds(
     early exit — checked once after the sleep so commands meant to run
     "after the game starts" don't fire for a session that had already
     failed and switched to desktop by the time this thread woke up.
+
+    Known residual gap (accepted tradeoff, not fixed): this only catches
+    a crash within [0, delay]. _monitor_process keeps watching for a
+    crash up to VALIDATION_TIMEOUT, which under the shipped SSoT defaults
+    (POST_START_DELAY=2.0, VALIDATION_TIMEOUT=5.0) is longer than delay —
+    a crash landing in (delay, VALIDATION_TIMEOUT] still fires the
+    commands before the recovery-to-desktop path engages. Closing this
+    fully would mean waiting up to VALIDATION_TIMEOUT before ever firing
+    post_start_cmds, even for a perfectly healthy session — trading a
+    universal, on-every-launch UX delay for protection against a narrow,
+    low-harm edge case (stray post-start command state on a session
+    that's about to be recovered anyway, not data loss or a security
+    issue). Deliberately left as is, same reasoning as this file's other
+    accepted-tradeoff gaps.
     """
     try:
         time.sleep(max(delay, 0))
