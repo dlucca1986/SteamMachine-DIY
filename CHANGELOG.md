@@ -670,6 +670,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   against a narrow, low-harm edge case (stray command state on a session about to be
   recovered anyway — not data loss or a security issue). Found via a third full-file review
   pass (4 parallel agents, 2026-09-03).
+- `install.sh`: the plain-reinstall SSoT confirm prompt's "decline overwrite" branch lost
+  the `chmod 644` heal its `--update` sibling has, reproducing the 2.1.5 "SSoT unreadable"
+  bug for anyone who answers "N" to the prompt on a legacy 0600 SSoT. Now heals the
+  permissions regardless of the user's answer. Found via a third full-file review pass (4
+  parallel agents, 2026-09-03), verified with a standalone smoke test of the branch logic.
 
 ### Performance
 - `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
