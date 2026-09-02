@@ -159,6 +159,10 @@ deploy_files() {
                 info "Overwriting SSoT as requested..."
                 install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
             else
+                # Same heal as the --update branch above: a preserved
+                # SSoT can still be a 2.1.5-era 0600 file, and declining
+                # the overwrite must not leave it unreadable.
+                chmod 644 "$SSOT_CONF"
                 info "Preserving existing SSoT config."
             fi
         else
