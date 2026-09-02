@@ -61,12 +61,11 @@ _LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
 
 _SERVICE_UNIT: str = "steamos_diy.service"
 
-# Leading option token(s) of a `gamescope --help` line, e.g.
-# "-W, --output-width ..." or "--rt ..." — captures short and long form.
-_GS_HELP_OPT = re.compile(r"^(--?[A-Za-z][\w-]*)(?:,\s*(--[\w-]+))?")
-
-# A config flag token is an option, not a negative-number value ("-1").
-_FLAG_TOKEN = re.compile(r"^--?[A-Za-z]")
+# gamescope's own getopt_long error, both forms it actually emits:
+# "unrecognized option '--foo'" (long) and "invalid option -- 'Z'" (short).
+_GS_UNRECOGNIZED = re.compile(
+    r"unrecognized option '([^']+)'|invalid option -- '([^']+)'"
+)
 
 
 class CheckResult(NamedTuple):
@@ -212,60 +211,8 @@ def _check_config_types(data: object) -> list[CheckResult]:
     return results
 
 
-def _gamescope_options(gs_bin: str) -> set[str] | None:
-    """Parse `gamescope --help` into the set of recognised option tokens.
-
-    Returns None when gamescope cannot be run or its help yields nothing,
-    so the caller skips the check instead of reporting a false failure
-    (binary presence is already covered by _check_binaries).
-    """
-    try:
-        # gs_bin is the SSoT-configured gamescope path, run with a fixed
-        # flag — never shell=True or externally-controlled arguments.
-        res = subprocess.run(  # nosec B603
-            [gs_bin, "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    opts: set[str] = set()
-    for line in (res.stdout + res.stderr).splitlines():
-        match = _GS_HELP_OPT.match(line.strip())
-        if match:
-            opts.update(tok for tok in match.groups() if tok)
-    return opts or None
-
-
-def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
-    """Option tokens in *flags* the installed gamescope does not know.
-
-    Mirrors the runtime (`shlex.split` per entry, then extend argv): an
-    entry may bundle a flag with its value ("-W 1280", "--nested-width=1280")
-    or several flags; only option tokens are checked — values and negative
-    numbers ignored, "--flag=value" judged by its flag part alone.
-    Order-preserving and de-duplicated.
-    """
-    unknown: list[str] = []
-    seen: set[str] = set()
-    for entry in flags:
-        tokens, _ = shlex_split_or_fallback(str(entry))
-        for tok in tokens:
-            base = tok.split("=", 1)[0]
-            if (
-                _FLAG_TOKEN.match(base)
-                and base not in supported
-                and base not in seen
-            ):
-                seen.add(base)
-                unknown.append(base)
-    return unknown
-
-
 def _check_gamescope_flags(data: object) -> CheckResult:
-    """Validate global-config 'flags' against the installed gamescope.
+    """Validate global-config 'flags' against gamescope's own argv parser.
 
     A flag the running gamescope does not recognise makes it exit at
     launch — the session never starts, systemd retries, and TTY1 goes
@@ -273,18 +220,39 @@ def _check_gamescope_flags(data: object) -> CheckResult:
     gamescope versions, here before boot is the whole point. Scope is the
     global config (the flags always passed); per-game profiles keep to
     their own launch path.
+
+    Runs the actual configured flags through gamescope itself
+    (`gamescope <flags> --help`) rather than diffing against
+    `gamescope --help`'s documented option list: gamescope accepts some
+    flags it never lists in --help (e.g. --fade-out-duration), so a
+    text-based allowlist reports those as false failures. --help still
+    makes gamescope print usage and exit immediately without touching
+    display/DRM, so this stays as side-effect-free as the old approach.
+    getopt_long stops at the first bad option, so only the first one (if
+    any) is ever reported — still strictly better than false-flagging a
+    valid flag.
     """
     flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:
         return CheckResult("Gamescope flags", True, "none set")
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
-    supported = _gamescope_options(gs_bin)
-    if supported is None:
+    argv = [gs_bin]
+    for entry in flags:
+        tokens, _ = shlex_split_or_fallback(str(entry))
+        argv.extend(tokens)
+    argv.append("--help")
+    try:
+        # gs_bin is the SSoT-configured gamescope path; flags come from
+        # the local YAML config, never shell=True or externally-supplied.
+        res = subprocess.run(  # nosec B603
+            argv, capture_output=True, text=True, check=False, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
         return CheckResult("Gamescope flags", True, "gamescope unavailable")
-    unknown = _collect_unknown_flags(flags, supported)
-    if unknown:
-        detail = f"unrecognised: {', '.join(unknown)}"
-        return CheckResult("Gamescope flags", False, detail)
+    match = _GS_UNRECOGNIZED.search(res.stdout + res.stderr)
+    if match:
+        bad = match.group(1) or f"-{match.group(2)}"
+        return CheckResult("Gamescope flags", False, f"unrecognised: {bad}")
     return CheckResult("Gamescope flags", True, "all recognised")
 
 

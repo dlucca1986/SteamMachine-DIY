@@ -99,3 +99,118 @@ def test_check_binaries_rejects_a_directory(tmp_path, monkeypatch):
     gs_result = next(r for r in results if r.name == "Binary bin_gs")
     assert gs_result.ok is False
     assert "not executable" in gs_result.detail
+
+
+# ---------------------------------------------------------------------------
+# _check_gamescope_flags — validated via gamescope's own argv parser, not
+# a text-parsed --help allowlist (which false-flags real-but-undocumented
+# flags like --fade-out-duration; found live on real hardware, 2026-09-03)
+# ---------------------------------------------------------------------------
+
+
+def _fake_run(stdout="", stderr="", returncode=0):
+    def run(_argv, **_kwargs):
+        return SimpleNamespace(
+            stdout=stdout, stderr=stderr, returncode=returncode
+        )
+
+    return run
+
+
+def test_check_gamescope_flags_accepts_undocumented_but_valid_flag(
+    monkeypatch,
+):
+    """Regression: gamescope accepts some flags (e.g. --fade-out-duration)
+    it never lists in --help. The old approach diffed configured flags
+    against a --help-derived allowlist and false-flagged this as
+    "unrecognised" even though gamescope itself accepts it fine -- now
+    runs the flags through gamescope's own parser instead, which prints
+    normal usage (no "unrecognized option") for a flag it actually
+    accepts, undocumented or not."""
+    monkeypatch.setattr(
+        health, "get_ssot_var", lambda *a, **k: "/usr/bin/gamescope"
+    )
+    monkeypatch.setattr(
+        health.subprocess,
+        "run",
+        _fake_run(stdout="usage: gamescope [options...] -- [command...]\n"),
+    )
+
+    result = health._check_gamescope_flags(
+        {"flags": ["--fade-out-duration 200"]}
+    )
+
+    assert result.ok is True
+    assert result.detail == "all recognised"
+
+
+def test_check_gamescope_flags_rejects_a_genuinely_unknown_long_flag(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        health, "get_ssot_var", lambda *a, **k: "/usr/bin/gamescope"
+    )
+    monkeypatch.setattr(
+        health.subprocess,
+        "run",
+        _fake_run(
+            stderr="gamescope: unrecognized option "
+            "'--supercazzola-test-recovery'\n"
+            "See --help for a list of options.\n",
+            returncode=1,
+        ),
+    )
+
+    result = health._check_gamescope_flags(
+        {"flags": ["--supercazzola-test-recovery"]}
+    )
+
+    assert result.ok is False
+    assert result.detail == "unrecognised: --supercazzola-test-recovery"
+
+
+def test_check_gamescope_flags_rejects_a_genuinely_unknown_short_flag(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        health, "get_ssot_var", lambda *a, **k: "/usr/bin/gamescope"
+    )
+    monkeypatch.setattr(
+        health.subprocess,
+        "run",
+        _fake_run(
+            stderr="gamescope: invalid option -- 'Z'\n"
+            "See --help for a list of options.\n",
+            returncode=1,
+        ),
+    )
+
+    result = health._check_gamescope_flags({"flags": ["-Z"]})
+
+    assert result.ok is False
+    assert result.detail == "unrecognised: -Z"
+
+
+def test_check_gamescope_flags_degrades_when_gamescope_unavailable(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        health, "get_ssot_var", lambda *a, **k: "/usr/bin/gamescope"
+    )
+
+    def raising_run(*_a, **_k):
+        raise FileNotFoundError("no such binary")
+
+    monkeypatch.setattr(health.subprocess, "run", raising_run)
+
+    result = health._check_gamescope_flags({"flags": ["-e"]})
+
+    assert result.ok is True
+    assert result.detail == "gamescope unavailable"
+
+
+def test_check_gamescope_flags_skips_when_no_flags_configured():
+    result = health._check_gamescope_flags({"flags": []})
+
+    assert result.ok is True
+    assert result.detail == "none set"
