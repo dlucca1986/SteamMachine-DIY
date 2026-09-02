@@ -384,6 +384,25 @@ def spawn_native(path: str, args: list[str]) -> int:
         return 0
 
 
+def safe_emit(signal, *args) -> None:
+    """Emit *signal*, swallowing RuntimeError from a torn-down window.
+
+    Every emit() call from a daemon worker thread in control_center.py and
+    updater.py goes through here: closing the window while a worker is
+    still in flight (some, like Backup/Restore, run for up to the 300s
+    pkexec budget) deletes the underlying Qt object, and emitting on a
+    deleted signal raises RuntimeError. Uncaught, that would vanish
+    silently — stderr is /dev/null when the app is launched detached —
+    but there is genuinely nothing left to update at that point, so
+    swallowing it here is correct, not just convenient. Takes a duck-typed
+    signal (only .emit() is called), so this needs no Qt import itself.
+    """
+    try:
+        signal.emit(*args)
+    except RuntimeError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # System & user management
 # ---------------------------------------------------------------------------

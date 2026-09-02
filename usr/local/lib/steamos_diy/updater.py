@@ -30,6 +30,7 @@ from utils import (
     VERSION,
     check_latest_release,
     download_release,
+    safe_emit,
     spawn_native,
     verify_file_sha256,
 )
@@ -73,10 +74,7 @@ class UpdateManager(QObject):
         self._set_busy("⏳ Checking for updates…")
 
         def worker() -> None:
-            try:
-                self._check_ready.emit(check_latest_release())
-            except RuntimeError:
-                pass  # window already torn down; nothing to update
+            safe_emit(self._check_ready, check_latest_release())
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -94,10 +92,7 @@ class UpdateManager(QObject):
             # pylint: disable-next=broad-except
             except Exception:  # noqa: BLE001
                 result = None
-            try:
-                self._download_ready.emit(result)
-            except RuntimeError:
-                pass  # window already torn down; nothing to update
+            safe_emit(self._download_ready, result)
 
         threading.Thread(target=worker, daemon=True).start()
 

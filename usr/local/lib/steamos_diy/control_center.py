@@ -83,6 +83,7 @@ from utils import (
     VERSION,
     clear_ssot_cache,
     get_ssot_var,
+    safe_emit,
     spawn_native,
     write_atomic,
 )
@@ -217,25 +218,6 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
         )
     )
     return conf_root, games_conf_dir
-
-
-def _safe_emit(signal, *args) -> None:
-    """Emit *signal*, swallowing RuntimeError from a torn-down window.
-
-    Every emit() call from a daemon worker thread in this module goes
-    through here: closing the window while a worker is still in flight
-    (some, like Backup/Restore, run for up to the 300s pkexec budget)
-    deletes the underlying Qt object, and emitting on a deleted signal
-    raises RuntimeError. Uncaught, that would vanish silently — stderr is
-    /dev/null when the app is launched detached (same class of issue
-    already hardened in updater.py's workers) — but there is genuinely
-    nothing left to update at that point, so swallowing it here is correct,
-    not just convenient.
-    """
-    try:
-        signal.emit(*args)
-    except RuntimeError:
-        pass
 
 
 def _core_script_argv(name: str, *args: str) -> list[str]:
@@ -590,7 +572,7 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             try:
-                _safe_emit(self.preflight_ready, run_preflight())
+                safe_emit(self.preflight_ready, run_preflight())
             # A daemon thread's uncaught exception has nowhere to go —
             # stderr is /dev/null when the app is launched detached (see
             # the journal.py aware/naive-datetime bug) — so this is the
@@ -599,7 +581,7 @@ class SDYControlCenter(QMainWindow):
             # (health.py already does).
             # pylint: disable-next=broad-except
             except Exception as err:  # noqa: BLE001
-                _safe_emit(
+                safe_emit(
                     self.process_finished, "Preflight Error", str(err), True
                 )
 
@@ -1082,9 +1064,9 @@ class SDYControlCenter(QMainWindow):
                     # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)
                     detected = parse_game_logs("\n".join(lines))
-                    _safe_emit(self.games_detected, detected)
+                    safe_emit(self.games_detected, detected)
                 except (subprocess.SubprocessError, OSError):
-                    _safe_emit(self.games_detected, {})
+                    safe_emit(self.games_detected, {})
             finally:
                 self._scan_games_busy = False
 
@@ -1150,9 +1132,9 @@ class SDYControlCenter(QMainWindow):
                 if tag in ("ALL", "STEAM"):
                     ents.extend(fetch_gamescope_logs(launches))
                 ents.sort(key=lambda x: x[0])
-                _safe_emit(self.logs_ready, ents, tag)
+                safe_emit(self.logs_ready, ents, tag)
             except (subprocess.SubprocessError, OSError) as err:
-                _safe_emit(self.logs_ready, [], f"ERROR:{err}")
+                safe_emit(self.logs_ready, [], f"ERROR:{err}")
             finally:
                 self._logs_busy = False
 
@@ -1283,14 +1265,14 @@ class SDYControlCenter(QMainWindow):
                 Path(dest).write_text(
                     _build_support_report(), encoding="utf-8"
                 )
-                _safe_emit(
+                safe_emit(
                     self.process_finished,
                     "Support Report",
                     f"Saved: {dest}",
                     False,
                 )
             except OSError as err:
-                _safe_emit(
+                safe_emit(
                     self.process_finished, "Save Error", str(err), True
                 )
             finally:
@@ -1338,7 +1320,7 @@ class SDYControlCenter(QMainWindow):
 
         def worker() -> None:
             try:
-                _safe_emit(self.service_status_ready, get_service_status())
+                safe_emit(self.service_status_ready, get_service_status())
             finally:
                 self._service_status_busy = False
 
@@ -1413,7 +1395,7 @@ class SDYControlCenter(QMainWindow):
                 subprocess.run(  # nosec B603
                     ["/usr/bin/pkexec", *cmd], check=True, timeout=300
                 )
-                _safe_emit(self.process_finished, ok_title, ok_msg, False)
+                safe_emit(self.process_finished, ok_title, ok_msg, False)
             except subprocess.TimeoutExpired:
                 # pkexec's own PID is killed by subprocess.run(), but not
                 # any privileged grandchild it spawned (backup.py,
@@ -1440,11 +1422,11 @@ class SDYControlCenter(QMainWindow):
                     "(authentication may have taken too long) — you can "
                     "try again."
                 )
-                _safe_emit(self.process_finished, err_title, message, True)
+                safe_emit(self.process_finished, err_title, message, True)
             except subprocess.CalledProcessError:
-                _safe_emit(self.process_finished, err_title, err_msg, True)
+                safe_emit(self.process_finished, err_title, err_msg, True)
             except OSError as err:
-                _safe_emit(
+                safe_emit(
                     self.process_finished,
                     err_title,
                     f"Cannot launch pkexec: {err}",
@@ -1457,7 +1439,7 @@ class SDYControlCenter(QMainWindow):
                     # background thread — emit and let the main-thread
                     # slot (_on_pkexec_lock_released) do it, same as
                     # process_finished above.
-                    _safe_emit(self.pkexec_lock_released, lock_key)
+                    safe_emit(self.pkexec_lock_released, lock_key)
 
         threading.Thread(target=worker, daemon=True).start()
 
