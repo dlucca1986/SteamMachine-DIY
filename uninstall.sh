@@ -30,6 +30,10 @@ fi
 
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+if [ -z "$USER_HOME" ]; then
+    error "Cannot resolve home directory for user: $REAL_USER"
+    exit 1
+fi
 
 # --- Filesystem Layout (must mirror install.sh / utils.py constants) ---
 readonly LIB_DIR="/usr/local/lib/steamos_diy"
