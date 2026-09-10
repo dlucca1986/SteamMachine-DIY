@@ -20,7 +20,7 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 Configures system access and installs the software stack:
 
 * **Full System Upgrade**: Before installing any package, the installer runs `pacman -Syu` to synchronize the package databases and upgrade all existing packages. This ensures a consistent system state before the framework is deployed.
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `kate`, `konsole`. The last two are explicit dependencies — the Control Center's "Edit SSoT" and "Open Konsole Terminal" buttons target these two binaries by name, independent of whichever desktop environment is actually running.
 * **Hardware Groups:** Automatically manages user membership to ensure hardware access and system administration rights. Adds user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`. The `tty` group is required for `notify()` to write to `/dev/tty1`.
 
 ### 3. SSOT Deployment & Filesystem Policy
