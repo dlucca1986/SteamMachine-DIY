@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -59,7 +59,7 @@ except OSError as err:
 
 # Runtime project version — kept in sync with the file headers by the
 # release bump (a plain-text substitution across the whole tree).
-VERSION: str = "2.1.7"
+VERSION: str = "2.1.8"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"

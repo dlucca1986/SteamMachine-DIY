@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY

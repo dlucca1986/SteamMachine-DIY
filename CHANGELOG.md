@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2.1.8] — 2026-08-26 — Continuous Integration & Centralization Pass
+## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
 ### Added
 - **Continuous Integration**: `.github/workflows/quality-gates.yml` runs on every push/PR to
