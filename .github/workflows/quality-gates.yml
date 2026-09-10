@@ -72,11 +72,24 @@ jobs:
       - name: vulture (whitelist covers documented Qt/tarfile/ruamel false positives)
         run: vulture usr/local/lib/steamos_diy/ vulture_whitelist.py
 
+      # tests/ is stripped on stable per branch policy (see CLAUDE.md's
+      # "Branch merge policy") -- 0 items collected there is expected,
+      # not a failure.
       - name: pytest
-        run: pytest
+        run: |
+          if [ ! -d usr/local/lib/steamos_diy/tests ]; then
+            echo "tests/ absent (expected on stable) -- skipping."
+            exit 0
+          fi
+          pytest
 
       - name: pylint (tests)
-        run: cd usr/local/lib/steamos_diy/tests && pylint *.py
+        run: |
+          if [ ! -d usr/local/lib/steamos_diy/tests ]; then
+            echo "tests/ absent (expected on stable) -- skipping."
+            exit 0
+          fi
+          cd usr/local/lib/steamos_diy/tests && pylint *.py
 
       - name: shellcheck
         run: shellcheck install.sh uninstall.sh
