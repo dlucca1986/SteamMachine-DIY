@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- `install.sh`'s `BASE_PKGS` was missing `kate`/`konsole` as explicit dependencies, even
+  though the Control Center's "Edit SSoT" button and "Open Konsole Terminal" button target
+  these two binaries by name — previously assumed present only because the officially
+  supported desktop (KDE Plasma) usually ships them, which isn't guaranteed on a minimal
+  Plasma install. Both buttons could silently fail on an otherwise-supported configuration.
+  Now installed explicitly, matching every other binary this project depends on directly.
+  `uninstall.sh` deliberately does not remove them, same as every other package this project
+  installs (`steam`, `gamescope`, Mesa drivers…) — see the FAQ's existing "left in place"
+  policy.
+
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
 ### Added
