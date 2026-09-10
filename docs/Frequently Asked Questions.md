@@ -38,7 +38,7 @@ The system will automatically identify the game (via AppID or executable name) a
 Yes. `sdy` is binary-agnostic. It scans the executable path and looks for a matching YAML profile. You can use it with Heroic, Lutris, or standalone binaries.
 
 ### 6. Steam shows "Update Error" or "BIOS Update Failed".
-This is expected on non-Valve hardware. We provide **Compatibility Shims** that intercept these calls and return a safe exit code to maintain Steam UI stability.
+This is expected on non-Valve hardware. **Compatibility Shims** intercept these calls and return a safe exit code to maintain Steam UI stability.
 * `steamos-update` exits **7** (RAUC convention: "no update available") — Steam treats this as "up to date".
 * `jupiter-dock-updater` exits **7** (same RAUC convention — "firmware up to date").
 * All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, `steamos-select-branch`) exit **0** (success).
@@ -66,7 +66,7 @@ This project is optimized for **Pipewire**. Ensure `pipewire-alsa`, `pipewire-pu
 ## 🛠️ System & Updates
 
 ### 10. Will a system update (`pacman -Syu`) break the setup?
-The project uses a **non-destructive** approach. We don't modify core system binaries. Standard updates are safe.
+The project uses a **non-destructive** approach. Core system binaries are never modified. Standard updates are safe.
 > [!IMPORTANT]
 >
 > If you update the Kernel, ensure your **Early KMS** is rebuilt so the driver loads before the `steamos_diy` service starts.
@@ -87,7 +87,7 @@ It removes every file and symlink the project deployed (libraries, shims, SSoT, 
 See [Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture) for the complete filesystem hierarchy.
 
 ### 14. Where can I find the logs for debugging?
-We use the **System Journal**. Use the following commands or check the **Diagnostics** tab in the Control Center:
+Logs go through the **System Journal**. Use the following commands or check the **Diagnostics** tab in the Control Center:
 ```bash
 # Application logs: crash recovery, session switches, gamescope launch args,
 # backup/restore, self-update, and helper shims — this is what you want.

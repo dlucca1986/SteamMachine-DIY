@@ -126,8 +126,7 @@ The **DGM** engine maps **YAML** flags directly to the gamescope command line. T
 ---
 
 > [!TIP]
-> **Don't struggle with manual file paths!**
-> All configuration templates and active files are centrally managed within the GUI. For a full walkthrough on how to use the editor, check out the:
+> Configuration templates and active files are all managed from the GUI — no manual file paths needed. For a full walkthrough on how to use the editor, see the:
 >
 > 🔍 **[SteamMachine-DIY Control Center Guide](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center)**.
 

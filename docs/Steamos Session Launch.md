@@ -63,6 +63,10 @@ Before the user's `env_vars`, the launcher applies a fixed map of **compositor/M
 | `vk_xwayland_wait_ready=false` | Lower input latency (session tweak, no Steam control) |
 | `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0` | Keep SDL games up on focus loss (session tweak) |
 | `ENABLE_GAMESCOPE_WSI=1`, `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3`, `WINEDLLOVERRIDES=dxgi=n` | Proton/vkd3d session defaults (session tweak, no Steam control) |
+| `STEAM_MULTIPLE_XWAYLANDS=1` | Per-game Xwayland isolation (session tweak, no Steam control) |
+| `SRT_LOG_TO_JOURNAL=1` | Routes Steam's own `steam-runtime-tools` logger to the journal (session tweak, no Steam control) |
+| `QT_QPA_PLATFORM_THEME=kde` | Correct icons/readable text for Qt apps inside gamescope (session tweak, no Steam control) |
+| `XCURSOR_SCALE=256` | Cursor scale inside the embedded session (session tweak, no Steam control) |
 
 These are **panel-independent** — the control is always safe to expose; only its *benefit* depends on hardware. **Display-dependent** capabilities — VRR (`STEAM_GAMESCOPE_VRR_SUPPORTED`) and HDR (`STEAM_GAMESCOPE_HDR_SUPPORTED`) — are deliberately left out: declare them in your own `env_vars` **only when your monitor supports them**, otherwise Steam shows controls that do nothing. Since user `env_vars` are applied after `GAME_MODE_ENV`, they can override any of these defaults.
 

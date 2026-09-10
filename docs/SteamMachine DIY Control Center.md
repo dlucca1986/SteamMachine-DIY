@@ -72,7 +72,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
-| **Gamescope flags** | every option token in `config flags` is recognised by the installed `gamescope --help` — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. Both `--flag value` and `--flag=value` forms are checked (by the flag part alone). Skipped if gamescope can't be run |
+| **Gamescope flags** | the configured `flags` are run through the installed gamescope's own argv parser (`gamescope <flags> --help`), checking its error output for an unrecognised option — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. `getopt_long` stops at the first bad option, so only one is ever reported per run. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
 | **C-Core** | `libcore.so` is loadable |
 | **Session state** | the `next_session` directory is writable |
