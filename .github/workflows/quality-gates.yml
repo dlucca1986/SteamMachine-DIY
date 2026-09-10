@@ -1,0 +1,82 @@
+name: Quality gates
+
+# Mirrors CLAUDE.md's local review checklist verbatim — one job step per
+# gate, so a red X in the Actions UI points straight at which tool failed.
+# No project code depends on this workflow; it only runs the commands a
+# human already runs manually before every change.
+
+on:
+  push:
+    branches: [testing, stable]
+  pull_request:
+    branches: [testing, stable]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # PyQt6's wheel bundles Qt6 itself but still dynamically links a
+      # handful of system libraries even for a headless (no display)
+      # import — a well-known pitfall on CI runners.
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - name: Install project + tooling dependencies
+        run: |
+          pip install PyQt6 ruamel.yaml
+          pip install pylint flake8 ruff bandit radon vulture pytest
+
+      - name: pylint (production code)
+        run: >
+          pylint usr/local/lib/steamos_diy/*.py
+          usr/local/lib/steamos_diy/helpers/*.py
+
+      - name: flake8
+        run: flake8 usr/local/lib/steamos_diy/
+
+      - name: ruff check
+        run: ruff check usr/local/lib/steamos_diy/
+
+      - name: bandit
+        run: >
+          bandit -r usr/local/lib/steamos_diy/
+          -x usr/local/lib/steamos_diy/tests
+
+      - name: radon cc (baseline B average, fail on any C or worse)
+        run: |
+          radon cc usr/local/lib/steamos_diy/ -a -nb
+          offenders="$(radon cc usr/local/lib/steamos_diy/ --min C)"
+          if [ -n "$offenders" ]; then
+            echo "$offenders"
+            echo "::error::Function(s) at grade C or worse — see CLAUDE.md's radon cc baseline."
+            exit 1
+          fi
+
+      - name: radon mi (every file must be grade A)
+        run: |
+          offenders="$(radon mi usr/local/lib/steamos_diy/ | grep -v ' - A$' || true)"
+          if [ -n "$offenders" ]; then
+            echo "$offenders"
+            echo "::error::File(s) below maintainability grade A."
+            exit 1
+          fi
+
+      - name: vulture (whitelist covers documented Qt/tarfile/ruamel false positives)
+        run: vulture usr/local/lib/steamos_diy/ vulture_whitelist.py
+
+      - name: pytest
+        run: pytest
+
+      - name: pylint (tests)
+        run: cd usr/local/lib/steamos_diy/tests && pylint *.py
+
+      - name: shellcheck
+        run: shellcheck install.sh uninstall.sh

@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Health & Preflight Backend
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Pure config-validation and service-status helpers.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -16,7 +16,9 @@ import ctypes
 import grp
 import os
 import re
-import shlex
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 from pathlib import Path
 from typing import NamedTuple
@@ -30,8 +32,10 @@ from utils import (
     DEFAULT_STEAM_BIN,
     NEXT_SESSION_PATH,
     SSOT_CONF_PATH,
+    SYSTEMCTL_BIN,
     clear_ssot_cache,
     get_ssot_var,
+    shlex_split_or_fallback,
 )
 
 # Safe loader — validation only cares that the document parses, not about
@@ -57,12 +61,11 @@ _LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
 
 _SERVICE_UNIT: str = "steamos_diy.service"
 
-# Leading option token(s) of a `gamescope --help` line, e.g.
-# "-W, --output-width ..." or "--rt ..." — captures short and long form.
-_GS_HELP_OPT = re.compile(r"^(--?[A-Za-z][\w-]*)(?:,\s*(--[\w-]+))?")
-
-# A config flag token is an option, not a negative-number value ("-1").
-_FLAG_TOKEN = re.compile(r"^--?[A-Za-z]")
+# gamescope's own getopt_long error, both forms it actually emits:
+# "unrecognized option '--foo'" (long) and "invalid option -- 'Z'" (short).
+_GS_UNRECOGNIZED = re.compile(
+    r"unrecognized option '([^']+)'|invalid option -- '([^']+)'"
+)
 
 
 class CheckResult(NamedTuple):
@@ -101,7 +104,11 @@ def _check_yaml(path: str) -> CheckResult:
         with open(path, "r", encoding="utf-8") as fh:
             _yaml_probe.load(fh)
         return CheckResult(name, True, "valid")
-    except (OSError, YAMLError) as err:
+    # UnicodeDecodeError (a ValueError) is raised by the text-mode read
+    # itself, before ruamel ever sees the bytes, on a file saved with
+    # non-UTF-8 encoding — as real a "bad config" case as a YAML syntax
+    # error, and must surface as a failed check the same way.
+    except (OSError, YAMLError, UnicodeDecodeError) as err:
         mark = getattr(err, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark else ""
         return CheckResult(name, False, f"{type(err).__name__}{where}")
@@ -159,7 +166,9 @@ def _read_user_config() -> object:
     try:
         with open(user_config, "r", encoding="utf-8") as fh:
             return _yaml_probe.load(fh)
-    except (OSError, YAMLError):
+    # See _check_yaml's comment: non-UTF-8 content raises UnicodeDecodeError
+    # before ruamel gets involved, same "unreadable" contract as the rest.
+    except (OSError, YAMLError, UnicodeDecodeError):
         return _UNREADABLE
 
 
@@ -202,61 +211,8 @@ def _check_config_types(data: object) -> list[CheckResult]:
     return results
 
 
-def _gamescope_options(gs_bin: str) -> set[str] | None:
-    """Parse `gamescope --help` into the set of recognised option tokens.
-
-    Returns None when gamescope cannot be run or its help yields nothing,
-    so the caller skips the check instead of reporting a false failure
-    (binary presence is already covered by _check_binaries).
-    """
-    try:
-        res = subprocess.run(  # nosec B603
-            [gs_bin, "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    opts: set[str] = set()
-    for line in (res.stdout + res.stderr).splitlines():
-        match = _GS_HELP_OPT.match(line.strip())
-        if match:
-            opts.update(tok for tok in match.groups() if tok)
-    return opts or None
-
-
-def _collect_unknown_flags(flags: list, supported: set[str]) -> list[str]:
-    """Option tokens in *flags* the installed gamescope does not know.
-
-    Mirrors the runtime (`shlex.split` per entry, then extend argv): an
-    entry may bundle a flag with its value ("-W 1280", "--nested-width=1280")
-    or several flags; only option tokens are checked — values and negative
-    numbers ignored, "--flag=value" judged by its flag part alone.
-    Order-preserving and de-duplicated.
-    """
-    unknown: list[str] = []
-    seen: set[str] = set()
-    for entry in flags:
-        try:
-            tokens = shlex.split(str(entry))
-        except ValueError:
-            tokens = str(entry).split()
-        for tok in tokens:
-            base = tok.split("=", 1)[0]
-            if (
-                _FLAG_TOKEN.match(base)
-                and base not in supported
-                and base not in seen
-            ):
-                seen.add(base)
-                unknown.append(base)
-    return unknown
-
-
 def _check_gamescope_flags(data: object) -> CheckResult:
-    """Validate global-config 'flags' against the installed gamescope.
+    """Validate global-config 'flags' against gamescope's own argv parser.
 
     A flag the running gamescope does not recognise makes it exit at
     launch — the session never starts, systemd retries, and TTY1 goes
@@ -264,18 +220,39 @@ def _check_gamescope_flags(data: object) -> CheckResult:
     gamescope versions, here before boot is the whole point. Scope is the
     global config (the flags always passed); per-game profiles keep to
     their own launch path.
+
+    Runs the actual configured flags through gamescope itself
+    (`gamescope <flags> --help`) rather than diffing against
+    `gamescope --help`'s documented option list: gamescope accepts some
+    flags it never lists in --help (e.g. --fade-out-duration), so a
+    text-based allowlist reports those as false failures. --help still
+    makes gamescope print usage and exit immediately without touching
+    display/DRM, so this stays as side-effect-free as the old approach.
+    getopt_long stops at the first bad option, so only the first one (if
+    any) is ever reported — still strictly better than false-flagging a
+    valid flag.
     """
     flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:
         return CheckResult("Gamescope flags", True, "none set")
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
-    supported = _gamescope_options(gs_bin)
-    if supported is None:
+    argv = [gs_bin]
+    for entry in flags:
+        tokens, _ = shlex_split_or_fallback(str(entry))
+        argv.extend(tokens)
+    argv.append("--help")
+    try:
+        # gs_bin is the SSoT-configured gamescope path; flags come from
+        # the local YAML config, never shell=True or externally-supplied.
+        res = subprocess.run(  # nosec B603
+            argv, capture_output=True, text=True, check=False, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
         return CheckResult("Gamescope flags", True, "gamescope unavailable")
-    unknown = _collect_unknown_flags(flags, supported)
-    if unknown:
-        detail = f"unrecognised: {', '.join(unknown)}"
-        return CheckResult("Gamescope flags", False, detail)
+    match = _GS_UNRECOGNIZED.search(res.stdout + res.stderr)
+    if match:
+        bad = match.group(1) or f"-{match.group(2)}"
+        return CheckResult("Gamescope flags", False, f"unrecognised: {bad}")
     return CheckResult("Gamescope flags", True, "all recognised")
 
 
@@ -284,7 +261,10 @@ def _check_binaries() -> list[CheckResult]:
     results: list[CheckResult] = []
     for key, default in _BINARY_KEYS:
         path = get_ssot_var(key, default)
-        ok = bool(path) and os.access(path, os.X_OK)
+        # os.access(X_OK) alone is true for a traversable directory, not
+        # just an executable file -- a SSoT key mistakenly pointed at a
+        # directory would otherwise pass this preflight as "OK".
+        ok = bool(path) and os.path.isfile(path) and os.access(path, os.X_OK)
         detail = path if ok else f"not executable: {path}"
         results.append(CheckResult(f"Binary {key}", ok, detail))
     return results
@@ -385,9 +365,10 @@ def parse_service_status(raw: str) -> ServiceStatus:
 def get_service_status() -> ServiceStatus:
     """Snapshot steamos_diy.service via `systemctl show` (no root needed)."""
     try:
+        # Fixed argv, no shell, no user input involved.
         res = subprocess.run(  # nosec B603
             [
-                "/usr/bin/systemctl",
+                SYSTEMCTL_BIN,
                 "show",
                 _SERVICE_UNIT,
                 "--property=ActiveState,SubState,NRestarts,ExecMainStatus",
@@ -395,7 +376,8 @@ def get_service_status() -> ServiceStatus:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
         return parse_service_status(res.stdout)
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         return ServiceStatus("unknown", "unknown", 0, 0)

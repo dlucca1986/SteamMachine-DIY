@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -14,10 +14,13 @@
 import ctypes
 import os
 import pwd
-import shutil
+import re
+import shlex
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
-import tarfile
 import threading
 from pathlib import Path
 from typing import Any, NamedTuple, overload
@@ -42,6 +45,7 @@ try:
     _LIB.c_jlog.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
     _LIB.c_notify.argtypes = [ctypes.c_char_p, ctypes.c_int]
     _LIB.c_write_atomic.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    _LIB.c_write_atomic.restype = ctypes.c_int
     _LIB.c_sd_notify_ready.argtypes = []
 
 except OSError as err:
@@ -55,7 +59,7 @@ except OSError as err:
 
 # Runtime project version — kept in sync with the file headers by the
 # release bump (a plain-text substitution across the whole tree).
-VERSION: str = "2.1.7"
+VERSION: str = "2.1.8"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
@@ -71,6 +75,12 @@ USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 BACKUP_MANIFEST_NAME: str = "links.txt"
 
+# Basename of the global config file under user_config's directory.
+# Shared by get_backup_mapping (below) and control_center.py's
+# _resolve_config_paths so the two can't independently drift on what a
+# relocated user_config's directory is computed relative to.
+CONFIG_FILE_NAME: str = "config.yaml"
+
 # Where downloaded release tarballs are unpacked, relative to the user
 # config dir. Shared with backup.py, which must exclude it from archives.
 UPDATES_DIR_NAME: str = "updates"
@@ -83,6 +93,16 @@ DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
 DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
+
+# systemd tool paths — unlike the DEFAULT_*_BIN group above, these are not
+# SSoT-backed: every systemd distro ships them at this fixed path, so
+# there's no legitimate per-deployment override. Centralized here purely
+# to stop health.py/restore.py/journal.py/control_center.py from each
+# re-declaring their own literal.
+SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
+JOURNALCTL_BIN: str = "/usr/bin/journalctl"
+PYTHON3_BIN: str = "/usr/bin/python3"
+KONSOLE_BIN: str = "/usr/bin/konsole"
 
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
@@ -197,7 +217,7 @@ def _load_ssot_cache() -> None:
                     continue
                 key, _, raw = line.partition("=")
                 _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
-    except OSError as err:
+    except (OSError, UnicodeDecodeError) as err:
         jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
     os.environ.update(_SSOT_CACHE)
 
@@ -252,7 +272,7 @@ def read_session_target(path: str | Path, default: str = "steam") -> str:
         with open(path, "r", encoding="utf-8") as fh:
             value = _strip_quotes(fh.readline())
             return value or default
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return default
 
 
@@ -279,9 +299,50 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
     return {}
 
 
-def write_atomic(path: str | Path, val: str) -> None:
-    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable)."""
-    _LIB.c_write_atomic(str(path).encode("utf-8"), str(val).encode("utf-8"))
+GAMES_CONF_SUBDIR: str = "games.d"
+
+
+def default_games_conf_dir() -> Path:
+    """Fallback games_conf_dir when the SSoT key is unset.
+
+    ~/.config/steamos_diy/games.d — the same default the SSoT template
+    itself ships (etc/default/steamos_diy.conf). Single source of truth
+    for sdy.py and control_center.py so they can't silently disagree on
+    where per-game profiles live if the SSoT key is ever missing.
+    """
+    return Path.home() / USER_CONFIG_REL / GAMES_CONF_SUBDIR
+
+
+def shlex_split_or_fallback(value: str) -> tuple[list[str], ValueError | None]:
+    """shlex.split *value*; on an unbalanced quote, also return str.split().
+
+    Shared by every hand-edited shell-like field (game flags, wrapper,
+    extra args, gamescope preflight) so a malformed entry degrades instead
+    of crashing the session. The second return value is the caught error,
+    or None on a clean parse — callers that want to warn about the
+    fallback log it themselves, since the tag/field name differs per call
+    site.
+    """
+    try:
+        return shlex.split(value), None
+    except ValueError as err:
+        return value.split(), err
+
+
+def write_atomic(path: str | Path, val: str) -> bool:
+    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable).
+
+    Returns True on success, False on any failure (symlink/FIFO refused at
+    tmp_path, a short write, or a failed rename) — already logged via
+    syslog on the C side, but callers that need to react (not just have a
+    trace to grep for later) can now check the result instead of assuming
+    the write landed.
+    """
+    return bool(
+        _LIB.c_write_atomic(
+            str(path).encode("utf-8"), str(val).encode("utf-8")
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +382,25 @@ def spawn_native(path: str, args: list[str]) -> int:
         return 0
 
 
+def safe_emit(signal, *args) -> None:
+    """Emit *signal*, swallowing RuntimeError from a torn-down window.
+
+    Every emit() call from a daemon worker thread in control_center.py and
+    updater.py goes through here: closing the window while a worker is
+    still in flight (some, like Backup/Restore, run for up to the 300s
+    pkexec budget) deletes the underlying Qt object, and emitting on a
+    deleted signal raises RuntimeError. Uncaught, that would vanish
+    silently — stderr is /dev/null when the app is launched detached —
+    but there is genuinely nothing left to update at that point, so
+    swallowing it here is correct, not just convenient. Takes a duck-typed
+    signal (only .emit() is called), so this needs no Qt import itself.
+    """
+    try:
+        signal.emit(*args)
+    except RuntimeError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # System & user management
 # ---------------------------------------------------------------------------
@@ -345,6 +425,8 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
     try:
         u_info = pwd.getpwnam(user_name)
         if target.is_dir():
+            # user_name is the machine's real login user (resolved via
+            # pwd above), never attacker-controlled input; fixed argv.
             subprocess.run(  # nosec B603
                 [
                     "/usr/bin/chown",
@@ -355,11 +437,15 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                timeout=30,
             )
         else:
             os.chown(target, u_info.pw_uid, u_info.pw_gid)
-    except (OSError, KeyError, subprocess.CalledProcessError) as err:
-        jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="DEBUG")
+    except (OSError, KeyError, subprocess.SubprocessError) as err:
+        # WARN, not DEBUG: a failed/timed-out chown leaves target_path
+        # owned by root after a backup/restore ran as the privileged
+        # user, which the user needs to notice and fix manually.
+        jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="WARN")
 
 
 def check_root() -> None:
@@ -368,27 +454,101 @@ def check_root() -> None:
         sys.exit(1)
 
 
-def get_backup_mapping(home: str) -> dict[str, str]:
+def require_ssot_conf(tag: str) -> None:
+    """Exit with code 1, logging f"{tag}_FAILED", if the SSoT conf is missing.
+
+    Shared precondition for backup.py and restore.py, which both need the
+    SSoT readable before doing anything privileged.
+    """
+    if not os.path.isfile(SSOT_CONF_PATH):
+        jlog("SYSTEM", f"{tag}_FAILED: SSoT config not found", level="ERROR")
+        sys.exit(1)
+
+
+def get_backup_mapping(
+    home: str, *, for_restore: bool = False
+) -> dict[str, str]:
     """Archive-path → filesystem-path map. Single source of truth for the
     backup format used by both backup.py and restore.py.
 
     Adding a new entry here propagates to both sides: backup picks it up
     when adding members, restore picks it up when mapping them back.
     Order is preserved (3.7+ dict insertion order).
+
+    for_restore always includes the "user/games_conf_dir" entry - see
+    that entry's own comment below for why restore can't use the same
+    "only if it needs one" optimization backup does.
     """
-    return {
+    # user_config is SSoT-relocatable to a different *directory* (the
+    # basename always stays CONFIG_FILE_NAME - see CLAUDE.md's confirmed-
+    # intentional note on control_center.py's Global Options tab). Without
+    # resolving it the same way control_center.py's _resolve_config_paths
+    # does, a relocated config would silently back up the wrong (default)
+    # directory instead of the live one.
+    default_conf_dir = os.path.join(home, USER_CONFIG_REL)
+    conf_dir = os.path.dirname(
+        get_ssot_var(
+            "user_config",
+            os.path.join(default_conf_dir, CONFIG_FILE_NAME),
+        )
+    )
+    if not conf_dir:
+        # A hand-edited user_config with no directory component (e.g. a
+        # bare "config.yaml") makes os.path.dirname() return "".
+        # os.path.realpath("") resolves to the process's CURRENT WORKING
+        # DIRECTORY, not a config path — restore.py's _allowed_prefixes
+        # would otherwise add that unmodified to its allow-list of
+        # privileged (root, under pkexec) write destinations. Degrade to
+        # the same default used when user_config is unset entirely,
+        # matching get_ssot_num's own degrade-safely contract, instead of
+        # silently widening the restore write surface to an unpredictable
+        # cwd.
+        conf_dir = default_conf_dir
+    mapping = {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
         "system/steamos_diy.conf": SSOT_CONF_PATH,
         "system/service": _SERVICE_PATH,
         "source/steamos_diy": CORE_LIB_DIR,
-        "user/config": os.path.join(home, USER_CONFIG_REL),
+        "user/config": conf_dir,
     }
+    # A games_conf_dir is backed up recursively for free only when it's
+    # actually nested under the (possibly relocated) user/config entry
+    # above - otherwise, whether relocated itself or just left at its own
+    # default while user_config moved elsewhere, it needs its own entry or
+    # it silently drops out of every backup, and restore has no key to put
+    # it back even if it had been captured.
+    default_games_dir = os.path.join(
+        home, USER_CONFIG_REL, GAMES_CONF_SUBDIR
+    )
+    games_dir = get_ssot_var("games_conf_dir", default_games_dir)
+    games_real = os.path.realpath(games_dir) + os.sep
+    conf_real = os.path.realpath(conf_dir) + os.sep
+    nested = games_real.startswith(conf_real)
+    # On restore, the archive's member names were fixed by whatever this
+    # same nesting check evaluated to AT BACKUP TIME on a possibly
+    # different system state (e.g. a from-scratch reinstall after a
+    # system failure, restoring onto a fresh default SSoT from an
+    # archive made while games_conf_dir was relocated to an SD card) -
+    # this process has no way to know that before opening the tar, so
+    # the entry is included unconditionally here; it only ever matches
+    # archive members that actually exist under that prefix, so it's a
+    # harmless no-op for an archive where nesting still holds.
+    if for_restore or not nested:
+        mapping["user/games_conf_dir"] = games_dir
+    return mapping
 
 
 def verify_archive(
     path: str | Path, fail_tag: str = "ARCHIVE_VERIFY_FAIL"
 ) -> bool:
     """Walk all tar members end-to-end to verify gzip integrity."""
+    # Deferred import: tarfile is only needed by backup.py/restore.py's
+    # verification and download_release() (~15ms load cost) — every other
+    # importer of this module, session_launch.py included, would
+    # otherwise pay it on every session boot/switch for nothing.
+    # pylint: disable=import-outside-toplevel
+    import tarfile
+
     try:
         with tarfile.open(str(path), "r:gz") as tar:
             for _ in tar:
@@ -415,6 +575,10 @@ _RELEASES_API: str = (
 )
 _HTTP_TIMEOUT: int = 10
 
+# Release asset name every release must carry from 2.1.8 on: one line,
+# the tarball_url source tarball's hex SHA-256 digest. See download_release().
+_CHECKSUM_ASSET_NAME: str = "SHA256SUMS"
+
 
 class ReleaseInfo(NamedTuple):
     """Latest-release facts consumed by the Control Center updater."""
@@ -424,6 +588,60 @@ class ReleaseInfo(NamedTuple):
     notes: str
     tarball_url: str
     html_url: str
+    checksum_url: str
+
+
+class ExtractedRelease(NamedTuple):
+    """download_release()'s success result: extracted dir + install.sh hash.
+
+    install_sh_sha256 lets the caller re-verify install.sh's integrity
+    immediately before executing it via pkexec, narrowing the TOCTOU
+    window between this checksum-verified extraction and actual root
+    execution — the extracted directory lives under the user's own home,
+    writable by that same user.
+    """
+
+    dir: Path
+    install_sh_sha256: str
+
+
+def _https_open(url: str, *, extra_headers: dict[str, str] | None = None):
+    """Open *url* over HTTPS with the shared SteamMachine-DIY User-Agent.
+
+    Centralizes the Request/urlopen/timeout plumbing common to every
+    GitHub-release network call below (check_latest_release,
+    _fetch_expected_sha256, _download_verified_tarball); each caller
+    keeps its own error handling since what counts as recoverable, and
+    what to log, differs per caller (JSON parsing vs. raw digest text
+    vs. streamed binary). Every call site passes a URL already confirmed
+    https:// (either _RELEASES_API itself or a caller-side guard), so the
+    scheme is never attacker-controlled.
+    """
+    # Deferred import: urllib pulls in ~40ms of http machinery, paid only
+    # by the Control Center's update-check path, never session-boot.
+    # pylint: disable=import-outside-toplevel
+    import urllib.request
+
+    headers = {"User-Agent": "SteamMachine-DIY"}
+    if extra_headers:
+        headers.update(extra_headers)
+    req = urllib.request.Request(url, headers=headers)
+    # B310: every caller has already confirmed url is https:// (see this
+    # function's docstring), so the scheme is never attacker-controlled.
+    return urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT)  # nosec B310
+
+
+def _require_https(url: str, fail_tag: str) -> bool:
+    """Log and return False if *url* isn't https://; True otherwise.
+
+    Shared by every caller that must reject a non-https URL before it
+    ever reaches _https_open(), which trusts its caller to have already
+    done this check.
+    """
+    if url.startswith("https://"):
+        return True
+    jlog("SYSTEM", f"{fail_tag}: non-https URL", "ERROR")
+    return False
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
@@ -440,6 +658,20 @@ def _api_str(data: dict[str, Any], key: str) -> str:
     return str(val) if val else ""
 
 
+def _find_checksum_url(data: dict[str, Any]) -> str:
+    """browser_download_url of the release's SHA256SUMS asset, or ""."""
+    assets = data.get("assets")
+    if not isinstance(assets, list):
+        return ""
+    for asset in assets:
+        if (
+            isinstance(asset, dict)
+            and asset.get("name") == _CHECKSUM_ASSET_NAME
+        ):
+            return _api_str(asset, "browser_download_url")
+    return ""
+
+
 def _release_from_api(data: Any) -> ReleaseInfo | None:
     """Map the releases-API JSON to a ReleaseInfo; None if unusable."""
     if not isinstance(data, dict) or not data.get("tag_name"):
@@ -452,6 +684,7 @@ def _release_from_api(data: Any) -> ReleaseInfo | None:
         notes=_api_str(data, "body"),
         tarball_url=_api_str(data, "tarball_url"),
         html_url=_api_str(data, "html_url"),
+        checksum_url=_find_checksum_url(data),
     )
 
 
@@ -463,25 +696,15 @@ def check_latest_release() -> ReleaseInfo | None:
     https URL and a short timeout: a dead network degrades to a quick
     "unknown" instead of hanging the worker thread.
     """
-    # Deferred imports: urllib pulls in ~40ms of http machinery. Only
-    # the Control Center pays that, never the session-boot or game-
-    # launch paths that import utils.
+    # Deferred import — see _https_open.
     # pylint: disable=import-outside-toplevel
     import json
-    import urllib.request
     from http.client import HTTPException
 
-    req = urllib.request.Request(
-        _RELEASES_API,
-        headers={
-            "User-Agent": "SteamMachine-DIY",
-            "Accept": "application/vnd.github+json",
-        },
-    )
     try:
-        # B310: fixed https:// URL (_RELEASES_API), no user-controlled scheme.
-        with urllib.request.urlopen(  # nosec B310
-            req, timeout=_HTTP_TIMEOUT
+        with _https_open(
+            _RELEASES_API,
+            extra_headers={"Accept": "application/vnd.github+json"},
         ) as resp:
             data = json.load(resp)
     except (OSError, ValueError, HTTPException) as err:
@@ -490,59 +713,173 @@ def check_latest_release() -> ReleaseInfo | None:
     return _release_from_api(data)
 
 
-def _prune_downloads(root: Path) -> None:
+def _prune_downloads(root: Path, keep: Path | None = None) -> None:
     """Drop previous release downloads (v<digit>… dirs) under *root*.
 
     Only version-named directories are touched, so anything the user
-    parked in the updates folder by hand survives the cleanup.
+    parked in the updates folder by hand survives the cleanup. *keep*,
+    if given, is skipped — used to protect a just-verified new download
+    from being pruned as if it were a stale previous one.
     """
+    # Deferred import: shutil is only needed by this self-update-only
+    # helper (~15ms load cost) — every other importer of this module,
+    # session_launch.py included, would otherwise pay it for nothing.
+    # pylint: disable=import-outside-toplevel
+    import shutil
+
     for entry in root.iterdir():
         if (
             entry.is_dir()
             and entry.name.startswith("v")
             and entry.name[1:2].isdigit()
+            and entry != keep
         ):
             shutil.rmtree(entry, ignore_errors=True)
 
 
-def download_release(info: ReleaseInfo, dest_root: str | Path) -> Path | None:
-    """Download and unpack *info*'s source tarball under *dest_root*.
+def _fetch_expected_sha256(url: str) -> str | None:
+    """Fetch and parse a SHA256SUMS asset: one 64-char hex digest.
 
-    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns the
-    inner export directory (the one holding install.sh), or None on any
-    failure. Older downloads are pruned first so the updates folder
-    never accumulates stale releases. The "data" extraction filter
-    rejects absolute paths, traversal and special members.
+    None on any network/format failure — download_release() treats that
+    identically to a missing checksum asset (abort, never extract
+    unverified content).
     """
-    # Deferred imports — see check_latest_release.
+    # Deferred import — see _https_open.
     # pylint: disable=import-outside-toplevel
-    import urllib.request
     from http.client import HTTPException
 
-    if not info.tarball_url.startswith("https://"):
-        jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: non-https URL", "ERROR")
+    if not _require_https(url, "UPDATE_CHECKSUM_FAIL"):
         return None
+    try:
+        with _https_open(url) as resp:
+            text = resp.read(256).decode("ascii")
+    except (OSError, HTTPException, UnicodeDecodeError) as err:
+        jlog("SYSTEM", f"UPDATE_CHECKSUM_FAIL: {err}", level="ERROR")
+        return None
+    parts = text.split()
+    digest = parts[0].lower() if parts else ""
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        jlog("SYSTEM", f"UPDATE_CHECKSUM_FAIL: bad digest {text!r}", "ERROR")
+        return None
+    return digest
+
+
+def _download_verified_tarball(url: str, expected_sha256: str) -> Any:
+    """Download *url* into a temp file, verifying its SHA-256 en route.
+
+    Returns the temp file, seeked to 0, on a match. On any network error
+    or a mismatch, logs, closes the temp file, and returns None — the
+    caller (download_release) never receives an unverified file object.
+    """
+    # Deferred imports — see _https_open.
+    # pylint: disable=import-outside-toplevel
+    import hashlib
+    import tempfile
+    from http.client import HTTPException
+
+    # SIM115: handle is returned open — download_release() closes it via
+    # its own `with tmp, ...` block once extraction finishes.
+    tmp = tempfile.TemporaryFile()  # noqa: SIM115
+    try:
+        digest = hashlib.sha256()
+        # Scheme constrained to https:// by download_release's own guard.
+        with _https_open(url) as resp:
+            for chunk in iter(lambda: resp.read(65536), b""):
+                tmp.write(chunk)
+                digest.update(chunk)
+    except (OSError, HTTPException) as err:
+        jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
+        tmp.close()
+        return None
+    if digest.hexdigest() != expected_sha256:
+        jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: checksum mismatch", "ERROR")
+        tmp.close()
+        return None
+    tmp.seek(0)
+    return tmp
+
+
+def _sha256_file(path: Path) -> str:
+    """SHA-256 hex digest of *path*'s contents."""
+    # Deferred import — see _https_open.
+    # pylint: disable=import-outside-toplevel
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_file_sha256(path: Path, expected_sha256: str) -> bool:
+    """True if *path* exists and its SHA-256 matches *expected_sha256*.
+
+    Used to re-verify a previously-hashed file (e.g. install.sh, right
+    before a pkexec execution) so a tamper window between an earlier
+    verification and actual privileged use is caught rather than trusted
+    blindly.
+    """
+    if not path.is_file():
+        return False
+    return _sha256_file(path) == expected_sha256
+
+
+def download_release(
+    info: ReleaseInfo, dest_root: str | Path
+) -> ExtractedRelease | None:
+    """Download, checksum-verify, and unpack *info*'s source tarball.
+
+    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns an
+    ExtractedRelease (the inner export directory holding install.sh, plus
+    install.sh's own SHA-256), or None on any failure. Requires
+    info.checksum_url (the release's SHA256SUMS asset, published
+    alongside every release from 2.1.8 on) and rejects the download
+    outright if it's missing or doesn't match — install.sh inside the
+    tarball runs with elevated privileges, so nothing gets extracted
+    unverified. Older downloads are pruned only after the new tarball is
+    checksum-verified, fully extracted, AND confirmed to contain
+    install.sh — so a corrupted/mismatched download, a failed extraction,
+    or a malformed release tarball never costs the last known-good cached
+    release; the updates folder still never accumulates stale releases in
+    the success case. The "data" extraction filter rejects absolute
+    paths, traversal and special members. The returned install.sh hash is
+    for the caller to re-check via verify_file_sha256() immediately
+    before a pkexec execution (see updater.py) — the tarball checksum
+    alone only covers the moment of extraction, not whatever else might
+    touch the (user-writable) destination directory afterward.
+    """
+    # Deferred import — see verify_archive()'s own comment on why tarfile
+    # isn't a top-level import in this module.
+    # pylint: disable=import-outside-toplevel
+    import tarfile
+
+    if not _require_https(info.tarball_url, "UPDATE_DOWNLOAD_FAIL"):
+        return None
+
+    # _fetch_expected_sha256 already logs the specific reason (non-https,
+    # network error, or malformed digest) before returning None here —
+    # no second, generic log line needed for the same event.
+    expected = _fetch_expected_sha256(info.checksum_url)
+    if expected is None:
+        return None
+
     root = Path(dest_root)
     target = root / f"v{info.version}"
-    req = urllib.request.Request(
-        info.tarball_url, headers={"User-Agent": "SteamMachine-DIY"}
-    )
     try:
         root.mkdir(parents=True, exist_ok=True)
-        _prune_downloads(root)
-        # B310: scheme constrained to https:// by the guard above.
-        with (
-            urllib.request.urlopen(  # nosec B310
-                req, timeout=_HTTP_TIMEOUT
-            ) as resp,
-            tarfile.open(fileobj=resp, mode="r|gz") as tar,
-        ):
+        tmp = _download_verified_tarball(info.tarball_url, expected)
+        if tmp is None:
+            return None
+        with tmp, tarfile.open(fileobj=tmp, mode="r:gz") as tar:
             tar.extractall(target, filter="data")
-    except (OSError, ValueError, tarfile.TarError, HTTPException) as err:
+        for entry in sorted(target.iterdir()):
+            installer = entry / "install.sh"
+            if installer.is_file():
+                _prune_downloads(root, keep=target)
+                return ExtractedRelease(entry, _sha256_file(installer))
+    except (OSError, ValueError, tarfile.TarError) as err:
         jlog("SYSTEM", f"UPDATE_DOWNLOAD_FAIL: {err}", level="ERROR")
         return None
-    for entry in sorted(target.iterdir()):
-        if (entry / "install.sh").is_file():
-            return entry
     jlog("SYSTEM", "UPDATE_DOWNLOAD_FAIL: install.sh not found", "ERROR")
     return None

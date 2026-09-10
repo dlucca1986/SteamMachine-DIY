@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Game Discovery Engine (SDY)
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Executes games with per-game overrides and global config.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -13,11 +13,17 @@
 
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
-from utils import apply_env_map, get_ssot_var, jlog, load_yaml_safe
+from utils import (
+    apply_env_map,
+    default_games_conf_dir,
+    get_ssot_var,
+    jlog,
+    load_yaml_safe,
+    shlex_split_or_fallback,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level constants — resolved once at import, never re-read from disk.
@@ -35,10 +41,6 @@ _GENERIC_STEMS: frozenset[str] = frozenset(
         "main",
     }
 )
-
-# Fallback directory for per-game profile files (used when user_config is
-# unavailable in the SSoT).
-_FALLBACK_GAMES_DIR: str = "/etc/steamos_diy/games.d"
 
 # Bytes read from the head of each YAML file when scanning for an AppID.
 # Headers are always at the top, so reading more would only waste I/O.
@@ -64,7 +66,7 @@ def _header_declares_id(path: str, appid: str) -> bool:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             header = fh.read(_HEADER_READ_BYTES)
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return False
     return any(m.group(1) == appid for m in _ID_LINE.finditer(header))
 
@@ -83,9 +85,12 @@ def _find_profile_by_id(directory: str, appid: str) -> str | None:
     """Scan YAML headers for STEAM_APPID/SDY_ID match without full parsing.
 
     Reads only _HEADER_READ_BYTES per file — IDs live at the top by convention,
-    full parsing would be pure waste.
+    full parsing would be pure waste. Callers must already have a truthy
+    appid — the sole call site (_get_profile_path) only invokes this
+    inside `if steam_appid:`, so a `not appid` guard here would be dead
+    code, not a real safety net.
     """
-    if not appid or not os.path.isdir(directory):
+    if not os.path.isdir(directory):
         return None
 
     for entry in _iter_yaml_files(directory):
@@ -100,15 +105,22 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
 
     When the stem is generic (start, launcher, run…), substitutes the parent
     directory name — /opt/MyGame/start.sh resolves to "MyGame", not "start".
+    Rightmost, not first: a wrapper (mangohud, gamemoderun) commonly comes
+    first in argv, with the actual game binary later — see the "rightmost"
+    regression test. isfile (not just exists) skips a trailing directory
+    argument (e.g. --workshop-dir /path/to/workshop) that would otherwise
+    be mistaken for the game binary itself.
     """
     target_path = next(
         (
             a
             for a in reversed(raw_args)
-            if a.startswith("/") and os.path.exists(a)
+            if a.startswith("/") and os.path.isfile(a)
         ),
-        os.path.abspath(raw_args[0]),
+        None,
     )
+    if target_path is None:
+        target_path = os.path.abspath(raw_args[0])
 
     p = Path(target_path)
     stem = p.stem
@@ -133,7 +145,7 @@ def _get_profile_path(
         if found:
             return found
 
-    for name in (eff_name, stem):
+    for name in dict.fromkeys((eff_name, stem)):
         candidate = os.path.join(game_conf_dir, f"{name}.yaml")
         if os.path.exists(candidate):
             return candidate
@@ -147,11 +159,10 @@ def _safe_split(field: str, value: str) -> list[str]:
     A malformed per-game override must not stop the game from launching —
     same fallback health.py's preflight already uses for gamescope flags.
     """
-    try:
-        return shlex.split(value)
-    except ValueError as err:
+    tokens, err = shlex_split_or_fallback(value)
+    if err is not None:
         jlog("STEAM", f"BAD_{field}: {value!r} - {err}", level="WARN")
-        return value.split()
+    return tokens
 
 
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
@@ -188,12 +199,18 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
 def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     """execvpe the game, replacing this process. Never returns on success.
 
-    Exits with 1 on binary-not-found, permission denied, or OS failure.
+    Exits with 1 on binary-not-found, permission denied, OS failure, or a
+    malformed argv (os.execvpe raises ValueError, not OSError, for an
+    embedded null byte — e.g. from a hand-edited GAME_WRAPPER/
+    GAME_EXTRA_ARGS entry).
     """
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
+        # full_cmd comes from the user's own local YAML config (wrapper/
+        # extra args), not from network or other-user input — same trust
+        # level as a shell alias the user wrote for themselves.
         os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
-    except OSError as err:
+    except (OSError, ValueError) as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
         sys.exit(1)
 
@@ -210,12 +227,15 @@ def run() -> None:
     Exits with 1 on failure; never returns on success.
     """
     if len(sys.argv) < 2:
-        return
+        jlog("STEAM", "NO_TARGET: sdy invoked with no argv", level="ERROR")
+        sys.exit(1)
 
     raw_args = sys.argv[1:]
 
     user_config_path = get_ssot_var("user_config")
-    game_conf_dir = get_ssot_var("games_conf_dir", _FALLBACK_GAMES_DIR)
+    game_conf_dir = get_ssot_var(
+        "games_conf_dir", str(default_games_conf_dir())
+    )
 
     stem, eff_name = _resolve_effective_name(raw_args)
     steam_id = os.getenv("SteamAppId")

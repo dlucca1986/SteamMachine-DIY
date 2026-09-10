@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 
 static char current_tag[64] = "";
@@ -57,32 +58,103 @@ void c_notify(const char *status, int clear) {
 }
 
 // 3. ATOMIC WRITE (fdatasync + rename for hardware durability)
+// Returns 1 on success, 0 on any failure (already logged via syslog) — lets
+// Python callers stop assuming a write landed just because the call
+// returned; a symlink refusal, a short write, or a failed rename are now
+// visible to them, not just to whoever happens to grep the journal.
 __attribute__((visibility("default")))
-void c_write_atomic(const char *path, const char *val) {
-    if (!path || !val) return;
+int c_write_atomic(const char *path, const char *val) {
+    if (!path || !val) return 0;
     char tmp_path[512];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     // O_CLOEXEC: keep this transient fd out of any concurrently forked child.
-    int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-    if (fd < 0) return;
+    // O_NOFOLLOW: refuse to write through a symlink planted at tmp_path by
+    // another process running as this same user, instead of truncating
+    // whatever it points at — same TOCTOU guard already applied on the
+    // Python side (restore.py::_write_member). No current caller of
+    // write_atomic() crosses a privilege boundary (all three run as the
+    // invoking user, never root), but this is an exported, generically-
+    // loaded primitive with no caller-specific privilege check of its
+    // own, so it shouldn't rely on today's call graph to stay safe.
+    // O_NONBLOCK: a FIFO planted at tmp_path by the same same-user threat
+    // model would otherwise block this open() forever waiting for a
+    // reader — every caller (session switch, Control Center save) would
+    // hang with no timeout. With O_NONBLOCK, a write-only open on a
+    // reader-less FIFO fails immediately (ENXIO) instead. No-op on a
+    // regular file per POSIX, so this changes nothing for the normal case.
+    // Mode 0644 always applies to the new inode, regardless of the target
+    // file's previous permissions (tmp+rename replaces the inode outright,
+    // it can't "preserve" the old one) — fine for every current caller
+    // (next_session marker, user config YAML), none of which need anything
+    // stricter, but worth this note for whoever adds the next one.
+    int fd = open(
+        tmp_path,
+        O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
+        0644
+    );
+    if (fd < 0) return 0;
+    // A reader could still be attached to a pre-existing FIFO at tmp_path,
+    // letting the O_NONBLOCK open above succeed anyway — fstat and refuse
+    // anything that isn't a plain file before writing/renaming it over the
+    // real target, so this can never turn a config file into a FIFO/device
+    // node. Left in place rather than unlinked: we didn't create it, and
+    // it isn't ours to delete.
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        syslog(LOG_WARNING,
+               "c_write_atomic: refusing non-regular tmp path %s", tmp_path);
+        close(fd);
+        return 0;
+    }
     size_t len = strlen(val);
     ssize_t written = write(fd, val, len);
     if (written < 0 || (size_t)written != len) {
         close(fd);
         unlink(tmp_path);
-        return;
+        return 0;
     }
-    fdatasync(fd);
+    // Best-effort durability note, not a correctness requirement: unlike
+    // the rename() below (whose failure aborts the write outright),
+    // fdatasync() failing here doesn't change the control flow — the
+    // data is already fully written to the page cache and proceeding to
+    // rename() is still strictly better than discarding a completed
+    // write over an unconfirmed flush. Logged so a failing/degrading
+    // storage device leaves a trace instead of silently not honoring
+    // the "hardware durability" this function's own header promises.
+    if (fdatasync(fd) != 0) {
+        syslog(LOG_WARNING, "c_write_atomic: fdatasync %s: %m", tmp_path);
+    }
     close(fd);
     if (rename(tmp_path, path) != 0) {
         syslog(LOG_ERR, "c_write_atomic: rename %s -> %s: %m", tmp_path, path);
         unlink(tmp_path);
+        return 0;
     }
+    // rename() is atomic, but the directory entry update it makes isn't
+    // guaranteed durable across a power loss until the directory itself is
+    // fsync'd — this runs on a handheld that can lose power mid-operation
+    // (same threat model as the subprocess timeout discipline elsewhere in
+    // this project). Best-effort: a failure to open/fsync the directory
+    // isn't reported, since the rename itself already succeeded.
+    char dir_path[512];
+    snprintf(dir_path, sizeof(dir_path), "%s", path);
+    char *slash = strrchr(dir_path, '/');
+    if (slash) {
+        // path directly under root ("/foo") -> keep dir_path as "/"
+        // rather than truncating to an empty, unopenable string.
+        *(slash == dir_path ? slash + 1 : slash) = '\0';
+        int dfd = open(dir_path, O_RDONLY | O_CLOEXEC);
+        if (dfd >= 0) {
+            fsync(dfd);
+            close(dfd);
+        }
+    }
+    return 1;
 }
 
 // 4. SYSTEMD READINESS NOTIFICATION (handles abstract sockets via '@' prefix)
 __attribute__((visibility("default")))
-void c_sd_notify_ready() {
+void c_sd_notify_ready(void) {
     const char *sock_path = getenv("NOTIFY_SOCKET");
     if (!sock_path) return;
     // SOCK_CLOEXEC: don't leak the notify socket into a forked child.
@@ -105,6 +177,6 @@ void c_sd_notify_ready() {
     socklen_t addrlen = offsetof(struct sockaddr_un, sun_path) + strlen(sock_path);
     if (addrlen > sizeof(addr)) addrlen = sizeof(addr);
     const char *msg = "READY=1";
-    sendto(fd, msg, 7, 0, (const struct sockaddr *)&addr, addrlen);
+    sendto(fd, msg, strlen(msg), 0, (const struct sockaddr *)&addr, addrlen);
     close(fd);
 }

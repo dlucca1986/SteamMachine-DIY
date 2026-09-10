@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Core Session Manager
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -11,8 +11,11 @@
 # =============================================================================
 """
 
-import shlex
+import resource
 import signal
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import threading
@@ -32,6 +35,7 @@ from utils import (
     notify,
     read_session_target,
     sd_notify_ready,
+    shlex_split_or_fallback,
     spawn_native,
     write_atomic,
 )
@@ -63,16 +67,69 @@ GAME_MODE_ENV: dict[str, str] = {
     # Latency + embedded-session correctness
     "vk_xwayland_wait_ready": "false",
     "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
+    # Per-game Xwayland isolation — a session capability, not tied to any
+    # specific hardware or user preference.
+    "STEAM_MULTIPLE_XWAYLANDS": "1",
+    # Steam's bundled steam-runtime-tools "srt-logger" writes to the
+    # journal (with its own identifier/prefixes) instead of wherever
+    # stderr would otherwise go — confirmed present in a real Steam
+    # install's own runtime, independent of the underlying distro.
+    "SRT_LOG_TO_JOURNAL": "1",
     # Proton / vkd3d session defaults (from Valve's gamescope-session)
     "ENABLE_GAMESCOPE_WSI": "1",
     "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
     "WINEDLLOVERRIDES": "dxgi=n",
+    # Desktop-session styling for Qt apps inside gamescope — avoids missing
+    # icons/unreadable text. Verified functional here: this system already
+    # ships KDEPlasmaPlatformTheme6.so, unlike the two vars below.
+    "QT_QPA_PLATFORM_THEME": "kde",
+    # Cursor scale inside the embedded gamescope X11 session — applies to
+    # whatever cursor theme is already active, no bundled theme needed.
+    "XCURSOR_SCALE": "256",
 }
+
+# Deliberately NOT ported from Valve's gamescope-session, despite being in
+# the same source block as the vars above: QT_IM_MODULE=steam,
+# GTK_IM_MODULE=Steam, and XCURSOR_THEME=steam all point at a "steam"
+# plugin/theme (Qt platforminputcontext, GTK immodule, XCursor theme) that
+# ships only inside the real SteamOS image — confirmed absent from this
+# project's own target systems (checked platforminputcontexts/, GTK
+# immodules/, and every icon theme dir) and not bundled by the Steam
+# client itself. Setting them would be inert on every real install this
+# project targets, not "genuinely improving" anything — the kind of
+# cargo-culted config this project explicitly reviews against. Revisit
+# only if a way to legitimately obtain these assets (not just copying
+# Valve's own copyrighted cursor theme) is ever found.
+
+# Real SteamOS's gamescope-session raises this before spawning Steam —
+# Proton/games with heavy shader-cache or asset I/O can exhaust the
+# systemd-default 1024 soft limit. Matched here for parity, not tuned.
+GAME_MODE_NOFILE_TARGET: int = 524288
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _raise_nofile_limit(target: int = GAME_MODE_NOFILE_TARGET) -> None:
+    """Raise this process's open-file soft limit toward *target*, inherited
+    by the gamescope/Steam child spawned right after.
+
+    Only ever raises, never lowers: if a user or distro has already set a
+    higher soft limit (via limits.conf, a systemd unit override, etc.),
+    this is a no-op. Never exceeds the existing hard limit (raising that
+    needs privileges this process doesn't have) and never aborts the
+    session if the call fails for any reason — a low soft limit degrades
+    game behavior under heavy I/O, it doesn't break the launch itself.
+    """
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        new_soft = min(target, hard)
+        if new_soft > soft:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+    except (ValueError, OSError) as err:
+        jlog("STEAM", f"NOFILE_LIMIT_RAISE_FAILED: {err}", level="WARN")
 
 
 def _build_gamescope_args(cfg: dict) -> list[str]:
@@ -81,20 +138,21 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
     GAME_MODE_ENV is applied first so the user's env_vars retain the last
     word; user flags are appended to the gamescope argv.
     """
+    _raise_nofile_limit()
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)
     gs_args = [gs_bin, "-e", "-f"]
 
     apply_env_map(GAME_MODE_ENV)
     apply_env_map(cfg.get("env_vars"))
-    for flag in cfg.get("flags") or []:
-        try:
-            gs_args.extend(shlex.split(str(flag)))
-        except ValueError as err:
+    flags = cfg.get("flags")
+    for flag in flags if isinstance(flags, list) else []:
+        tokens, err = shlex_split_or_fallback(str(flag))
+        if err is not None:
             # Unbalanced quote in a hand-edited flag: don't crash the whole
             # session over one bad entry — same fallback health.py's
             # preflight already uses for this exact field.
             jlog("STEAM", f"BAD_FLAG_ENTRY: {flag!r} - {err}", level="WARN")
-            gs_args.extend(str(flag).split())
+        gs_args.extend(tokens)
 
     steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
     gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
@@ -105,26 +163,64 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
 
 def _get_post_start_cmds(cfg: dict) -> list[str]:
     """Return post_start_cmds from user config; [] if absent or invalid."""
-    cmds = cfg.get("post_start_cmds") or []
-    return [str(c) for c in cmds if c]
+    cmds = cfg.get("post_start_cmds")
+    return [str(c) for c in cmds if c] if isinstance(cmds, list) else []
 
 
-def _schedule_post_start_cmds(cmds: list[str], delay: float) -> None:
-    """Sleep *delay* seconds, then fire each cmd via spawn_native."""
-    time.sleep(delay)
-    for cmd_str in cmds:
-        try:
-            parts = shlex.split(cmd_str)
-        except ValueError as err:
+def _schedule_post_start_cmds(
+    cmds: list[str], delay: float, crashed: threading.Event
+) -> None:
+    """Sleep *delay* seconds, then fire each cmd via spawn_native.
+
+    Uses shlex_split_or_fallback like every other hand-edited shell-like
+    field in this codebase (flags, GAME_WRAPPER, GAME_EXTRA_ARGS) — an
+    unbalanced quote degrades to a naive str.split() and still runs,
+    rather than silently skipping the command entirely.
+
+    crashed is set by _run_session the moment _monitor_process detects an
+    early exit — checked once after the sleep so commands meant to run
+    "after the game starts" don't fire for a session that had already
+    failed and switched to desktop by the time this thread woke up.
+
+    Known residual gap (accepted tradeoff, not fixed): this only catches
+    a crash within [0, delay]. _monitor_process keeps watching for a
+    crash up to VALIDATION_TIMEOUT, which under the shipped SSoT defaults
+    (POST_START_DELAY=2.0, VALIDATION_TIMEOUT=5.0) is longer than delay —
+    a crash landing in (delay, VALIDATION_TIMEOUT] still fires the
+    commands before the recovery-to-desktop path engages. Closing this
+    fully would mean waiting up to VALIDATION_TIMEOUT before ever firing
+    post_start_cmds, even for a perfectly healthy session — trading a
+    universal, on-every-launch UX delay for protection against a narrow,
+    low-harm edge case (stray post-start command state on a session
+    that's about to be recovered anyway, not data loss or a security
+    issue). Deliberately left as is, same reasoning as this file's other
+    accepted-tradeoff gaps.
+    """
+    try:
+        time.sleep(max(delay, 0))
+        if crashed.is_set():
             jlog(
                 "STEAM",
-                f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
-                level="WARN",
+                "POST_START_CMDS_SKIPPED: session crashed before delay "
+                "elapsed",
+                level="DEBUG",
             )
-            continue
-        if parts:
-            spawn_native(parts[0], parts)
-            jlog("STEAM", f"POST_START_CMD: {cmd_str}")
+            return
+        for cmd_str in cmds:
+            parts, err = shlex_split_or_fallback(cmd_str)
+            if err is not None:
+                jlog(
+                    "STEAM",
+                    f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
+                    level="WARN",
+                )
+            if parts:
+                spawn_native(parts[0], parts)
+                jlog("STEAM", f"POST_START_CMD: {cmd_str}")
+    # A daemon thread's uncaught exception has nowhere to go — stderr is
+    # /dev/null when the app is launched detached.
+    except Exception as err:  # pylint: disable=broad-except  # noqa: BLE001
+        jlog("STEAM", f"POST_START_CMDS_FAILED: {err}", level="ERROR")
 
 
 def _monitor_process(
@@ -143,7 +239,12 @@ def _monitor_process(
         return False  # Exited early — treat as crash
     except subprocess.TimeoutExpired:
         jlog("CORE", f"VALIDATED_{target.upper()}_STABLE", level="DEBUG")
-        write_atomic(next_path, target)
+        if not write_atomic(next_path, target):
+            jlog(
+                "CORE",
+                f"NEXT_SESSION_WRITE_FAILED: {next_path}",
+                level="ERROR",
+            )
         notify("Stable", clear_after=True)
         sd_notify_ready()
         return True  # Still running — stable
@@ -153,12 +254,27 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
     """SIGTERM → wait → SIGKILL if ignored within TERM_TIMEOUT."""
     if proc.returncode is None:
         proc.terminate()
+    term_timeout = get_ssot_num("TERM_TIMEOUT", 5.0)
     try:
-        proc.wait(timeout=get_ssot_num("TERM_TIMEOUT", 5.0))
+        proc.wait(timeout=term_timeout)
+        return
     except subprocess.TimeoutExpired:
         jlog("CORE", "SIGTERM_TIMEOUT: escalating to SIGKILL", level="WARN")
         proc.kill()
-        proc.wait()
+    try:
+        proc.wait(timeout=term_timeout)
+    except subprocess.TimeoutExpired:
+        # Still alive after SIGKILL: stuck in uninterruptible I/O
+        # (D-state), nothing more to do at this level — the kernel, not
+        # us, controls when that clears. systemd's own KillMode=mixed +
+        # TimeoutStopSec backstop reaps the cgroup regardless, so
+        # returning here (instead of blocking forever) lets the caller's
+        # shutdown/recovery flow proceed rather than wedging with it.
+        jlog(
+            "CORE",
+            "SIGKILL_TIMEOUT: process still alive (D-state?)",
+            level="ERROR",
+        )
 
 
 def _build_command_for(target: str, cfg: dict) -> list[str]:
@@ -169,15 +285,35 @@ def _build_command_for(target: str, cfg: dict) -> list[str]:
 
 
 def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
-    """Recover to desktop after crash: persist target, notify user, kill proc.
+    """Recover to desktop after an early exit: persist target, notify, kill.
+
+    Deliberate fail-safe: any process exit within the validation window
+    (a real crash, or a switch request that raced it — see
+    _monitor_process) forces "desktop", never "steam", so a broken config
+    always lands where the user can fix it via the Control Center rather
+    than looping back into a session that might not even be launchable.
 
     Returns:
         Always ``"desktop"`` — drives caller's next-target logic.
     """
-    jlog("CORE", "CRASH_DETECTED: RECOVERY", level="ERROR")
+    jlog(
+        "CORE",
+        "EARLY_EXIT_RECOVERY: process exited during the validation "
+        "window (crash, or a switch request raced it) - forcing desktop",
+        level="ERROR",
+    )
     target = "desktop"
     notify("Recovery: Starting Desktop...")
-    write_atomic(next_path, target)
+    if not write_atomic(next_path, target):
+        # The single most important write in this file: if it doesn't
+        # land, the next boot re-reads whatever next_session already held
+        # (possibly the same target that just crashed) instead of the
+        # desktop fallback this whole function exists to guarantee.
+        jlog(
+            "CORE",
+            f"NEXT_SESSION_WRITE_FAILED: {next_path}",
+            level="ERROR",
+        )
     _terminate_gracefully(proc)
     return target
 
@@ -189,6 +325,8 @@ def _post_session_message(target: str, ret_code: int) -> str:
     return f"Ended (Code: {ret_code})"
 
 
+# 6 logical inputs (cmd, next_path, target, timeout, proc_holder,
+# post_start_cmds) — all independently needed by the caller, no subset.
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def _run_session(
     cmd: list[str],
@@ -208,18 +346,23 @@ def _run_session(
     initial_target = target
     ret_code = 0
     try:
+        # cmd is built from SSoT-configured binary paths plus fixed
+        # session literals (_build_command_for) — never shell=True or
+        # externally-controlled input.
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
             proc_holder[0] = proc
+            crashed = threading.Event()
             if post_start_cmds:
                 delay = get_ssot_num("POST_START_DELAY", 2.0)
                 threading.Thread(
                     target=_schedule_post_start_cmds,
-                    args=(post_start_cmds, delay),
+                    args=(post_start_cmds, delay, crashed),
                     daemon=True,
                 ).start()
             if not _monitor_process(proc, v_timeout, next_path, target):
+                crashed.set()
                 target = _handle_recovery(proc, next_path)
             proc.wait()
             ret_code = proc.returncode
@@ -233,8 +376,14 @@ def _run_session(
         notify("FATAL: Cannot launch session!")
         ret_code = 1
         target = initial_target
-    except subprocess.SubprocessError as err:
-        jlog("CORE", f"SUBPROCESS_ERROR: {err}", level="ERROR")
+    except ValueError as err:
+        # subprocess.Popen raises ValueError, not OSError, for a
+        # malformed argv element (e.g. an embedded null byte from a
+        # hand-edited flags/env_vars entry) -- same class of bug as
+        # sdy.py::_exec_game's equivalent os.execvpe gap, fixed the
+        # same way.
+        jlog("CORE", f"BAD_LAUNCH_ARGV: {err}", level="ERROR")
+        notify("FATAL: Cannot launch session!")
         ret_code = 1
         target = initial_target
     finally:

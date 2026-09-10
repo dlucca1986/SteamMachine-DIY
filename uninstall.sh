@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Uninstaller
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Interactive removal of DIY components and system restoration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -30,6 +30,10 @@ fi
 
 REAL_USER=${SUDO_USER:-$(whoami)}
 USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+if [ -z "$USER_HOME" ]; then
+    error "Cannot resolve home directory for user: $REAL_USER"
+    exit 1
+fi
 
 # --- Filesystem Layout (must mirror install.sh / utils.py constants) ---
 readonly LIB_DIR="/usr/local/lib/steamos_diy"

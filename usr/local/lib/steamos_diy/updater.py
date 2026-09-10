@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Control Center updater UI: check, download, Konsole handoff.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -15,6 +15,8 @@ import shlex
 import threading
 from pathlib import Path
 
+# PyQt6's compiled C-extension bindings aren't visible to pylint's static
+# import resolution, so these genuine, existing symbols get flagged.
 # pylint: disable=no-name-in-module
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
@@ -22,12 +24,15 @@ from PyQt6.QtWidgets import QMessageBox, QPushButton
 
 # pylint: enable=no-name-in-module
 from utils import (
+    KONSOLE_BIN,
     UPDATES_DIR_NAME,
     USER_CONFIG_REL,
     VERSION,
     check_latest_release,
     download_release,
+    safe_emit,
     spawn_native,
+    verify_file_sha256,
 )
 
 _IDLE_LABEL: str = "⬆️ Check for Updates"
@@ -50,7 +55,7 @@ class UpdateManager(QObject):
     """
 
     _check_ready = pyqtSignal(object)  # ReleaseInfo | None
-    _download_ready = pyqtSignal(object)  # extracted Path | None
+    _download_ready = pyqtSignal(object)  # ExtractedRelease | None
 
     def __init__(self, window, button_style: str):
         super().__init__(window)
@@ -69,7 +74,7 @@ class UpdateManager(QObject):
         self._set_busy("⏳ Checking for updates…")
 
         def worker() -> None:
-            self._check_ready.emit(check_latest_release())
+            safe_emit(self._check_ready, check_latest_release())
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -78,9 +83,16 @@ class UpdateManager(QObject):
         self._set_busy(f"⏳ Downloading v{info.version}…")
 
         def worker() -> None:
-            self._download_ready.emit(
-                download_release(info, self._dest_root)
-            )
+            try:
+                result = download_release(info, self._dest_root)
+            # A daemon thread's uncaught exception has nowhere to go
+            # (stderr is /dev/null when the app is launched detached) and
+            # would skip the emit() below entirely, leaving the button
+            # stuck on "Downloading..." forever with no error shown.
+            # pylint: disable-next=broad-except
+            except Exception:  # noqa: BLE001
+                result = None
+            safe_emit(self._download_ready, result)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -138,35 +150,63 @@ class UpdateManager(QObject):
         elif box.clickedButton() is page_btn:
             QDesktopServices.openUrl(QUrl(info.html_url or _RELEASES_URL))
 
-    def _on_download(self, src_dir):
+    def _on_download(self, result):
         """Hand the unpacked release over to the installer in Konsole.
 
         The installer runs visibly in a terminal (live pacman/gcc output,
         polkit auth popup) — a long silent root operation would be both
         bad UX and undiagnosable when it fails.
         """
-        self._set_idle()
-        if src_dir is None:
+        # Deliberately NOT re-idled here: the button must stay disabled
+        # from download through the privileged install actually starting,
+        # or a second click while Konsole/pkexec is still running (a
+        # detached process this handler never awaits) can launch a second
+        # concurrent `install.sh --update` against the same files. Every
+        # return path below either re-idles explicitly (failure — let the
+        # user retry) or leaves it busy (success — a reboot is imminent).
+        if result is None:
+            self._set_idle()
             QMessageBox.warning(
                 self._win,
                 "Update Download",
                 "Download failed — see the Diagnostics logs.",
             )
             return
+        src_dir, expected_sha256 = result
         QMessageBox.information(
             self._win,
             "Installing Update",
             "The installer will now run in a terminal window.\n"
             "The system reboots automatically when it completes.",
         )
+        # Re-verify right before privileged use, not just at download
+        # time: the QMessageBox above can block on the user for an
+        # unbounded time, during which src_dir (under the user's own
+        # home, writable by that same user) could be tampered with by
+        # anything else already running as that user — this closes the
+        # TOCTOU window down to the few ms between this check and exec.
+        install_sh = src_dir / "install.sh"
+        try:
+            verified = verify_file_sha256(install_sh, expected_sha256)
+        except OSError:
+            verified = False
+        if not verified:
+            self._set_idle()
+            QMessageBox.critical(
+                self._win,
+                "Update Aborted",
+                "install.sh changed unexpectedly after download — "
+                "aborting for safety. Please try the update again.",
+            )
+            return
         # Absolute script path: pkexec starts programs in root's home,
         # so a relative ./install.sh would not resolve (the installer
         # then cd's to its own directory for the relative deploy paths).
-        script = shlex.quote(str(src_dir / "install.sh"))
-        spawn_native(
-            "/usr/bin/konsole",
+        script = shlex.quote(str(install_sh))
+        pid = spawn_native(
+            KONSOLE_BIN,
             [
-                "/usr/bin/konsole",
+                KONSOLE_BIN,
                 "--workdir",
                 str(src_dir),
                 "-e",
@@ -178,3 +218,13 @@ class UpdateManager(QObject):
                 ),
             ],
         )
+        if pid == 0:
+            self._set_idle()
+            QMessageBox.critical(
+                self._win,
+                "Update Failed",
+                "Could not launch a terminal to run the installer.\n"
+                f"Run it manually: sudo bash {install_sh} --update",
+            )
+            return
+        self._set_busy("🚀 Installing…")

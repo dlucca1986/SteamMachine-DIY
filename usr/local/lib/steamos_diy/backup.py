@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Backup Tool
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Surgical backup with deep symlink recovery for SteamOS shims.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -21,7 +21,6 @@ from pathlib import Path
 from utils import (
     BACKUP_MANIFEST_NAME,
     CORE_LIB_DIR,
-    SSOT_CONF_PATH,
     UPDATES_DIR_NAME,
     USER_CONFIG_REL,
     check_root,
@@ -30,6 +29,7 @@ from utils import (
     get_real_user,
     get_ssot_num,
     jlog,
+    require_ssot_conf,
     verify_archive,
 )
 
@@ -101,7 +101,12 @@ def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
         return []
     try:
         entries = list(os.scandir(search_path))
-    except OSError:
+    except OSError as err:
+        jlog(
+            "SYSTEM",
+            f"BACKUP_SYMLINK_SCAN_FAIL: {search_path} - {err}",
+            level="WARN",
+        )
         return []
 
     found: list[tuple[str, str]] = []
@@ -213,7 +218,20 @@ def _prune_old_archives(backup_dir: Path) -> None:
     timestamped naming makes lexicographic order chronological, and the
     glob cannot match in-flight *.tmp files.
     """
-    keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
+    try:
+        keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
+    except (ValueError, OverflowError) as err:
+        # get_ssot_num() already degrades a non-numeric value, but "nan"/
+        # "inf" parse as valid floats (float() accepts them) — int() is
+        # what actually rejects them (nan raises ValueError, inf raises
+        # OverflowError), so the degrade-to-default has to happen here
+        # instead. This runs AFTER run_backup() already logged
+        # BACKUP_SUCCESS — letting this escape would report a false
+        # "Backup Error" for an archive that's actually fine.
+        jlog(
+            "SYSTEM", f"BAD_BACKUP_KEEP: {err} - using default", level="WARN"
+        )
+        keep = _BACKUP_KEEP_DEFAULT
     if keep <= 0:
         return
     archives = sorted(
@@ -243,20 +261,37 @@ def run_backup() -> None:
     to *.tar.gz. The previous archive is never touched on failure.
     """
     check_root()
-    if not os.path.isfile(SSOT_CONF_PATH):
-        jlog("SYSTEM", "BACKUP_FAILED: SSoT config not found", level="ERROR")
-        sys.exit(1)
+    require_ssot_conf("BACKUP")
 
     user, home = get_real_user()
     home_str = str(home)
 
-    backup_dir = _ensure_backup_dir(home_str, user)
+    try:
+        backup_dir = _ensure_backup_dir(home_str, user)
+    except OSError as err:
+        # mkdir() itself can fail (permission denied, full disk, a path
+        # component that already exists as a file) - unlike every step
+        # below, this runs before BACKUP_START is even logged, so it
+        # needs its own guard rather than falling through unhandled.
+        jlog("SYSTEM", f"BACKUP_FAILED: {err}", level="ERROR")
+        sys.exit(1)
     final_path, tmp_path = _archive_paths(backup_dir)
 
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")
 
     try:
-        with tarfile.open(tmp_path, "w:gz") as tar:
+        # tarfile.open() would use the builtin open(), which follows a
+        # symlink planted at tmp_path by another process running as this
+        # same user — O_EXCL|O_NOFOLLOW refuses to write through one
+        # instead of letting root's write land wherever it points.
+        fd = os.open(
+            str(tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+        )
+        with os.fdopen(fd, "wb") as raw, tarfile.open(
+            fileobj=raw, mode="w:gz"
+        ) as tar:
             _add_payload(tar, home_str)
             _add_links_manifest(tar)
     except (OSError, tarfile.TarError) as err:

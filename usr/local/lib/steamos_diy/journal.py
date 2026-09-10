@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -14,16 +14,20 @@
 
 import os
 import re
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
+
+from utils import JOURNALCTL_BIN, jlog
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 _GAME_LOG_TAIL: int = 2000
-_MIN_APPID_LEN: int = 3  # exclude single/double-digit noise values
 _MICROSECONDS_PER_SECOND: int = 1_000_000
 
 _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
@@ -50,7 +54,7 @@ _GAMESCOPE_PAYLOAD = re.compile(
 def get_journal_cmd(tag: str) -> list[str]:
     """Build journalctl argv for *tag*; ALL expands to all known SDY tags."""
     base_cmd = [
-        "/usr/bin/journalctl",
+        JOURNALCTL_BIN,
         "--since",
         "12 hours ago",
         "-n",
@@ -116,7 +120,10 @@ def extract_game_metadata(line: str) -> tuple[str | None, str | None]:
 
 def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
     """Return last _GAME_LOG_TAIL game-launch lines from journalctl output."""
-    chdir_marker = f'chdir "{home}'
+    # Trailing "/" so a chdir into another user's home ("/home/deck2/...")
+    # can't false-positive-match this user's home ("/home/deck") — same
+    # boundary reasoning as restore.py::_allowed_prefixes.
+    chdir_marker = f'chdir "{home}/'
     matched = [
         line
         for line in stdout.splitlines()
@@ -132,19 +139,31 @@ def parse_game_logs(res: str) -> dict[str, str]:
     Tracks the last-seen NAME per source pid rather than one shared
     "current" name, so interleaved lines from two concurrently-running
     processes (e.g. two games launched close together) can't misattribute
-    one game's AppID to another's name.
+    one game's AppID to another's name. A line with no [pid]: suffix at
+    all is not tracked for correlation either way (a shared "" fallback
+    key would reintroduce the exact cross-attribution this function
+    exists to prevent, just for pid-less lines instead of present ones)
+    — its NAME still lands in det as a self-reference, but a pid-less ID
+    line is simply not attributed to any name.
+
+    No minimum-length filter on the ID value: extract_game_metadata only
+    ever matches it after a literal "gameID"/"AppID = " token, and a
+    handful of Valve's own early AppIDs are genuinely 1-2 digits (10 =
+    Counter-Strike, 20 = Team Fortress Classic, 70 = Half-Life, still
+    playable today) — a length floor would silently drop real detections
+    for exactly those games, not filter noise.
     """
     det: dict[str, str] = {}
     cur_by_pid: dict[str, str] = {}
     for line in res.splitlines():
         kind, value = extract_game_metadata(line)
         pid_match = _PID_FROM_LINE.search(line)
-        pid = pid_match.group(1) if pid_match else ""
         if kind == "NAME" and value:
             det[value] = value
-            cur_by_pid[pid] = value
-        elif kind == "ID" and value and len(value) >= _MIN_APPID_LEN:
-            cur = cur_by_pid.get(pid)
+            if pid_match:
+                cur_by_pid[pid_match.group(1)] = value
+        elif kind == "ID" and value and pid_match:
+            cur = cur_by_pid.get(pid_match.group(1))
             if cur:
                 det[cur] = value
     return det
@@ -229,17 +248,21 @@ def fetch_tagged_entries(
 
     Shared by the Diagnostics view and the support-report export so the
     two can never drift on how project logs are fetched. Raises
-    CalledProcessError/OSError — error handling is the caller's concern.
-    errors="replace" keeps decoding itself from ever raising: a MESSAGE
-    field with an embedded newline flips journalctl's export format to
-    binary-safe encoding, which is not guaranteed valid UTF-8.
+    subprocess.SubprocessError (includes TimeoutExpired)/OSError — error
+    handling is the caller's concern. errors="replace" keeps decoding
+    itself from ever raising: a MESSAGE field with an embedded newline
+    flips journalctl's export format to binary-safe encoding, which is
+    not guaranteed valid UTF-8.
     """
+    # get_journal_cmd() builds a fixed argv from constants + a tag
+    # constrained to a known set — never a shell string, never raw input.
     res = subprocess.run(  # nosec B603
         get_journal_cmd(tag),
         capture_output=True,
         text=True,
         errors="replace",
         check=True,
+        timeout=10,
     )
     return parse_export_format(res.stdout, launches)
 
@@ -281,9 +304,10 @@ def _run_journalctl_iso() -> str:
     still the parent. Narrowing here keeps Dolphin/plasmashell noise out.
     """
     try:
+        # Fixed argv, no shell — the identifiers below are hardcoded.
         res = subprocess.run(  # nosec B603
             [
-                "/usr/bin/journalctl",
+                JOURNALCTL_BIN,
                 "-t",
                 "steam",
                 "-t",
@@ -298,9 +322,16 @@ def _run_journalctl_iso() -> str:
             text=True,
             errors="replace",
             check=False,
+            timeout=10,
         )
         return res.stdout or ""
-    except OSError:
+    except (OSError, subprocess.SubprocessError) as err:
+        # Unlike fetch_tagged_entries's sibling call (which raises and
+        # lets the caller surface it), this one degrades to "" by design
+        # — but silently, that made a genuine journalctl failure
+        # indistinguishable from "no gamescope activity in the last
+        # hour". WARN leaves a trace without breaking the degrade.
+        jlog("SYSTEM", f"GAMESCOPE_LOG_FETCH_FAIL: {err}", level="WARN")
         return ""
 
 
@@ -323,7 +354,10 @@ def _split_gamescope_line(line: str) -> tuple[datetime, str] | None:
         ps = line.split(" ", 2)
         if len(ps) < 3:
             return None
-        ts = datetime.fromisoformat(ps[0]).replace(tzinfo=None)
+        # Timezone-aware, matching _finalize_export_entry's .astimezone()
+        # entries — load_logs() sorts both lists together (tag ALL/STEAM),
+        # and mixing aware/naive datetimes raises TypeError there.
+        ts = datetime.fromisoformat(ps[0])
         msg = (
             ps[2].split(": ", 1)[1].strip() if ": " in ps[2] else ps[2].strip()
         )

@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 System requirements, main features, and the packages involved.
@@ -28,7 +28,7 @@ System requirements, main features, and the packages involved.
 #### 1. Zero-DM & Service-Based Boot
 Replaces traditional Display Managers (SDDM/plasmalogin) to eliminate session conflicts and reduce overhead.
 
-* **Direct DRM Access**: The session manager runs as a high-priority service, granting `Gamescope` "DRM Master" status to minimize latency.
+* **Direct DRM Access**: `install.sh` grants the `gamescope` binary `cap_sys_admin`/`cap_sys_nice`/`cap_ipc_lock` via `setcap`, giving it DRM Master access and scheduling priority directly — without running the session as root.
 * **Visual Transitions**: The integrated `notify` engine manages visual feedback during session swaps, suppressing raw TTY output.
 
 #### 2. Session Management

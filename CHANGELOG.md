@@ -5,6 +5,883 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
+
+### Added
+- **Continuous Integration**: `.github/workflows/quality-gates.yml` runs on every push/PR to
+  `testing` and `stable`, one job step per gate (pylint on production code, flake8, ruff,
+  bandit, radon cc, radon mi, vulture, pytest, pylint on the test suite, shellcheck) —
+  mirrors CLAUDE.md's local review checklist verbatim, so a red X in the Actions UI points
+  straight at which tool failed. `radon cc`/`radon mi` don't have a built-in fail-on-threshold
+  flag (they always exit 0 regardless of findings), so each gets a short inline check instead:
+  fail the step if any function is grade C or worse, or any file drops below maintainability
+  grade A.
+- `vulture_whitelist.py` (repo root, generated via `vulture --make-whitelist`): covers exactly
+  the Qt/tarfile/ruamel false positives CLAUDE.md already documented. vulture's own exit code
+  is nonzero on any finding, including known false positives, so a whitelist was required for
+  it to function as a real CI pass/fail gate instead of a manually-eyeballed report. Lives
+  outside `usr/local/lib/steamos_diy/`, so `install.sh`'s deploy step never ships it.
+- `shellcheck` added to the local/CI gate list now that it's available in the dev environment.
+  `install.sh`'s only finding, `SC2086` on `pacman -Syu $BASE_PKGS $DRIVER_PKGS`, is intentional
+  word-splitting on two fixed-literal, space-separated package lists (never user input) — each
+  package must reach `pacman` as its own argv entry, so quoting would break installation.
+  Documented with a `# shellcheck disable=SC2086` and a one-line reason. `uninstall.sh` is clean.
+
+### Security
+- **Self-update integrity verification**: `download_release()` in `utils.py` previously
+  fetched and extracted a GitHub release tarball with no integrity check before
+  `install.sh` inside it ran with elevated privileges — flagged in CLAUDE.md as the
+  project's highest-value supply-chain risk. It now requires a `SHA256SUMS` release
+  asset (added to `ReleaseInfo` via `_release_from_api()`'s new `_find_checksum_url()`),
+  fetches and validates the digest format via the new `_fetch_expected_sha256()`, and
+  streams the tarball into a temp file while hashing it (`_download_verified_tarball()`)
+  before ever calling `tarfile.extractall`. Missing, malformed, or mismatched checksums
+  abort the download entirely (fail-closed) rather than degrading to an unverified
+  extraction. This makes attaching a `SHA256SUMS` asset a required manual step of the
+  release process from this version on (documented in CLAUDE.md's new "Release process"
+  section) — a release published without one cannot be installed via the in-app updater.
+  This defends against transport-level corruption/tampering of the download only, not
+  against a compromised publishing account (no independent signature).
+- **Update-installer TOCTOU**: `download_release()` now returns an `ExtractedRelease`
+  (extracted dir + `install.sh`'s own SHA-256, via the new `_sha256_file()`) instead of a
+  bare `Path`. `updater.py::_on_download` re-verifies that hash (`verify_file_sha256()`)
+  immediately before handing `install.sh` to `pkexec`, right after the blocking "Installing
+  Update" dialog closes. Previously, the only integrity check happened at download time,
+  before an unbounded, modal wait for the user's OK click — during that window, anything
+  already running as the same desktop user could overwrite `install.sh` in its
+  user-writable destination directory and have it executed as root on the next click, a
+  distinct local-privilege-escalation path from the compromised-GitHub-account threat model
+  the SHA-256 download check above already covers. Verified end-to-end (untampered file
+  still installs normally; a file swapped after download is blocked before `pkexec` runs).
+- **`download_release()` prune ordering, follow-up fix**: the fix above only protected
+  against a checksum-mismatched download costing the last known-good cached release —
+  a checksum-*valid* tarball that then failed extraction (`tarfile.TarError`, a full disk)
+  or turned out not to contain `install.sh` still pruned the old cache before either of
+  those checks ran. `_prune_downloads()` now runs only after extraction succeeds and
+  `install.sh` is confirmed present, and takes a `keep=target` argument so the
+  just-extracted new version is never pruned as if it were a stale one (found during
+  this session's second code-review pass, 2026-08-27).
+- **`_run_pkexec`'s sticky-on-timeout lock, narrowed to where it's actually needed**:
+  the 300s pkexec timeout added for checklist item 14 above counts however long the user
+  takes at the polkit password prompt against the same budget as the operation itself —
+  for journal vacuum (idempotent, sub-second real work, no file-overlap risk from a second
+  concurrent run) a timeout there is far more likely to be a slow/abandoned auth prompt
+  than a genuinely wedged operation, so leaving its lock permanently stuck until a Control
+  Center restart was pure downside. `_run_pkexec` gained a `sticky_on_timeout` keyword
+  (default `True`, preserving Backup/Restore's existing "may still be writing files, don't
+  risk a second overlapping run" behavior); `cleanup_logs_privileged` now passes
+  `sticky_on_timeout=False`, so a vacuum timeout resets its lock like any other error
+  instead of requiring a restart (found during this session's second code-review pass,
+  2026-08-27).
+- **Corrected a misleading `_run_pkexec` comment (and CLAUDE.md checklist item 20 itself)**:
+  both claimed every argv passed to `pkexec` was "a fixed literal, never built from GUI
+  input" — false for `run_restore()`, which appends the user-selected archive path from
+  `QFileDialog` as its own argv element. Not currently exploitable (no shell is invoked,
+  and `restore.py` independently validates the archive), but a future reviewer trusting
+  the comment could skip scrutinizing the one argv slot that actually varies with user
+  input. Both now state the real invariant: no argv element may be built by
+  string-concatenating GUI input into a larger token; a raw, whole GUI-provided value
+  passed as its own list element is fine (found during this session's second code-review
+  pass, 2026-08-27).
+- **Restored adjacency for `_https_open`'s `# nosec B310` justification**: the reason
+  (every caller already confirms `https://` before calling in) had only been in the
+  function's docstring since the `_https_open()` extraction, several lines above an
+  intervening `# pylint: disable` and `import` statement — CLAUDE.md requires the same
+  one-line-reason-on-the-line convention every other suppression in this codebase
+  follows. `scripts/audit-suppressions.py` now reports zero unjustified markers (found
+  during this session's second code-review pass, 2026-08-27).
+- **`_refresh_service_status` re-entrancy guard**: `get_service_status()`'s subprocess
+  timeout (`timeout=5`) is longer than the `QTimer` interval that polls it every 4s, so
+  a slow `systemctl show` could let the next tick launch a second thread/subprocess
+  before the first returned, piling up under load instead of simply skipping a cycle —
+  exactly the "wedged handheld" scenario this session's hardening pass otherwise targets.
+  `control_center.py` gained a `_service_status_busy` flag, following the same shape as
+  `_pkexec_busy`: a tick is skipped while a poll is already in flight, and the flag resets
+  once `get_service_status()` returns (found during this session's second code-review
+  pass, 2026-08-27).
+- **`refresh_detected_games` staleness guard** (CLAUDE.md checklist item 17): the "Scan
+  History" button had no guard against a second click starting an overlapping journalctl
+  scan — if a slower first scan finished after a faster second one, its stale result would
+  silently overwrite the fresher one in the games combo box. Added a `_scan_games_busy`
+  flag, same shape as `_pkexec_busy`/`_service_status_busy`: a second scan attempt while
+  one is in flight is now a no-op instead of racing (found during this session's second
+  code-review pass, 2026-08-27).
+- **Visual busy-state on Backup/Restore/Vacuum buttons** (CLAUDE.md checklist item 15):
+  these three buttons previously never reflected `_pkexec_busy` at all — the only feedback
+  for a double-click was a 3s status-bar toast, and once a timeout permanently locked
+  Backup/Restore the buttons kept looking fully clickable indefinitely, unlike
+  `updater.py`'s named `_set_busy` reference pattern. `control_center.py` now tracks each
+  button in `_lock_key_buttons` (keyed by `lock_key`) and disables it the moment
+  `_run_pkexec` starts; a new `pkexec_lock_released` signal — emitted only when the lock
+  actually clears — lets a main-thread slot (`_on_pkexec_lock_released`) re-enable it,
+  since Qt widgets must never be touched directly from the background worker thread
+  (found during this session's second code-review pass, 2026-08-27).
+- **Subprocess timeout discipline** (CLAUDE.md review checklist item 14): every
+  `subprocess.run()` call that talks to a system daemon (`systemctl`, `journalctl`, `pkexec`)
+  now carries an explicit `timeout=` and a handler for `TimeoutExpired` — `health.py`'s
+  `get_service_status` (`timeout=5`), `journal.py`'s `fetch_tagged_entries` and
+  `_run_journalctl_iso` (`timeout=10` each), `restore.py`'s `_reload_systemd` (`timeout=10`),
+  `utils.py`'s `fix_ownership` (`timeout=30`), and `control_center.py`'s `_run_pkexec` worker
+  and journalctl-scan calls (`timeout=300`/`timeout=10`). Previously an unresponsive daemon —
+  plausible on a handheld that can wedge or lose power mid-operation — could hang a worker
+  thread indefinitely with no way to recover short of killing the process. Every widened
+  `except` clause now catches `subprocess.SubprocessError` (the common superclass of both
+  `CalledProcessError` and `TimeoutExpired`) instead of just `CalledProcessError`, so the new
+  timeout path degrades the same way an existing failure already did, without adding a second
+  exception type to every call site.
+- **Symlink-follow on backup/restore's tmp write path**: `restore.py`'s `_ensure_safe_target()`
+  only checked the final extraction target for a pre-existing symlink, never the sibling
+  `<target>.sdy_restore_tmp` path `_write_member` actually opened with a plain `open(...,
+  "wb")`. `backup.py` had the same gap: `tarfile.open(tmp_path, "w:gz")` uses the builtin
+  `open()` internally, which follows symlinks, and `tmp_path` lives in the user-writable
+  `~/.config/steamos_diy/backups/` with a second-granularity timestamp. Both run as root via
+  `pkexec`, so another process running as the same local user could plant a symlink at either
+  predictable path ahead of time and have root write archive content through it to an
+  arbitrary file — deterministic, no race required. Both now open their tmp path with
+  `O_NOFOLLOW` (`backup.py` also adds `O_EXCL`, since its tmp path is freshly derived per run)
+  instead of a plain `open()`/`tarfile.open()`, refusing to follow a pre-existing symlink
+  there; `_write_member` now returns `bool` so `_extract_member` aborts cleanly instead of
+  `chmod`-ing a target that was never written. Found via a full-file 8-agent review of
+  `control_center.py`/`backup.py`/`restore.py`/`health.py` (2026-08-31, none had had this
+  review pass before).
+
+### Fixed
+- 3 more doc-drift corrections found by the same review: `CHANGELOG.md`'s own
+  `shlex_split_or_fallback()` entry still claimed `_schedule_post_start_cmds` kept its old
+  skip-on-malformed-entry behavior "unchanged," contradicted by a later `Fixed` entry in the
+  same release that unified it onto the shared degrade-and-run contract; `docs/Steamos
+  Session Launch.md` claimed a malformed `post_start_cmds` entry "is skipped" instead of
+  degrading and still running; `docs/Utilities Engine.md`'s `updater.py` import-list table
+  omitted `verify_file_sha256`, added by the 2.1.8 TOCTOU fix.
+- `updater.py`: three small gaps in the same download/install path — `check()`'s and
+  `_download()`'s `.emit()` calls sat outside (or partially outside) their worker's
+  try/except, so closing the Control Center window while a check/download is still in
+  flight (Qt tears down the signal object) raised `RuntimeError` uncaught in the daemon
+  thread; `_on_download()` discarded `spawn_native()`'s return value (`0` on failure), so a
+  Konsole launch failure left the user seeing "Installing Update..." and then nothing;
+  `verify_file_sha256()`'s TOCTOU re-check had no try/except of its own, so `install.sh`
+  vanishing in that window raised `OSError` uncaught inside a Qt main-thread slot instead of
+  failing closed. All three now degrade instead of crashing/hanging silently. Found via a
+  full-file 9-agent review of `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/
+  `updater.py` (2026-08-31).
+- `session_launch.py`: `_schedule_post_start_cmds`'s daemon thread had no try/except at
+  all. A negative `POST_START_DELAY` (a plausible SSoT typo — `get_ssot_num` only validates
+  it parses as a float, not that it's non-negative) reached `time.sleep()` raw, raising
+  `ValueError` uncaught — silently dropping every `post_start_cmds` entry with no
+  diagnostic. Clamped the delay to `0` (a negative value now degrades to "run immediately"
+  instead of skipping the commands) and added a try/except backstop, same pattern already
+  used for `updater.py::_download`'s worker. Found via a full-file 9-agent review of
+  `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31,
+  exception-contract-honesty angle).
+- `sdy.py`: `_header_declares_id` caught only `OSError` around a text-mode `open(...,
+  encoding="utf-8")`, the same gap already fixed in `utils.py::read_session_target` this
+  cycle — a non-UTF-8 game profile (e.g. hand-edited with an accented name saved in
+  Latin-1) raised `UnicodeDecodeError` uncaught into `sdy.py::run()`, which nothing wraps,
+  crashing the game launch with a raw traceback instead of degrading, and before any `jlog`
+  call so there's no diagnostic trail either. Now also catches `UnicodeDecodeError`. Found
+  via a full-file 9-agent review of `session_launch.py`/`session_select.py`/`sdy.py`/
+  `editors.py`/`updater.py` (2026-08-31, exception-contract-honesty angle).
+- `control_center.py`: `_atomic_save` called `yaml_parser.load(content)` only to validate
+  syntax, discarding the parsed result. A syntactically valid YAML document whose root isn't
+  a mapping (e.g. a bare list, from a paste mistake while editing a game profile) reported
+  "Configuration saved!" even though `utils.py::load_yaml_safe()` — the reader
+  `sdy.py`/`session_launch.py` both use — silently degrades that exact shape to `{}` on the
+  next load, dropping the whole profile with only a WARN-level `YAML_NOT_MAPPING` log line
+  the user has no reason to see. Now rejects a parsed-but-non-dict root the same way a YAML
+  syntax error already is — shown as a "Syntax Error" dialog instead of silently writing
+  content that won't load back the way the user expects. Found via a full-file 9-agent
+  review of `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py`
+  (2026-08-31, cross-file-contracts angle).
+- `session_launch.py`: `_build_gamescope_args`/`_get_post_start_cmds` both used
+  `cfg.get(key) or []`, which only substitutes the default for a falsy value. A truthy
+  non-list typo in a hand-edited `config.yaml` (e.g. `flags: true` or
+  `post_start_cmds: 1`) made the subsequent iteration raise `TypeError` uncaught — in
+  `run()`, before `_run_session`'s try/except even starts. With `Restart=on-failure` this
+  crash-loops the systemd unit on every Game Mode boot attempt (the default/most common
+  persisted `next_session` state), with no chance for the existing crash-recovery-to-Desktop
+  mechanism to run, since the crash happens before it's ever reached. Guarded both with
+  `isinstance(..., list)`, matching the pattern `utils.py::apply_env_map` already uses one
+  line above for the same class of field. Found independently by two separate review agents
+  (correctness and exception-contract-honesty angles) in a full-file 9-agent review of
+  `session_launch.py`/`session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31).
+- `docs/Utilities Engine.md` still described `download_release()` as returning a bare
+  `Path`/`None`, from before the 2.1.8 TOCTOU fix changed it to return an
+  `ExtractedRelease(dir, install_sh_sha256)`. Updated the function table row and added one
+  for `verify_file_sha256()`, the re-check helper `updater.py` calls right before `pkexec`.
+  Found via a full-file 9-agent review of `journal.py`/`utils.py` (2026-08-31, docs-drift
+  angle).
+- `control_center.py`: `refresh_detected_games`'s journalctl scan decoded output with
+  `subprocess.run`'s default strict UTF-8, unlike `journal.py`'s own journalctl calls
+  (`fetch_tagged_entries`/`_run_journalctl_iso`), which already use `errors="replace"`
+  because a `MESSAGE` field with an embedded newline flips journalctl's export format to
+  binary-safe encoding, not guaranteed valid UTF-8. An undecodable byte raised
+  `UnicodeDecodeError`, uncaught by the existing `except (SubprocessError, OSError)` clause —
+  silently killing the daemon thread (stderr is `/dev/null` when the app is launched
+  detached) and leaving "Scanning history..." stuck forever. Added `errors="replace"`,
+  matching `journal.py`'s pattern; the now textually-identical 5-line kwargs block triggered
+  pylint's `duplicate-code` check, suppressed with a targeted disable and a one-line reason
+  (a deliberate mirror of an established safety pattern, not independently reimplemented
+  logic worth extracting). Found via a full-file 9-agent review of `journal.py`/`utils.py`
+  (2026-08-31, exception-contract-honesty angle).
+- `helpers/*.py`: each shim's `except ImportError` around `from utils import run_shim` was
+  meant to guarantee Steam always gets a well-formed fallback exit code (0 or 7) even when
+  the project library is unusable — but `utils.py`'s own module-level guard against a
+  missing `libcore.so` raises `SystemExit(127)`, not `ImportError`. A missing/corrupted `.so`
+  (e.g. mid-upgrade) made every shim propagate exit 127 instead of its documented fallback,
+  confusing Steam's own update UI with an unexpected code instead of the intended
+  "OK (Simulated)"/"up to date" signal. Widened each shim's except clause to
+  `(ImportError, SystemExit)`; `utils.py` itself is untouched — real entry points
+  (`session_launch.py`, `control_center.py`, etc.) have no fallback and correctly hard-fail
+  at 127 if the C-Core can't load. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, cross-file-contracts angle).
+- `utils.py`/`updater.py`: `download_release()`'s post-extraction loop (`target.iterdir()`,
+  `_sha256_file(installer)`) ran outside the function's own `try`/`except`, so a
+  checksum-verified but structurally empty tarball — `tarfile.extractall()` never creates the
+  destination directory when the archive has zero members — raised `FileNotFoundError`
+  uncaught, contradicting the docstring's "`None` on any failure" contract. Moved the loop
+  inside the existing `try`. Separately, `updater.py`'s `UpdateManager._download` worker had
+  no `try`/`except` at all (unlike `check()`'s worker, safe because `check_latest_release()`
+  never raises) — an uncaught exception there vanishes silently, same class of bug as the
+  `validate_config` fix earlier this cycle, leaving the "⏳ Downloading…" button disabled
+  forever with no error shown. Added a backstop that degrades to emitting `None`, reusing
+  `_on_download`'s existing "failed" warning path. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, exception-contract-honesty angle).
+- `utils.py`: `read_session_target()`'s docstring promises "fall back to *default* on
+  failure," but its `except OSError` clause doesn't cover `UnicodeDecodeError` (a `ValueError`
+  subclass), raised by the text-mode `open(..., encoding="utf-8")` itself on non-UTF-8 bytes —
+  same failure mode as the `health.py` YAML-read gap fixed earlier this cycle, but here the
+  caller, `session_launch.py::run()` (the systemd service's entry point), wraps nothing around
+  the call at all. A `next_session` file containing invalid UTF-8 — plausible after restoring
+  a corrupted or hand-edited backup archive — would crash the session-launcher boot path
+  instead of degrading to the `"steam"` default. Now also catches `UnicodeDecodeError`. Found
+  via a full-file 9-agent review of `journal.py`/`utils.py` (2026-08-31,
+  exception-contract-honesty angle).
+- `restore.py`: `_allowed_prefixes()` was built from `home_real` alone, never consulting
+  `get_backup_mapping()`'s own destination paths — so a `games_conf_dir` (or `next_session`)
+  relocated via the SSoT to somewhere outside `/etc|/usr|/var|home` (e.g. external/SD-card
+  storage, a supported pattern per the `user/games_conf_dir` mapping entry added earlier this
+  cycle) was archived fine by `backup.py` but silently rejected by restore's
+  `_is_path_safe()` check — logged only as a WARN-level `RESTORE_REJECTED_PATH`, with the
+  overall restore still reporting `RESTORE_SUCCESS` since other members matched, so every
+  game profile at the relocated path was silently lost with no visible error. The allow-list
+  is now derived from the same mapping dict `_resolve_target` already consults, instead of
+  maintaining two independently-reasoned path sets. Found via a full-file 9-agent review of
+  `journal.py`/`utils.py` (2026-08-31, cross-file-contracts angle).
+- 3 doc-drift corrections found by the same review: the FAQ pointed at a "Logs" tab (the real
+  tab is "Diagnostics"); the Control Center doc's Preflight table implied `user_config`/
+  `games_conf_dir` always show as their own passing row (they only surface as a failing one);
+  the Backup & Recovery doc undersold `BACKUP_KEEP`'s guard (any value `<= 0` disables
+  pruning, not just exactly `0`).
+- `control_center.py`: the Diagnostics log filter (`log_search`) re-rendered the entire log
+  view — clear + one `QTextEdit.append()` per surviving line, each triggering a document
+  relayout — on every keystroke, a real stutter on a session left running for hours/days
+  with a correspondingly large log volume. `textChanged` now (re)starts a single-shot
+  `QTimer` (`_log_filter_timer`, 200ms) via the new `_schedule_log_filter` instead of
+  rendering directly, collapsing a burst of keystrokes into one render. Found via the same
+  full-file 8-agent review as the fixes above (2026-08-31).
+- `backup.py`: `_ensure_backup_dir()`'s `mkdir(parents=True, exist_ok=True)` can raise
+  `OSError` (permission denied, full disk, a path component that already exists as a file) —
+  unlike every later step in `run_backup()`, this call ran unguarded and before
+  `BACKUP_START` was even logged, so a failure crashed with a raw traceback instead of a
+  clean, logged exit. A companion `fix_ownership()` call later in the function was initially
+  flagged as a similar gap but turned out to be a false positive: `utils.fix_ownership()`
+  already catches `(OSError, KeyError, SubprocessError)` internally and only WARNs, so it
+  cannot actually raise — no change was needed there. Found via the same full-file 8-agent
+  review as the fixes above (2026-08-31).
+- `control_center.py`: `load_logs` was the only worker without a busy-guard, unlike
+  `refresh_detected_games`/`_refresh_service_status` — `on_tab_changed` calls it
+  unconditionally on every Diagnostics tab (re-)selection, so switching away and back while
+  a `journalctl` fetch was still in flight could start a second worker, and whichever
+  thread's `logs_ready` landed last silently overwrote the other's result. Added
+  `_logs_busy`, same shape as the other two guards (CLAUDE.md checklist item 17). Found via
+  the same full-file 8-agent review as the fixes above (2026-08-31).
+- `restore.py`: `run_restore()` always logged `RESTORE_SUCCESS` and exited 0 regardless of
+  how many archive members actually matched `get_backup_mapping()` — `verify_archive()` only
+  checks gzip/tar integrity, not content, so a wrong tool's archive (or one from an
+  incompatible layout) could pass it while restoring zero files, and Control Center's
+  "Restore Complete — Restored!" dialog appeared even though nothing on disk changed.
+  `_extract_payload()` now returns a restored-member count alongside the links entry;
+  `_execute_restore()` logs `RESTORE_EMPTY` and exits 1 when that count is 0, which
+  `_run_pkexec`'s existing error handling already surfaces as a "Restore Error" dialog.
+  Found via the same full-file 8-agent review as the fixes above (2026-08-31).
+- `utils.py`: `get_backup_mapping()` only ever mapped `user/config` (`~/.config/
+  steamos_diy`), covering `games_conf_dir`'s default location (nested inside it) for free —
+  but a `games_conf_dir` relocated via the SSoT (a supported, tested pattern per
+  `control_center.py`'s `_resolve_config_paths`) got no mapping entry at all: backup silently
+  skipped every game profile there, and restore had no key to put them back with even if
+  they had been captured. Now adds a `user/games_conf_dir` entry whenever the resolved path
+  differs from the default (`realpath`-compared to avoid a spurious diff from a symlink/
+  trailing slash). Found via the same full-file 8-agent review as the two fixes above
+  (2026-08-31).
+- `control_center.py`: `validate_config`'s worker thread had no try/except at all — the only
+  one in the file without it — so an uncaught exception killed it before it could emit
+  anything: no dialog, no log, the "Validate Configuration" button visibly doing nothing.
+  Root cause was in `health.py`: `_check_yaml`/`_read_user_config` caught `(OSError,
+  YAMLError)` but not `UnicodeDecodeError`, raised by the text-mode `open()` itself — before
+  ruamel ever sees the bytes — on a config file saved with non-UTF-8 encoding. Same failure
+  mode as the aware/naive datetime crash in `journal.py` earlier this cycle: the app is
+  launched detached with stderr to `/dev/null`, so an uncaught background-thread exception
+  is completely invisible. Both `health.py` except clauses now also catch
+  `UnicodeDecodeError` (fixes it for every caller, including `export_support_log`), and
+  `validate_config`'s worker now has a defensive try/except matching every sibling worker in
+  the file, emitting `process_finished` on failure instead of dying silently. Found via a
+  full-file 8-agent review of `control_center.py`/`backup.py`/`restore.py`/`health.py`
+  (2026-08-31).
+- `sdy.py`: `games_conf_dir`'s fallback (used only when the SSoT key is unset) hardcoded
+  `/etc/steamos_diy/games.d` — a directory `install.sh` never creates and nothing else in the
+  repo references, i.e. a dead path. `control_center.py` falls back to
+  `~/.config/steamos_diy/games.d` instead, so on an installation with a missing/corrupted
+  `games_conf_dir` key, the GUI would save per-game profiles to a directory the launcher would
+  never look in — same silent-divergence risk as the `user_config`/`games_conf_dir` SSoT bug
+  fixed in 2.1.7, but on the fallback value rather than the SSoT-read value. Now resolves via
+  the new `utils.default_games_conf_dir()`, matching `control_center.py`'s actual default.
+- `utils.py`: `download_release()` used to prune every previously-cached release download
+  (`_prune_downloads()`) *before* verifying the new download's checksum. A corrupted or
+  tampered-with download that failed `_download_verified_tarball()`'s SHA-256 check would
+  abort correctly, but the last known-good cached release had already been deleted — a
+  successful earlier update's cache was destroyed by an unrelated failed one. Pruning now
+  runs only after the new tarball is downloaded and verified, immediately before extraction.
+- `control_center.py`: `_run_pkexec`'s re-entrancy guard (`_pkexec_busy`) had two related gaps.
+  First, replacing its old unconditional `finally:` reset with a `TimeoutExpired`-only skip
+  meant *any* unforeseen exception in the worker (e.g. a cross-thread Qt signal emit racing
+  window teardown) — not just the deliberate timeout case — could leave the guard silently
+  stuck forever with no error shown; a `finally` guarded by a local flag now resets it on
+  every outcome except the intentional timeout. Second, the guard was a single flag shared by
+  three unrelated privileged operations (journal vacuum, backup, restore), so a timeout on
+  vacuum (which touches no files backup/restore care about) permanently blocked the other two
+  as well; it's now keyed per lock group (`lock_key="files"` for Backup/Restore, which do
+  share target files and must stay mutually exclusive, `lock_key="vacuum"` for journal
+  cleanup, which doesn't) so unrelated operations no longer block each other.
+- `control_center.py`: `_resolve_config_paths`'s `games_conf_dir` fallback independently
+  hardcoded the `"games.d"` subdirectory name instead of sharing it with
+  `utils.default_games_conf_dir()` (the function whose own docstring already claimed to be
+  the single source of truth for both files) — today's values happened to coincide, but
+  nothing would have caught the two silently diverging if either literal were ever edited
+  alone, the same class of bug already fixed once for this exact concept earlier in this
+  release. Both now derive from a single shared `utils.GAMES_CONF_SUBDIR` constant.
+- `journal.py`: `_split_gamescope_line` stripped the timezone off its parsed timestamp
+  (`.replace(tzinfo=None)`) while `_finalize_export_entry`'s timestamps stayed timezone-aware.
+  `control_center.py`'s `load_logs()` merges and sorts both lists together for the default
+  `ALL` tag (and `STEAM`), so a real session with any gamescope activity raised an uncaught
+  `TypeError: can't compare offset-naive and offset-aware datetimes` inside the worker
+  thread — not covered by the surrounding `except (subprocess.SubprocessError, OSError)`, so
+  it died silently and the Diagnostics tab stayed stuck on "Loading logs..." forever. Found
+  live on a real gamescope session (no prior test merged both entry sources).
+  `journalctl -o short-iso` already includes the UTC offset, so dropping the
+  `.replace(tzinfo=None)` call is sufficient — both sources now stay aware.
+- `steamos_diy_core.c`: first full manual review of the C source (checklist items 1/6/7,
+  pre-checked by `scripts/audit-c-core.sh`/`scripts/audit-ctypes-abi.py`) found and fixed
+  four issues in `c_write_atomic`/`c_sd_notify_ready`. Most notably, `c_write_atomic`'s
+  `rename()` was never followed by an `fsync()` on the containing directory — the rename
+  itself is atomic, but the directory-entry update it makes isn't guaranteed durable across
+  a power loss before that directory's own journal entry flushes, on the same handheld
+  power-loss threat model already documented for subprocess timeout discipline. It now
+  best-effort `fsync()`s the parent directory (handles both nested and single-level-under-
+  root paths) after a successful rename. Also: `c_sd_notify_ready()`'s empty `()` parameter
+  list (unspecified-argument C, not true zero-argument) is now `(void)`; its `sendto()` call
+  hardcoded the length of `"READY=1"` as the literal `7` instead of `strlen(msg)`; and a
+  comment now documents that `c_write_atomic` always creates its target with mode `0644`
+  regardless of the file's previous permissions (inherent to tmp+rename, harmless today
+  since no caller writes a permission-sensitive file through it). All four verified by
+  compiling `libcore.so` and exercising every function directly via `ctypes` (including a
+  real abstract `AF_UNIX` socket round-trip for `c_sd_notify_ready`), since this file has no
+  automated test coverage (`conftest.py` mocks `ctypes.CDLL` for the Python suite). CLAUDE.md
+  gained a "Confirmed-intentional design decisions" entry for `gcc -fanalyzer`'s unrelated
+  `%m`/`-Wformat` non-ISO-C warning on the same `syslog()` call (valid glibc extension, this
+  project only targets glibc distros) so it isn't re-flagged as a finding in future audits.
+- `session_launch.py`: `_schedule_post_start_cmds` reimplemented shlex parsing with raw
+  `shlex.split`/skip-on-`ValueError` instead of reusing `shlex_split_or_fallback` — already
+  imported and used two functions above it for the structurally identical `flags` field, and
+  already the documented contract this test file's own docstring claimed for *both* fields.
+  A malformed `post_start_cmds` entry silently skipped the whole command; the identical typo
+  in `flags` degraded to a naive `str.split()` and still ran. Now both fields share the same
+  degrade-and-run behavior. Found independently by 3 of 8 review agents in the second
+  extended code-review pass (reuse, cross-file, and architecture angles).
+- `sdy.py`: `_resolve_effective_name`'s "rightmost existing absolute path in argv" heuristic
+  could pick a trailing directory argument (e.g. a `--workshop-dir /path/to/workshop` value)
+  instead of the actual game binary, since it only checked `os.path.exists`, not that the
+  candidate was a file. The per-game profile lookup then silently missed, falling back to
+  the global config with no error. Now requires `os.path.isfile`, which keeps the
+  intentional "skip past a wrapper like mangohud earlier in argv" behavior (already pinned
+  by an existing test) while excluding directories.
+- `session_launch.py`: removed `_run_session`'s `except subprocess.SubprocessError` clause —
+  every subprocess call reachable inside the surrounding `try` block already catches its own
+  `TimeoutExpired` internally (`_monitor_process`, `_terminate_gracefully`), and nothing
+  calls `.run(check=True)`/`.check_call()`/`.check_output()`, so `CalledProcessError` was
+  never possible either. The clause was logically dead code — reachable per syntax, never
+  per actual call pattern — the exact class of issue `vulture` can't catch since it only
+  flags unreferenced code, not unreachable branches. No behavior change.
+- `session_launch.py`: `_terminate_gracefully`'s final `proc.wait()` after escalating to
+  `SIGKILL` had no timeout, so a child stuck in uninterruptible I/O (D-state — a real
+  possibility on a handheld with a flaky storage/USB glitch) could block it indefinitely,
+  in turn blocking `_handle_term`'s `sys.exit(0)`. Now bounded by the same `TERM_TIMEOUT`
+  used for the SIGTERM wait; if still alive after that, logs `SIGKILL_TIMEOUT` and returns
+  rather than hanging — `systemd`'s own `KillMode=mixed` + `TimeoutStopSec` backstop reaps
+  the cgroup regardless, so this only affects how promptly the caller's own shutdown/
+  recovery flow can proceed, not whether the process eventually goes away.
+- `sdy.py`: `run()`'s docstring states "Exits with 1 on failure; never returns on success,"
+  but the `len(sys.argv) < 2` guard did a plain `return` — neither outcome. Now exits 1 with
+  a logged `NO_TARGET` reason, matching the documented contract.
+- `docs/SteamMachine DIY Control Center.md`: the Diagnostics styling table listed `/` among
+  the characters highlighted red/bold in the YAML editor; `editors.py`'s actual regex only
+  matches `:` and `-` (deliberately — `/` appears in nearly every path value in this
+  project's config, so highlighting it would make paths unreadable rather than clearer).
+  Corrected the table to match the code.
+- `utils.py`: `get_backup_mapping()`'s `user/config` entry was hardcoded to
+  `~/.config/steamos_diy`, unlike `games_conf_dir`'s entry above (fixed 2026-08-26), which
+  already resolves dynamically via the SSoT. A `user_config` relocated to a different
+  directory (a supported, tested pattern — see CLAUDE.md's confirmed-intentional note on
+  `control_center.py`'s Global Options tab) caused `backup.py` to silently archive the
+  stale default directory instead of the live one; restoring that archive left the user's
+  actual active config untouched, with no error anywhere in the flow. Now resolves the
+  same way `control_center.py::_resolve_config_paths` already does, via a new shared
+  `CONFIG_FILE_NAME` constant so the two can't independently drift on the fallback value.
+  Also fixes a latent interaction this exposed: the check for whether `games_conf_dir` is
+  "already nested under user/config, backed up for free" compared against the *fixed*
+  default directory, not the actual (now possibly relocated) `user/config` entry — a
+  `games_conf_dir` left at its own default while `user_config` alone moved elsewhere would
+  have silently dropped out of the backup too. Replaced the equality check with a real
+  nesting check against the resolved `user/config` directory. Found via a dedicated
+  cross-file-contracts review across the full 11-file production `.py` tree (2026-09-01).
+- `restore.py`: `_restore_link` recreated a symlink via `os.unlink()` then `os.symlink()`
+  as two separate syscalls, unlike every other write path in this file (`_write_member`
+  already goes tmp+`os.replace()`). A kill between the two calls — plausible given
+  `control_center.py`'s own 300s pkexec timeout, or a handheld losing power mid-restore —
+  left the symlink missing entirely rather than stale, silently dropping a critical shim
+  (e.g. a session-select polkit helper) with no log of the gap. Now creates the new
+  symlink at a temp path first, then `os.replace()`s it onto the real link path, mirroring
+  `_write_member`'s existing pattern. Found via the same cross-file-contracts review as the
+  fix above (2026-09-01).
+- `restore.py`: `_extract_member`'s `os.chmod()` call was the only step not wrapped in its
+  own error handling — an `OSError` there (e.g. a race where the target is removed or has
+  its permissions changed between `_write_member`'s `os.replace()` and this `chmod`)
+  propagated all the way up into `_execute_restore`'s archive-level `except`, which exits 1
+  and aborts the *entire* restore — contradicting `run_restore`'s own docstring, which
+  promises per-member rejections are logged but non-fatal, and inconsistent with every
+  other per-member failure path in this file (symlink guards, allow-list checks), which
+  already degrades gracefully. Now logs `RESTORE_CHMOD_FAIL` and returns `False` for that
+  member only, same as the others. Found via the same cross-file-contracts review as the
+  two fixes above (2026-09-01).
+- `control_center.py`: `self.conf_root`/`self.games_conf_dir` were resolved once in
+  `__init__` and never revisited. A restore that relocates the SSoT's `user_config`/
+  `games_conf_dir` keys runs as a separate `pkexec`'d process, so it can't invalidate
+  Control Center's in-process `get_ssot_var()` cache — without an explicit
+  `clear_ssot_cache()`, the paths stayed pointed at the stale pre-restore location until
+  the app was restarted, silently misdirecting any Global Options/Game Overrides save made
+  right after a restore. `_show_completion_message` now clears the SSoT cache and
+  re-resolves both paths whenever a privileged operation completes without error — also
+  fires harmlessly for backup/vacuum/validate/export success, where the SSoT never
+  changes (a cheap re-read of a small file, not a hot path). Found via the same
+  cross-file-contracts review as the three fixes above (2026-09-01).
+- `control_center.py`: every daemon-worker `signal.emit()` call lacked the `RuntimeError`
+  guard `updater.py`'s own workers already have. Closing Control Center while a privileged
+  operation is still in flight (Backup/Restore can run for up to the 300s pkexec budget)
+  deletes the underlying Qt object; emitting on it then raises `RuntimeError`, which
+  propagated uncaught out of the worker thread — silently, since stderr is `/dev/null` when
+  the app is launched detached, the same silent-vanish class already hardened elsewhere.
+  Added a shared `_safe_emit(signal, *args)` helper and routed all 13 emit() call sites
+  through it (`_run_pkexec`'s worker, `validate_config`, `refresh_detected_games`,
+  `load_logs`, `export_support_log`, `_refresh_service_status`). Found via the same
+  cross-file-contracts review as the fixes above (2026-09-01).
+- `control_center.py`: "Switch to Steam", "Open Konsole Terminal", and "Browse Config
+  Folder" all discarded `spawn_native()`'s return value, unlike `updater.py`'s own call to
+  the same function (which checks `pid == 0` and shows a warning). A missing binary or
+  broken `PATH` made the button click silently do nothing, with zero user-visible feedback.
+  Added a small `_launch_or_warn(bin_path, argv)` wrapper and routed all 3 call sites
+  through it. Found via the same cross-file-contracts review as the fixes above
+  (2026-09-01).
+- `utils.py`/`restore.py`: `get_backup_mapping()`'s `"user/games_conf_dir"` entry was only
+  added when the *current* system's `games_conf_dir` diverges from its default nesting
+  under `user/config` — correct for `backup.py` (avoids double-archiving), but `restore.py`
+  computed its own mapping the same way, using the current pre-restore SSoT state rather
+  than whatever state the archive was actually made under. This matters for the real
+  backup/restore use case: a "parachute" restore after a from-scratch OS reinstall (system
+  failure, not a project update) lands back on the default SSoT, but the archive being
+  restored may have been made while `games_conf_dir` was relocated (e.g. to an SD card) —
+  the archive's member names are fixed at backup time regardless of the current system's
+  state, so without a matching mapping key those per-game override files were silently
+  dropped on restore, with no error since other members still matched. `get_backup_mapping()`
+  gained a `for_restore` keyword: when set, the entry is always included (a harmless no-op
+  match when the archive's own `games_conf_dir` was nested, the common case) — `backup.py`'s
+  own call is unaffected, and `restore.py`'s `_prepare_restore` now passes
+  `for_restore=True`. `system/next_session` was left as-is (a fixed system path, not a
+  user-facing "where are my files" setting, so not similarly relocation-sensitive in
+  practice). Found via a dedicated cross-file-contracts review across the full 11-file
+  production `.py` tree (2026-09-01).
+- `control_center.py`: `toggle_template` never disabled the target combo
+  (`combo_global_files`/`combo_games`) while a template preview was showing. Switching the
+  target file mid-preview fired `load_global_file`/`load_game_file` (wired to the combo's
+  own change signal) while `is_template`/`cache` still tracked the PREVIOUS file; exiting
+  template mode afterwards restored that stale cache over the newly-selected file, and a
+  subsequent Save silently wrote it to the wrong path — real data corruption of a game or
+  global config profile. `_template_widgets_for` now also returns the context's target
+  combo, disabled for the duration of the preview in `_enter_template_mode` and re-enabled
+  in `_exit_template_mode`. Found via a second full-file review pass across the same
+  11-file production tree (2026-09-02).
+- `restore.py`: `_write_member`'s `os.makedirs`/`shutil.copyfileobj`/`os.replace` calls had
+  no try/except at all. Any `OSError` there (e.g. a crafted archive member whose target's
+  parent path collides with an existing file from another mapping key, or `ENOSPC`
+  mid-copy) escaped all the way to `_execute_restore`'s archive-level `except`, aborting
+  the ENTIRE restore — contradicting `run_restore`'s own documented per-member-isolation
+  contract ("Per-member rejections are logged but non-fatal"). Now wrapped in
+  `try/except OSError`, logs `RESTORE_WRITE_FAIL`, returns `False`, same pattern already
+  used by `_restore_link` and `_extract_member`'s chmod guard. Found via the second
+  full-file review pass, cross-confirmed independently by 2 different agents (2026-09-02).
+- `utils.py`: `_load_ssot_cache()` only caught `OSError` while iterating the SSoT file,
+  unlike its siblings `read_session_target`/`load_yaml_safe` (both already catch
+  `UnicodeDecodeError` too). Since `get_ssot_var()` is called from virtually every module
+  (including `jlog()` itself), a hand-edited SSoT conf saved with a non-UTF-8 byte would
+  crash the very first `get_ssot_var()` call anywhere instead of degrading. Now also
+  catches `UnicodeDecodeError`. Found via the second full-file review pass (2026-09-02).
+- `control_center.py`: `load_global_file`, `load_game_file`, and `_enter_template_mode`
+  all called `Path.read_text(encoding="utf-8")` with zero try/except, unlike every other
+  hand-edited-file reader in this codebase. A non-UTF-8 game profile or global config (or
+  a TOCTOU delete after the `exists()` check) crashed the load with an uncaught exception
+  out of a Qt slot instead of degrading. All three now catch `(OSError, UnicodeDecodeError)`
+  and show a status-bar message, matching `beautify_yaml`'s existing lightweight degrade
+  pattern. Found via the second full-file review pass (2026-09-02).
+- `backup.py`: `get_ssot_num()` already degrades a non-numeric SSoT value, but `"nan"`/
+  `"inf"` parse as valid floats (`float()` accepts them) — `int()` is what actually rejects
+  them (`nan` raises `ValueError`, `inf` raises `OverflowError`), uncaught in
+  `_prune_old_archives`. This runs AFTER `run_backup()` already logged `BACKUP_SUCCESS`, so
+  the crash reported a false "Backup Error" for an archive that's actually fine. Now
+  wrapped in `try/except (ValueError, OverflowError)`, degrades to `_BACKUP_KEEP_DEFAULT`
+  with a `BAD_BACKUP_KEEP` warning log. Found via the second full-file review pass
+  (2026-09-02).
+- `control_center.py`: `refresh_detected_games`'s journalctl invocation had no `-n` line
+  cap, unlike `journal.py`'s own bounded `get_journal_cmd()` pattern (`-n 300` with
+  `--since "12 hours ago"`). Every "Scan History" click pulled the WHOLE 24h system
+  journal unbounded, mostly discarded by the Python-side filter. Can't narrow by `-t` like
+  `journal.py` does: the chdir/gameID/AppID lines `filter_game_journal_lines` looks for
+  come from Steam/gamescope's own captured output, not this project's `jlog()` tags. Added
+  `-n 5000` instead — generous enough to still catch real launches over 24h, but bounded.
+  Found via the second full-file review pass (2026-09-02).
+- `utils.py::get_backup_mapping`: a hand-edited `user_config` with no directory component
+  (a bare `"config.yaml"`) made `os.path.dirname()` return `""`. Passed unmodified to
+  `restore.py`'s `_allowed_prefixes`, `os.path.realpath("")` resolves to the process's
+  CURRENT WORKING DIRECTORY, silently widening the privileged (root, under `pkexec`)
+  restore write allow-list to an unpredictable cwd instead of degrading to the default
+  config dir. Now falls back to the default when `os.path.dirname()` returns empty,
+  matching `get_ssot_num`'s own degrade-safely contract. Found via the second full-file
+  review pass (2026-09-02).
+- `session_launch.py`: `_schedule_post_start_cmds`'s daemon thread had no link to session
+  outcome — it fired its configured commands even after `_monitor_process` detected an
+  early crash and `_handle_recovery` had already switched to desktop. Added a
+  `threading.Event`, set by `_run_session` the moment a crash is detected, checked by the
+  daemon thread once after its delay elapses before firing anything. Found via the second
+  full-file review pass (2026-09-02).
+- `sdy.py`/`session_launch.py`: `os.execvpe` (`sdy.py::_exec_game`) and `subprocess.Popen`
+  (`session_launch.py::_run_session`) both raise `ValueError`, not `OSError`, for an
+  embedded null byte in argv (e.g. from a hand-edited `GAME_WRAPPER`/`GAME_EXTRA_ARGS`/
+  `flags` entry) — uncaught by either function's `except OSError`, crashing the launch
+  path with a raw traceback instead of the documented graceful degrade. Same
+  "hand-edited config crashes the boot path" class already fixed repeatedly elsewhere.
+  Found via the second full-file review pass (2026-09-02).
+- `journal.py::filter_game_journal_lines`: `chdir_marker` had no trailing boundary
+  character, so `home="/home/deck"` false-positive-matched a chdir into a DIFFERENT
+  user's home, `"/home/deck2/..."`. Added a trailing `"/"`, same boundary reasoning
+  already used by `restore.py::_allowed_prefixes` (`"/etcfoo"` must not match `"/etc"`).
+  Found via the second full-file review pass (2026-09-02).
+- `journal.py::parse_game_logs`: `pid = pid_match.group(1) if pid_match else ""` made
+  every line lacking a `[pid]:` suffix share the SAME `cur_by_pid[""]` bucket,
+  reintroducing the exact cross-attribution the pid-keyed tracking exists to prevent (per
+  this function's own docstring) — just for pid-less lines instead of present ones. A
+  pid-less NAME line still lands in `det` as a self-reference; a pid-less ID line is no
+  longer attributed to any name. Found via the second full-file review pass (2026-09-02).
+- `control_center.py::_update_game_combo_ui`: `combo_games.clear()` also resets the
+  editable combo's line-edit text, not just its item list. A "Scan History" click
+  finishing while the user was still typing a manually-added game's name wiped that text;
+  a subsequent Save then silently no-oped on the now-empty `currentText()`. Now captures
+  the typed text before clearing and restores it via `setEditText()` if it doesn't already
+  match one of the freshly repopulated items. Found via the second full-file review pass
+  (2026-09-02).
+- `journal.py::parse_game_logs`: `_MIN_APPID_LEN = 3` discarded any ID under 3 digits as
+  "noise", but `extract_game_metadata` only ever matches an ID after a literal
+  `"gameID"`/`"AppID = "` token, and several of Valve's own early AppIDs are genuinely 1-2
+  digits (10 = Counter-Strike, 20 = Team Fortress Classic, 70 = Half-Life, all still
+  playable today). The filter silently dropped real journal-based launch detections for
+  exactly those games instead of filtering actual noise. Removed the length floor. Found
+  via the second full-file review pass (2026-09-02).
+- `control_center.py::edit_ssot_privileged`: called `subprocess.Popen` directly, unlike
+  the other 3 Maintenance-tab buttons (Switch to Steam/Konsole/Browse Config), which all
+  route through `spawn_native`'s `start_new_session=True` detachment. Kate/KWrite stayed
+  attached to Control Center's own process group instead of being properly detached. Now
+  routed through `_launch_or_warn`/`spawn_native` like its siblings. Found via the second
+  full-file review pass (2026-09-02).
+- `control_center.py::export_support_log`: had no re-entrancy guard at all, unlike
+  `refresh_detected_games`/`load_logs`'s established `_busy` pattern. The save dialog is
+  modal, so this only mattered for two fast successive clicks picking the SAME
+  destination — without a guard, two worker threads could race writing to that file with
+  plain `write_text()` (not the atomic `write_atomic()` path, since this is a diagnostic
+  export, not a config file). Found via the second full-file review pass (2026-09-02).
+- 3 more doc/comment-drift corrections found by the same review: `docs/Backup &
+  Recovery.md`'s link-reconstruction description still said restore recreates symlinks via
+  a plain `os.symlink` call, unaware of this cycle's `_restore_link` atomicity fix;
+  `control_center.py::_show_completion_message`'s comment listed "validate" among the ops
+  that reach its cache-refresh code on success, but `validate_config` uses a separate
+  `preflight_ready` signal on success and never reaches this method at all;
+  `docs/Steamos Session Launch.md` stated `POST_START_DELAY < VALIDATION_TIMEOUT` as a
+  guaranteed invariant when nothing in code enforces that relationship — replaced with a
+  description of this cycle's actual crash-skip mechanism. Found via the second full-file
+  review pass (2026-09-02).
+- `sdy.py::_find_profile_by_id`: removed the unreachable `not appid` half of its guard —
+  the sole call site (`_get_profile_path`) only invokes this function inside
+  `if steam_appid:`, so that branch was dead code, not a real safety net. Found via the
+  second full-file review pass (2026-09-02).
+- `install.sh`: two real gaps found extending the full-file review methodology to the
+  files deferred until this cycle (`install.sh`/`uninstall.sh`/`steamos_diy_core.c`,
+  never reviewed at this depth before). `deploy_files()`: a plain (non `--update`) run on
+  top of an already-installed system unconditionally overwrote the live SSoT config with
+  the template, unlike the YAML config deploy step right below it which already prompts
+  before overwriting — now gets the same confirm prompt. `setup_systemd_lockdown()`:
+  masked `getty@tty1.service` *before* confirming `steamos_diy.service` was successfully
+  deployed and enabled; under `set -eo pipefail` a missing service file or a failed
+  `systemctl enable` left TTY1 masked with no working replacement. Reordered to mask
+  Getty only after the replacement is confirmed enabled, matching the "confirm safe state
+  first" discipline `uninstall.sh`'s own `cleanup_services()` already applies in reverse.
+- `steamos_diy_core.c::c_write_atomic`: two gaps found by the same deferred-files review.
+  `open(tmp_path, ...)` had no `O_NOFOLLOW`, unlike the equivalent Python-side TOCTOU
+  guard already applied this cycle (`restore.py::_write_member`) — a symlink planted at
+  `tmp_path` by another process running as the same user would be followed and written
+  through instead of refused; no current caller crosses a privilege boundary, but this is
+  an exported, generically-loaded primitive with no privilege check of its own, so it
+  shouldn't rely on today's call graph to stay safe. `fdatasync(fd)`'s return value was
+  discarded before `rename()`, unlike the function's own header comment promising
+  "hardware durability" — now logs a `WARNING` via syslog on failure (matching the
+  existing rename-failure log pattern) without changing control flow. Verified by
+  rebuilding `libcore.so` with `install.sh`'s exact compile command, re-running
+  `scripts/audit-c-core.sh`/`scripts/audit-ctypes-abi.py` (no ABI change), and a
+  functional smoke test confirming normal writes still work and a symlinked tmp path is
+  now refused without touching its target.
+- `control_center.py::closeEvent`: a failed save (a YAML syntax error, or an `OSError` from
+  `_atomic_save`) on the "Save before closing?" prompt still closed the window right after
+  the save loop — `_atomic_save` swallows both exceptions internally (shows its own error
+  dialog) and gives `closeEvent` no success/failure signal, so "Save" silently behaved like
+  "Discard" whenever the save actually failed. Now re-checks `_dirty_editors()` after the
+  save loop and calls `event.ignore()` if anything is still dirty, instead of accepting
+  unconditionally. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `session_launch.py`: `_schedule_post_start_cmds`'s docstring overclaimed its own crash
+  guard — it only catches a crash within `[0, POST_START_DELAY]`, but `_monitor_process`
+  keeps watching up to `VALIDATION_TIMEOUT`, longer than `POST_START_DELAY` under the
+  shipped SSoT defaults (2.0s vs 5.0s). A crash in `(POST_START_DELAY, VALIDATION_TIMEOUT]`
+  still fires `post_start_cmds` before recovery-to-desktop engages. Documented as a
+  deliberately accepted tradeoff rather than fixed in code: closing it fully would delay
+  every session's `post_start_cmds` up to `VALIDATION_TIMEOUT`, even when healthy, to guard
+  against a narrow, low-harm edge case (stray command state on a session about to be
+  recovered anyway — not data loss or a security issue). Found via a third full-file review
+  pass (4 parallel agents, 2026-09-03).
+- `install.sh`: the plain-reinstall SSoT confirm prompt's "decline overwrite" branch lost
+  the `chmod 644` heal its `--update` sibling has, reproducing the 2.1.5 "SSoT unreadable"
+  bug for anyone who answers "N" to the prompt on a legacy 0600 SSoT. Now heals the
+  permissions regardless of the user's answer. Found via a third full-file review pass (4
+  parallel agents, 2026-09-03), verified with a standalone smoke test of the branch logic.
+- `steamos_diy_core.c::c_write_atomic`: two related gaps fixed together. It was `void`, so
+  every failure (symlink refused, short write, failed rename) was only visible in syslog,
+  never to the Python caller — `write_atomic()` now forwards the C side's int return as
+  `bool`, and all 4 call sites react to `False` instead of assuming the write landed;
+  `control_center.py::_atomic_save` is the one users actually see: it now reports a Save
+  Error and leaves the document dirty instead of lying "Configuration saved!", which is
+  also what makes the recent `closeEvent` fix effective for a C-level write failure, not
+  just a Python-level `YAMLError`/`OSError`. Separately, `open()` on the tmp path had no
+  `O_NONBLOCK`: a same-user process planting a FIFO there (same threat model as the
+  existing `O_NOFOLLOW` symlink guard) blocked every caller forever waiting for a reader —
+  `O_NONBLOCK` now makes a reader-less FIFO fail immediately (`ENXIO`), and a new
+  `fstat`/`S_ISREG` check refuses the case where an attacker keeps a reader attached (which
+  would otherwise let the FIFO get renamed onto the real config file). Verified functionally
+  against a rebuilt `libcore.so`: normal write, overwrite, symlink attack, FIFO with no
+  reader, and FIFO with an attached reader all behave as intended, none hang. Found via a
+  third full-file review pass (4 parallel agents, 2026-09-03).
+- `updater.py::_on_download`: called `self._set_idle()` unconditionally at the top, before
+  the checksum re-verify and before Konsole/pkexec even launched — the "Check for Updates"
+  button was clickable again well before the privileged install (a detached process this
+  handler never awaits) actually finished, so a second click could start a second concurrent
+  `pkexec install.sh --update` against the same files (checklist item 15). Now only re-idles
+  on the failure paths (download failed, verify failed, spawn failed); on success it stays
+  disabled with an "Installing..." label since a reboot is imminent. Found via a third
+  full-file review pass (4 parallel agents, 2026-09-03).
+- `health.py::_check_binaries`: `os.access(path, os.X_OK)` alone is true for a traversable
+  directory, not just an executable file — a SSoT `bin_*` key mistakenly pointed at a
+  directory passed this preflight as "OK" even though `session_launch.py` can't actually
+  exec it. Now also requires `os.path.isfile()`. Found via a third full-file review pass (4
+  parallel agents, 2026-09-03).
+- `uninstall.sh`: had no guard against an unresolved `USER_HOME`, unlike `install.sh`'s
+  mirror-image check. A stale/invalid `SUDO_USER` left `USER_HOME` empty, so `user_cfg`
+  became `/.config/steamos_diy` and the "delete user data" step silently targeted an
+  unintended root-level path instead of failing loudly. Now exits with an error, matching
+  `install.sh`. Found via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `updater.py`: `_download`'s bare `# noqa: BLE001` on its broad-except lacked the one-line
+  justification CLAUDE.md's suppression-comment discipline requires. Added: an uncaught
+  exception in this daemon thread's worker would skip the `.emit()` below it entirely,
+  leaving the update button stuck on "Downloading..." forever with nothing printed. Found
+  via a third full-file review pass (4 parallel agents, 2026-09-03).
+- `health.py::_check_gamescope_flags`: built an "allowed flags" set by text-parsing
+  `gamescope --help`, then diffed the configured flags against it — but gamescope accepts
+  some flags it never documents in `--help` (found live on real hardware: `--fade-out-duration`
+  is used successfully in every real launch, yet the preflight always flagged it
+  "unrecognised"). Now runs the configured flags through gamescope's own parser
+  (`gamescope <flags> --help`) and checks its own error output instead of reimplementing one
+  — exactly as side-effect-free as before (`--help` still exits immediately without touching
+  display/DRM), and simpler code (removes `_gamescope_options()`/`_collect_unknown_flags()`
+  entirely). `getopt_long` stops at the first bad option, so only the first one is ever
+  reported per run — still strictly better than false-flagging a valid flag. Verified against
+  a real installed gamescope (3.16.28): a config using `--fade-out-duration` now passes, a
+  genuinely invalid flag is still correctly rejected. Found during a real-hardware test round
+  (2026-09-03).
+- **Docs**: `journalctl -u steamos_diy.service` was documented (Troubleshooting, Zero DM
+  Setup, FAQ wiki pages) as showing the session launcher's own logs, including crash
+  recovery — it never did. `PAMName=login` moves the process into its own login-session
+  cgroup (`user-<uid>.slice/session-N.scope`), and journald attributes a `syslog()`-sent
+  message's unit from the sender's *current* cgroup, so every `jlog()` line (`CORE`/`STEAM`/
+  `SYSTEM`, including `EARLY_EXIT_RECOVERY`) is filed under that session scope instead —
+  `-u` only ever showed systemd's own start/stop/restart lines. The `sdy-errors` diagnostic
+  alias built on `-u ... --priority=3` was consequently dead on arrival: it could never match
+  a real application error. All three docs pages now lead with `journalctl -t CORE -t STEAM
+  -t SYSTEM` and explain why `-u` alone misses everything; the alias now filters on the same
+  tags. Found and confirmed live on real hardware while deliberately testing the two
+  crash-recovery paths in `session_launch.py` (`kill -9` on gamescope before vs. after
+  `VALIDATED_STEAM_STABLE`) — both recovery paths themselves worked exactly as designed, only
+  the documented way to *see* that in the journal was wrong (2026-09-07).
+
+### Performance
+- `restore.py`: `_write_member`'s `dest.write(src.read())` loaded an archive member's entire
+  content into memory before writing it out. Backups can include large user-data blobs
+  (Steam config/state, save data) via `get_backup_mapping` — now streams via
+  `shutil.copyfileobj(src, dest)` instead, same end result, avoiding an allocation
+  proportional to file size on a resource-constrained handheld. Found via the same full-file
+  8-agent review as the fixes above (2026-08-31).
+- `utils.py`: deferred the `tarfile`/`shutil` imports (used only by backup/restore
+  verification and the self-update path) to their actual call sites, so every other importer
+  of this module — `session_launch.py` on the boot-critical session-switch path included —
+  no longer pays their load cost for nothing. Follows the pattern already established for
+  `urllib`/`json`/`hashlib`. Measured: `utils.py`'s cumulative import time dropped from ~55ms
+  to ~45ms (`python3 -X importtime`, 3-run average); a real but modest win against a
+  session-switch latency whose felt component (~4s) is otherwise dominated by third-party
+  gamescope/Steam startup, not by this project's own code.
+
+### Changed
+- 3 minor cleanups from the full-file 9-agent review of `session_launch.py`/
+  `session_select.py`/`sdy.py`/`editors.py`/`updater.py` (2026-08-31), all pure refactors
+  with no behavior change: `sdy.py::_resolve_effective_name`'s `os.path.abspath(raw_args[0])`
+  ran unconditionally as `next()`'s default argument (Python has no lazy-default machinery)
+  even when the generator immediately matched and the fallback was discarded unused — now
+  only computed when actually needed; `sdy.py::_get_profile_path` checked the same candidate
+  path twice whenever `eff_name == stem` (the common case for a normally-named game binary),
+  deduped with `dict.fromkeys()`; `"/usr/bin/konsole"` (independently hardcoded in
+  `updater.py` and `control_center.py`, already in agreement) centralized into a new
+  `utils.KONSOLE_BIN` constant, matching the existing `SYSTEMCTL_BIN`/`JOURNALCTL_BIN`/
+  `PYTHON3_BIN` pattern.
+- `control_center.py`: collapsed 3 independently-retyped `[PYTHON3_BIN, CORE_LIB_DIR/<script>,
+  *args]` argv constructions (for `session_select.py`, `backup.py`, `restore.py` — all in the
+  same file, each hardcoding `"/usr/bin/python3"` separately) into a shared
+  `_core_script_argv()` helper and a new `utils.PYTHON3_BIN` constant, matching the existing
+  `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` centralization pattern. Pure DRY refactor, no behavior
+  change. Found via the same full-file 8-agent review as the fixes above (2026-08-31).
+- `utils.py`: added `shlex_split_or_fallback()` — the "`shlex.split`, degrade to `str.split()`
+  on an unbalanced quote" pattern was independently reimplemented in `sdy.py` (`_safe_split`),
+  `session_launch.py` (the gamescope `flags` loop) and `health.py`
+  (`_collect_unknown_flags`) instead of sharing one copy. This is the exact class of code that
+  already caused a real crash in this project (the unguarded `shlex.split` fixed in 2.1.7) — a
+  future hardening of the fallback logic would otherwise need three independent edits instead
+  of one. `session_launch.py`'s `_schedule_post_start_cmds` initially kept its own inline
+  `shlex.split`/`continue`-on-failure handling unchanged; that divergence was itself unified
+  onto `shlex_split_or_fallback()`'s shared degrade-and-run contract later in this same
+  release (see the entry above).
+- `utils.py`: `check_latest_release()`, `_fetch_expected_sha256()`, and
+  `_download_verified_tarball()` each independently rebuilt the same
+  `urllib.request.Request`/`urlopen(timeout=...)` plumbing and the same "reject a non-https
+  URL" guard. Both are now centralized — `_https_open()` for the request/urlopen/timeout
+  boilerplate, `_require_https()` for the scheme guard — while each caller keeps its own
+  error handling, since what counts as recoverable (and what to log) genuinely differs per
+  caller (JSON parsing vs. raw digest text vs. streamed binary). `_fetch_expected_sha256()`'s
+  digest parsing/validation was also simplified from a double `str.split()` call plus a
+  hand-rolled per-character hex-alphabet loop to a single `re.fullmatch()` check.
+- `utils.py`: `fix_ownership`'s failure log (including the new timeout case above) moved from
+  `DEBUG` to `WARN` — a failed/timed-out `chown -R` after a backup/restore run leaves files
+  owned by root, which previously left zero trace in the journal under the default
+  `LOG_LEVEL=INFO`.
+- `backup.py` / `journal.py`: two previously-silent failure paths now log. `backup.py`'s
+  `_collect_symlinks` logs `BACKUP_SYMLINK_SCAN_FAIL` (WARN) if a symlink-search directory
+  can't be scanned, instead of silently omitting those symlinks from the backup manifest with
+  no trace. `journal.py`'s `_run_journalctl_iso` logs `GAMESCOPE_LOG_FETCH_FAIL` (WARN) if the
+  gamescope-log `journalctl` call fails, instead of returning an empty result indistinguishable
+  from "no gamescope activity in the last hour" — this required `journal.py` to start
+  importing `jlog` from `utils.py`, the only production file that previously imported nothing
+  from it.
+- Suppression-comment justification pass: every bare `# nosec`, `# pylint: disable`, and
+  `# shellcheck disable` marker across the codebase now carries the same one-line reason its
+  more prominent siblings already had (see `session_launch.py`'s existing `# nosec B404`/
+  `# nosec B603` pattern) — no behavior change, but a bare suppression is no longer
+  indistinguishable from an unreviewed one on a future read.
+- `utils.py`: added `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` constants — `/usr/bin/systemctl` was
+  hardcoded identically in `health.py` and `restore.py`, and `/usr/bin/journalctl` in
+  `journal.py` (twice) and `control_center.py` (twice). Unlike the `DEFAULT_*_BIN` group these
+  aren't SSoT-backed: every systemd distro ships them at this fixed path, so there's no
+  legitimate per-deployment override — this is a same-file-concept centralization, not a new
+  user-facing config knob.
+- `utils.py`: added `require_ssot_conf(tag)` — `backup.py` and `restore.py` each independently
+  checked `os.path.isfile(SSOT_CONF_PATH)` and exited with an identical `jlog`+`sys.exit(1)`
+  pattern, differing only in the log tag (`BACKUP_FAILED`/`RESTORE_FAILED`). Both now call the
+  shared helper. `restore.py`'s legacy `restore_links.sh` line parser also gained a comment
+  explaining why it deliberately skips a malformed line via a bare `shlex.split()`/`except
+  ValueError` instead of the shared `shlex_split_or_fallback()`: a degraded `str.split()` there
+  could pair the wrong link/target and recreate a bogus symlink, worse than skipping the entry.
+- `utils.py`: added `safe_emit(signal, *args)` — `control_center.py`'s `_safe_emit` (swallow
+  `RuntimeError` from emitting on a torn-down window) was reimplemented inline in
+  `updater.py`'s two workers instead of reused, since `updater.py` is imported *by*
+  `control_center.py` and couldn't import it back without a cycle. Moved to `utils.py`, which
+  both already import from; every call site updated. Found via a full periodic
+  KISS/centralization audit re-run (2026-09-03, first full re-run since 2026-08-26) — a
+  second candidate from the same audit (4 identically-shaped busy-guard flags in
+  `control_center.py`, crossing the "extract only if a third appears" threshold a prior audit
+  set) was reviewed and deliberately left alone: the guard itself is 3 obvious lines per site,
+  and a shared helper would need `getattr`/`setattr` on string attribute names to save very
+  little, plus one site (`export_support_log`) sets its flag after a synchronous dialog rather
+  than before, unlike the other three.
+- `session_launch.py`: raises the process's open-file soft limit toward 524288 before
+  spawning gamescope+Steam (`_raise_nofile_limit`, called from `_build_gamescope_args`) —
+  matches a `ulimit -n 524288` real SteamOS's own `gamescope-session` launcher applies before
+  Steam, found by comparing against a mounted real Deck recovery image. The systemd-managed
+  session normally starts at the systemd-default 1024 soft limit even though the hard limit is
+  already 524288 on a modern distro, so Proton/games with heavy shader-cache or asset I/O can
+  hit that ceiling under normal use even though the headroom to avoid it already exists.
+  Deliberately conservative: only ever raises (never lowers a soft limit a user or distro
+  already set higher via `limits.conf`/a unit override), never exceeds the existing hard
+  limit, and never aborts the session if the call fails for any reason.
+- `session_launch.py`'s `GAME_MODE_ENV` gained `QT_QPA_PLATFORM_THEME=kde` from the same real
+  Deck image comparison (fixes missing icons/unreadable text for Qt apps inside gamescope)
+  and `XCURSOR_SCALE=256` (cursor scale inside the embedded X11 session, applies to whatever
+  theme is already active). Both verified functional on this project's actual target systems
+  before adding (`KDEPlasmaPlatformTheme6.so` is present). Three more vars from the same
+  source block were deliberately **not** ported after checking further:
+  `QT_IM_MODULE=steam`/`GTK_IM_MODULE=Steam` (Steam's on-screen keyboard) and
+  `XCURSOR_THEME=steam` all point at a "steam" plugin/theme that only exists inside the real
+  SteamOS image — confirmed absent from every real install this project targets (no such Qt
+  platforminputcontext plugin, GTK immodule, or icon theme installed anywhere, and not
+  bundled by the Steam client itself). Setting them would be inert, not a real improvement.
+  The same source block's GTK cursor theme `kwriteconfig6` config write was also left out —
+  a privileged file write for a narrow GTK-only benefit versus a plain env var.
+- `session_launch.py`'s `GAME_MODE_ENV` gained `STEAM_MULTIPLE_XWAYLANDS=1` (per-game Xwayland
+  isolation, also from the same gamescope-session comparison) — a session capability like the
+  tearing/scaling flags already there, not tied to specific hardware or a personal config
+  choice. Two other candidates from the same script were checked and deliberately left out for
+  failing that same "genuinely agnostic" bar: `STEAM_DISABLE_AUDIO_DEVICE_SWITCHING` (correct
+  only if WirePlumber is the active audio session manager, not guaranteed on every distro) and
+  `STEAM_MANGOAPP_PRESETS_SUPPORTED`/`STEAM_USE_MANGOAPP` (only meaningful if the user has
+  `--mangoapp` in their own gamescope flags). `STEAM_LAUNCH_WRAPPER_SCOPE` (cgroup-per-game)
+  was inconclusive — its mechanism lives inside Steam's own compiled client, not verifiable by
+  reading scripts, and confirming it would need a live per-launch systemd-scope check
+  disproportionate to the expected gain — left unimplemented rather than guessed at.
+- `session_launch.py`'s `GAME_MODE_ENV` gained `SRT_LOG_TO_JOURNAL=1`, found in real SteamOS's
+  `gamescope-session.service` (the systemd unit, not the launcher script itself, browsed as a
+  quick follow-up look). Routes Steam's bundled steam-runtime-tools `srt-logger` to the
+  systemd journal with its own identifier/prefixes. Confirmed functional rather than assumed:
+  the `srt-logger` binary and its handling of exactly this env var
+  (`sd_journal_send`/`sd_journal_stream_fd`) are present in this machine's own real Steam
+  installation, bundled with Steam's runtime independent of the underlying distro — unlike the
+  QT_IM_MODULE/GTK_IM_MODULE/XCURSOR_THEME mistake earlier in this same round.
+
+---
+
 ## [2.1.7] — 2026-08-25 — Session Reliability & Regression Suite
 
 ### Added

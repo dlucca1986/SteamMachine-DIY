@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -13,6 +13,10 @@
 
 import os
 import shlex
+import shutil
+
+# B404: importing subprocess isn't the risk — every call site below
+# passes a fixed argv list, never shell=True or user-controlled input.
 import subprocess  # nosec B404
 import sys
 import tarfile
@@ -21,12 +25,13 @@ from pathlib import Path
 from utils import (
     BACKUP_MANIFEST_NAME,
     BACKUP_SCRIPT_NAME,
-    SSOT_CONF_PATH,
+    SYSTEMCTL_BIN,
     check_root,
     fix_ownership,
     get_backup_mapping,
     get_real_user,
     jlog,
+    require_ssot_conf,
     verify_archive,
 )
 
@@ -49,9 +54,16 @@ _ALLOWED_PREFIXES_FIXED: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _allowed_prefixes(home_real: str) -> tuple[str, ...]:
+def _allowed_prefixes(
+    home_real: str, mapping: dict[str, str]
+) -> tuple[str, ...]:
+    """Fixed prefixes plus every mapping destination (SSoT-relocatable
+    entries like games_conf_dir/next_session are not necessarily under
+    home/etc/usr/var, but backup already wrote there, so restore must be
+    allowed to write there too)."""
     # Trailing slash prevents "alice" from matching "alicebob".
-    return _ALLOWED_PREFIXES_FIXED + (home_real + "/",)
+    extra = tuple(os.path.realpath(dest) + "/" for dest in mapping.values())
+    return _ALLOWED_PREFIXES_FIXED + (home_real + "/",) + extra
 
 
 # ---------------------------------------------------------------------------
@@ -185,29 +197,65 @@ def _ensure_safe_target(target: str) -> bool:
 
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
-) -> None:
-    """Write member to target via tmp+rename.
+) -> bool:
+    """Write member to target via tmp+rename. False on any failure (a
+    symlink planted at target's tmp write path, or an OSError from
+    makedirs/copy/replace).
 
     Atomic (target either holds the old content or the fully-written new
     one, never missing/truncated on a crash mid-write), and — like
     backup.py's archive write — os.replace also sidesteps ETXTBSY: it
     swaps the directory entry to a new inode instead of truncating the
     file in place, so replacing a currently-running binary still works.
-    """
-    if member.isdir():
-        os.makedirs(target, exist_ok=True)
-        return
 
-    os.makedirs(os.path.dirname(target), exist_ok=True)
+    Per-member isolation is this function's own contract (see
+    run_restore's docstring): an OSError here (e.g. a crafted archive
+    entry whose parent path collides with an existing file from another
+    mapping key) must degrade to a rejected member, not escape to
+    _execute_restore's archive-level except and abort the whole restore.
+    """
+    try:
+        if member.isdir():
+            os.makedirs(target, exist_ok=True)
+            return True
+
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
 
     src = tar.extractfile(member)
     if src is None:
-        return
+        return True
 
     tmp = f"{target}.sdy_restore_tmp"
-    with src, open(tmp, "wb") as dest:
-        dest.write(src.read())
-    os.replace(tmp, target)
+    # _ensure_safe_target only checks target itself — this sibling path
+    # is where the write actually lands, so it needs the same guard.
+    # O_NOFOLLOW refuses a symlink planted here by another process
+    # running as this same user, instead of writing through it as root.
+    try:
+        fd = os.open(
+            tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
+        )
+    except OSError as err:
+        jlog(
+            "SYSTEM",
+            f"RESTORE_REJECTED_TMP_SYMLINK: {tmp} - {err}",
+            level="WARN",
+        )
+        return False
+    try:
+        with src, os.fdopen(fd, "wb") as dest:
+            shutil.copyfileobj(src, dest)
+        os.replace(tmp, target)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
+    return True
 
 
 def _extract_member(
@@ -218,13 +266,28 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract member to target; False if target is a pre-existing symlink."""
+    """Extract member to target; False on any per-member failure (a
+    pre-existing symlink at target/its tmp write path, a write I/O
+    error, or a chmod race).
+
+    Per run_restore's own contract, a single member's failure must stay
+    per-member (logged, skipped, restore continues) rather than escalate
+    to the archive-level except in _execute_restore, which aborts the
+    entire restore.
+    """
     if not _ensure_safe_target(target):
         return False
-    _write_member(tar, member, target)
-    # Mask to permission bits only: a crafted archive must not be able
-    # to plant setuid/setgid files through a root-run restore.
-    os.chmod(target, member.mode & 0o777)
+    if not _write_member(tar, member, target):
+        return False
+    try:
+        # Mask to permission bits only: a crafted archive must not be
+        # able to plant setuid/setgid files through a root-run restore.
+        os.chmod(target, member.mode & 0o777)
+    except OSError as err:
+        jlog(
+            "SYSTEM", f"RESTORE_CHMOD_FAIL: {target} - {err}", level="WARN"
+        )
+        return False
     if os.path.realpath(target).startswith(home_real + "/"):
         fix_ownership(target, user)
     return True
@@ -235,6 +298,8 @@ def _extract_member(
 # ---------------------------------------------------------------------------
 
 
+# 6 logical inputs (tar, member, mapping, allowed-list, home, user) — all
+# independently needed for one archive-entry decision, no natural subset.
 # pylint: disable=too-many-arguments
 def _process_member(
     tar: tarfile.TarFile,
@@ -268,24 +333,28 @@ def _extract_payload(
     allowed: tuple[str, ...],
     home_real: str,
     user: str,
-) -> tarfile.TarInfo | None:
+) -> tuple[int, tarfile.TarInfo | None]:
     """Extract safe members; defer the links entry to _restore_links.
 
-    Returns the links TarInfo (manifest, or legacy restore_links.sh) if
-    present, so the caller can hand it straight to _restore_links
-    without a second tar lookup, else None.
+    Returns (restored_count, links_member): the links TarInfo (manifest,
+    or legacy restore_links.sh) if present, so the caller can hand it
+    straight to _restore_links without a second tar lookup, else None;
+    restored_count lets the caller distinguish a real restore from an
+    archive where every member was rejected (wrong tool, foreign layout).
     """
     links_member: tarfile.TarInfo | None = None
+    restored = 0
 
     for member in tar.getmembers():
         if member.name in (BACKUP_MANIFEST_NAME, BACKUP_SCRIPT_NAME):
             links_member = member
             continue
-        _process_member(
+        if _process_member(
             tar, member, mapping, allowed, home_real=home_real, user=user
-        )
+        ):
+            restored += 1
 
-    return links_member
+    return restored, links_member
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +378,10 @@ def _iter_link_pairs(name: str, text: str):
         return
     for line in text.splitlines():
         try:
+            # Deliberately skip rather than use shlex_split_or_fallback():
+            # a degraded str.split() here could pair the wrong link/target
+            # and recreate a bogus symlink, which is worse than skipping
+            # one legacy entry outright.
             tokens = shlex.split(line)
         except ValueError:
             continue
@@ -317,7 +390,12 @@ def _iter_link_pairs(name: str, text: str):
 
 
 def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
-    """Recreate one symlink after allow-list validation of both ends."""
+    """Recreate one symlink after allow-list validation of both ends.
+
+    Atomic via tmp symlink + os.replace, same reasoning as _write_member:
+    a kill between unlink and symlink would leave a critical shim (e.g. a
+    session-select polkit helper) missing entirely rather than stale.
+    """
     if not (
         _is_path_safe(link, allowed) and _is_path_safe(target, allowed)
     ):
@@ -327,11 +405,13 @@ def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
             level="WARN",
         )
         return
+    tmp = f"{link}.sdy_restore_tmp"
     try:
         os.makedirs(os.path.dirname(link), exist_ok=True)
-        if os.path.lexists(link):
-            os.unlink(link)
-        os.symlink(target, link)
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        os.symlink(target, tmp)
+        os.replace(tmp, link)
     except OSError as err:
         jlog("SYSTEM", f"RESTORE_LINK_FAIL: {link} - {err}", level="WARN")
 
@@ -353,12 +433,14 @@ def _restore_links(
 
 def _reload_systemd() -> None:
     try:
+        # Fixed argv, no shell, no user input involved.
         subprocess.run(  # nosec B603
-            ["/usr/bin/systemctl", "daemon-reload"],
+            [SYSTEMCTL_BIN, "daemon-reload"],
             check=True,
             capture_output=True,
+            timeout=10,
         )
-    except (subprocess.CalledProcessError, OSError) as err:
+    except (subprocess.SubprocessError, OSError) as err:
         jlog("SYSTEM", f"RESTORE_DAEMON_RELOAD_FAIL: {err}", level="ERROR")
 
 
@@ -376,9 +458,7 @@ def _prepare_restore(
         (user, home_real, mapping, allowed) ready for _execute_restore.
     """
     check_root()
-    if not os.path.isfile(SSOT_CONF_PATH):
-        jlog("SYSTEM", "RESTORE_FAILED: SSoT config not found", level="ERROR")
-        sys.exit(1)
+    require_ssot_conf("RESTORE")
 
     if not os.path.exists(archive_path):
         jlog(
@@ -397,11 +477,12 @@ def _prepare_restore(
     # is what the security allow-list must check against. Not redundant.
     home_str = str(home)
     home_real = str(home.resolve())
+    mapping = get_backup_mapping(home_str, for_restore=True)
     return (
         user,
         home_real,
-        get_backup_mapping(home_str),
-        _allowed_prefixes(home_real),
+        mapping,
+        _allowed_prefixes(home_real, mapping),
     )
 
 
@@ -414,13 +495,25 @@ def _execute_restore(
 ) -> None:
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
-            links_member = _extract_payload(
+            restored, links_member = _extract_payload(
                 tar, mapping, allowed, home_real, user
             )
             jlog("SYSTEM", "RESTORE_PAYLOAD_DONE", level="DEBUG")
             if links_member is not None:
                 _restore_links(tar, links_member, allowed)
                 jlog("SYSTEM", "RESTORE_LINKS_DONE", level="DEBUG")
+        if restored == 0:
+            # Every member was rejected — a wrong/foreign archive (or one
+            # from an incompatible layout) can pass verify_archive's
+            # gzip/tar integrity check yet match nothing in the mapping.
+            # Reporting that as success would leave the user thinking a
+            # restore actually happened when nothing on disk changed.
+            jlog(
+                "SYSTEM",
+                "RESTORE_EMPTY: no member matched the backup mapping",
+                level="ERROR",
+            )
+            sys.exit(1)
         _reload_systemd()
         jlog("SYSTEM", "RESTORE_SUCCESS: Environment ready.", level="INFO")
     except (tarfile.TarError, OSError) as err:

@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -16,14 +16,14 @@ Three components:
 ---
 
 ## 🖥️ Using the Control Center
-The easiest way to manage your data is through the **Maintenance** tab in the Control Center. **Backup**, **Restore**, and journal-vacuum are mutually exclusive: starting one while another is still running (e.g. a double-click) is rejected with a status-bar message instead of launching a second `pkexec` process against the same files.
+The easiest way to manage your data is through the **Maintenance** tab in the Control Center. **Backup** and **Restore** are mutually exclusive — starting one while the other is still running (e.g. a double-click) is rejected with a status-bar message instead of launching a second `pkexec` process against the same files. Journal-vacuum uses its own independent lock, so it never blocks (or is blocked by) Backup/Restore, since it doesn't touch any of the same files. If Backup or Restore ever times out (5 minutes), its lock is deliberately left in place rather than cleared — the underlying script may still be writing files — so restart the Control Center to recover if that happens. Journal-vacuum doesn't share that behavior: a timeout there is far more likely to mean you took too long at the polkit password prompt than a genuinely stuck vacuum, so its lock always clears automatically and you can just try again.
 
 ### Creating a Backup
 1. Navigate to the **Maintenance** tab.
 2. Click on **📦 Create Full System Backup**.
 3. A `pkexec` prompt will ask for your password to access system files.
 4. The system will create a compressed `.tar.gz` archive in `~/.config/steamos_diy/backups/` named `sdy_backup_YYYYMMDD_HHMMSS.tar.gz`. The archive is written atomically: the tool writes to a `.tmp` file first, verifies integrity end-to-end with `verify_archive()`, then renames it to the final path — the previous archive is never touched on failure.
-5. **Rotation**: after every successful backup, archives beyond the `BACKUP_KEEP` count (SSoT key, default `5`) are pruned oldest-first, so the folder never grows unbounded. Set `BACKUP_KEEP=0` to keep everything. Each removal is logged as `BACKUP_PRUNED`.
+5. **Rotation**: after every successful backup, archives beyond the `BACKUP_KEEP` count (SSoT key, default `5`) are pruned oldest-first, so the folder never grows unbounded. Set `BACKUP_KEEP` to `0` (or any negative value) to keep everything. Each removal is logged as `BACKUP_PRUNED`.
 
 ### Restoring the System
 1. Click on **🔄 Restore from Archive**.
@@ -53,7 +53,7 @@ The utility targets specific paths to maintain a minimal backup footprint. The m
 > [!IMPORTANT]
 > **Link Reconstruction**
 >
-> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated with `os.symlink` — the archive never carries executable code. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
+> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated atomically (a temporary symlink is created next to the target, then swapped into place with `os.replace`) — the archive never carries executable code. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
 
 ---
 

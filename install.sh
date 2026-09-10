@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -111,6 +111,9 @@ install_dependencies() {
     BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc"
 
     info "Synchronizing package databases and installing core dependencies..."
+    # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
+    # are fixed-literal space-separated package lists, each must reach pacman as
+    # its own argv entry, not a single quoted string.
     pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS
 
     info "Configuring system groups for user: $REAL_USER"
@@ -144,6 +147,23 @@ deploy_files() {
             if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
                 install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
                 warn "SSoT template changed: review ${SSOT_CONF}.new"
+            fi
+        elif [ -f "$SSOT_CONF" ]; then
+            # A plain (non --update) run on top of an already-installed
+            # system: same "don't silently clobber user edits" risk as
+            # the YAML configs below, so it gets the same confirm prompt
+            # instead of overwriting unconditionally.
+            warn "Existing SSoT config found at $SSOT_CONF"
+            read -r -p "Overwrite it with the template? Your customizations will be lost. (y/N): " overwrite_ssot
+            if [[ "$overwrite_ssot" =~ ^[Yy]$ ]]; then
+                info "Overwriting SSoT as requested..."
+                install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
+            else
+                # Same heal as the --update branch above: a preserved
+                # SSoT can still be a 2.1.5-era 0600 file, and declining
+                # the overwrite must not leave it unreadable.
+                chmod 644 "$SSOT_CONF"
+                info "Preserving existing SSoT config."
             fi
         else
             info "Patching SSoT with User Home: $USER_HOME"
@@ -279,10 +299,7 @@ setup_shim_links() {
 # --- 5. Boot & Systemd Configuration ---
 setup_systemd_lockdown() {
     info "Configuring Systemd for Console Lockdown (TTY1)..."
-    
-    # Prevent Getty from interfering with Gamescope on TTY1
-    systemctl mask getty@tty1.service
-    
+
     # Deploy and personalize the main service
     if [ -f etc/systemd/system/steamos_diy.service ]; then
         cp -f etc/systemd/system/steamos_diy.service "$SERVICE_FILE"
@@ -294,6 +311,18 @@ setup_systemd_lockdown() {
     systemctl daemon-reload
     systemctl enable steamos_diy.service
     systemctl set-default graphical.target
+
+    # Mask Getty on TTY1 (so it can't interfere with Gamescope) only AFTER
+    # the replacement session launcher is confirmed enabled -- masking
+    # first (the previous order) meant a missing service file or a failed
+    # `systemctl enable` above (either aborts the script under
+    # set -eo pipefail) left TTY1 masked with no working replacement,
+    # requiring a manual `systemctl unmask` from another VT/SSH to
+    # recover. uninstall.sh's own cleanup_services() already applies this
+    # same "confirm the safe state first" discipline in the other
+    # direction (unmask/enable Getty before touching anything else).
+    info "Locking down TTY1 (Getty) now that the session launcher is active..."
+    systemctl mask getty@tty1.service
 }
 
 # --- 6. Cleanup ---

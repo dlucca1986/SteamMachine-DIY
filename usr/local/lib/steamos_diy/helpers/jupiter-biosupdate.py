@@ -3,7 +3,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Jupiter BIOS Update Shim
-# VERSION:      2.1.7
+# VERSION:      2.1.8
 # DESCRIPTION:  Compatibility shim for SteamOS BIOS update infrastructure.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -22,8 +22,10 @@ sys.path.insert(
 
 try:
     from utils import run_shim
-except ImportError:
-    # No utils available: simulate success so Steam doesn't stall on update UI.
+except (ImportError, SystemExit):
+    # No utils available (missing module, or utils.py's own C-Core load
+    # failure raising SystemExit): simulate success so Steam doesn't
+    # stall on update UI.
     sys.exit(0)
 
 if __name__ == "__main__":

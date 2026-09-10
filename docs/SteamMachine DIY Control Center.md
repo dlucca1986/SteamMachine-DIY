@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 PyQt6 dashboard for system management, YAML configuration editing, and log analysis.
@@ -17,7 +17,7 @@ Default tab. Logs are fetched in a background thread via `load_logs()` and auto-
 * **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
-Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
+Privileged operations (backup, restore, log vacuum) run in a background `threading.Thread` via `_run_pkexec`. Results surface via the `process_finished` PyQt signal. Each call passes a `lock_key` so only operations that actually target the same files block each other: Backup and Restore share `lock_key="files"` (mutually exclusive with each other), while journal vacuum uses its own independent `lock_key="vacuum"` and never blocks or is blocked by the other two. The button(s) tied to a `lock_key` (tracked in `_lock_key_buttons`) are disabled the moment the operation starts and re-enabled once the lock actually clears — the worker thread never touches the widgets directly, it emits `pkexec_lock_released`, which a main-thread slot (`_on_pkexec_lock_released`) turns into `setEnabled(True)`, mirroring `updater.py`'s `_set_busy` pattern. If a `pkexec` call for Backup or Restore times out (5 minutes), its lock is deliberately **not** cleared — the privileged process it started may still be running — so that button pair stays disabled until the Control Center is restarted. Journal vacuum's lock is **not** sticky on timeout (`sticky_on_timeout=False`): it's idempotent with no file-overlap risk, and a timeout there is far more likely to mean the polkit password prompt took too long than that the vacuum itself is stuck, so its button re-enables automatically and it can just be retried. Non-privileged launches (Switch to Steam, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`). Edit SSoT uses `subprocess.Popen` directly to preserve the GUI error dialog on failure.
 
 Buttons in order:
 
@@ -31,7 +31,7 @@ Buttons in order:
 | **Restore from Archive** | Opens a file picker for a `.tar.gz`, then runs `pkexec python3 restore.py <path>`. |
 | **Open Konsole Terminal** | Spawns `konsole`. |
 | **Browse Config Folder** | Opens `conf_root` (SSoT-resolved `user_config` directory, default `~/.config/steamos_diy/`) via `xdg-open`. |
-| **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
+| **Check for Updates** | Mounted from `updater.py` (`UpdateManager`): queries the GitHub Releases API off-thread (`utils.check_latest_release()`); when a newer release exists, offers **Download & Install** — the tarball is downloaded, its SHA-256 is verified against the release's `SHA256SUMS` asset (fail-closed: aborts, nothing extracted, on a missing/mismatched checksum), then unpacked into `~/.config/steamos_diy/updates/` and `install.sh --update` runs visibly in a Konsole window under `pkexec`. See [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating). |
 | **Open Project Wiki** | Opens the wiki URL via `QDesktopServices`. |
 
 ### 3. Global Options (Tab Index 2)
@@ -68,11 +68,11 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | :--- | :--- |
 | **SSoT config** | `/etc/default/steamos_diy.conf` exists |
 | **Binary `bin_*`** | each handler (`bin_gs` / `bin_steam` / `bin_plasma` / `bin_dbus`) resolves to an executable |
-| **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped |
+| **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped. Only ever surfaces as its own *failing* row (unset key or missing path); when the path resolves, that outcome folds into the YAML row below instead of a separate passing row |
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher iterates them directly, so a scalar would become per-character junk argv |
-| **Gamescope flags** | every option token in `config flags` is recognised by the installed `gamescope --help` — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. Both `--flag value` and `--flag=value` forms are checked (by the flag part alone). Skipped if gamescope can't be run |
+| **Gamescope flags** | the configured `flags` are run through the installed gamescope's own argv parser (`gamescope <flags> --help`), checking its error output for an unrecognised option — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. `getopt_long` stops at the first bad option, so only one is ever reported per run. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
 | **C-Core** | `libcore.so` is loadable |
 | **Session state** | the `next_session` directory is writable |
@@ -138,7 +138,7 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 | Strings | `"..."` / `'...'` | Yellow `#f1c40f` | Normal |
 | List items | `- ...` | Green `#27ae60` | Normal |
 | Numbers | `\d+` | Orange `#e67e22` | Normal |
-| Colons & dashes | `:` `/` `-` | Red `#e74c3c` | **Bold** |
+| Colons & dashes | `:` `-` | Red `#e74c3c` | **Bold** |
 | Error line | — | Red `#e74c3c` α50 | Background |
 | Preceding line | — | Orange `#f39c12` α50 | Background |
 

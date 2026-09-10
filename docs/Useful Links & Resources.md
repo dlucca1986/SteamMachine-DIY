@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🔗 Useful Links & Resources
@@ -41,7 +41,7 @@ A curated list of tools, guides, and communities to help you get the most out of
 ---
 
 ## ⚙️ **Core Components Documentation**
-* **[Gamescope GitHub](https://github.com/ValveSoftware/gamescope)**: Learn about the flags and features of our session's compositor.
+* **[Gamescope GitHub](https://github.com/ValveSoftware/gamescope)**: Learn about the flags and features of the session's compositor.
 * **[Feral GameMode](https://github.com/FeralInteractive/gamemode)**: How the CPU optimization daemon works under the hood.
 
 ---

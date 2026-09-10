@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.7-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 How YAML configuration becomes Gamescope arguments: global config, per-game overrides, and templates.
@@ -126,8 +126,7 @@ The **DGM** engine maps **YAML** flags directly to the gamescope command line. T
 ---
 
 > [!TIP]
-> **Don't struggle with manual file paths!**
-> All configuration templates and active files are centrally managed within the GUI. For a full walkthrough on how to use the editor, check out the:
+> Configuration templates and active files are all managed from the GUI — no manual file paths needed. For a full walkthrough on how to use the editor, see the:
 >
 > 🔍 **[SteamMachine-DIY Control Center Guide](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center)**.
 
