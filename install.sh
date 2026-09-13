@@ -28,6 +28,21 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# --- Desktop Environment Precondition ---
+# This project augments an existing KDE Plasma 6 (Wayland) install with a
+# Zero-DM gamescope-first boot path -- it does not install Plasma itself (a
+# full desktop environment is out of scope for what this installer should
+# silently pull in, unlike the small standalone kate/konsole below). Failing
+# loudly here beats silently completing: this installer goes on to mask
+# SDDM/plasmalogin and getty@tty1, so a missing Desktop Mode binary would
+# leave the user with no obvious way back to a working desktop on first boot.
+for bin in qdbus6 startplasma-wayland; do
+    if ! command -v "$bin" &>/dev/null; then
+        error "Missing '$bin' -- SteamMachine-DIY requires an existing KDE Plasma 6 (Wayland) install (packages: qt6-tools, plasma-workspace). Install Plasma first, then re-run this installer."
+        exit 1
+    fi
+done
+
 # --- Execution Mode ---
 # --update: non-interactive upgrade over an existing installation.
 # Preserves the live SSoT and user YAMLs, wipes the lib dir so files

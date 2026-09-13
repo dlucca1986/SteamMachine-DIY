@@ -5,6 +5,19 @@ What `install.sh` does, stage by stage.
 
 ---
 
+## ✅ Precondition Check
+Before touching anything, the installer verifies `qdbus6` and `startplasma-wayland` are
+already on `$PATH` — this project augments an existing **KDE Plasma 6 (Wayland)** install
+with a Zero-DM gamescope-first boot path, it does not install Plasma itself (a full desktop
+environment is out of scope for what this installer silently pulls in, unlike the small
+standalone `kate`/`konsole` packages below). Missing either one aborts immediately with a
+clear error instead of completing silently — the installer goes on to mask SDDM/plasmalogin
+and `getty@tty1`, so discovering a missing Desktop Mode binary only on first boot would leave
+no obvious way back to a working desktop. Install Plasma (`qt6-tools` + `plasma-workspace`,
+or the full `plasma` group) first if this check fails.
+
+---
+
 ## 🚀 Installation Stages
 
 ### 1. Hardware & Driver Audit
