@@ -17,6 +17,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `uninstall.sh` deliberately does not remove them, same as every other package this project
   installs (`steam`, `gamescope`, Mesa drivers…) — see the FAQ's existing "left in place"
   policy.
+- `install.sh` had no precondition check for `qdbus6`/`startplasma-wayland` (`qt6-tools`/
+  `plasma-workspace`) — the binaries `_dispatch_switch`'s default and `_build_command_for`'s
+  Desktop Mode fallback both depend on, and neither package is in `BASE_PKGS` (this project
+  augments an existing KDE Plasma install, it doesn't install Plasma itself). Running the
+  installer on a system without Plasma already present completed silently, then left Desktop
+  Mode permanently unlaunchable on first boot — with no way back, since the same install run
+  already masked SDDM/plasmalogin and `getty@tty1`. Now checked upfront; aborts immediately
+  with a clear error naming the missing binary and the packages that provide it, instead of
+  discovering the gap only after the point of no return.
 
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
