@@ -21,6 +21,7 @@ info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
+stage() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 # --- Root & Environment Check ---
 if [ "$EUID" -ne 0 ]; then
@@ -53,10 +54,20 @@ if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
     exec systemd-run --scope --slice=app.slice --unit="sdy-uninstaller-$(date +%s)" bash "$(realpath "$0")" "$@"
 fi
 
+BANNER_LABEL="SteamMachine-DIY Uninstaller"
+BANNER_WIDTH=41
+BANNER_PAD=$(( (BANNER_WIDTH - ${#BANNER_LABEL}) / 2 ))
+printf -v BANNER_LINE '%*s%s%*s' "$BANNER_PAD" "" "$BANNER_LABEL" \
+    "$((BANNER_WIDTH - BANNER_PAD - ${#BANNER_LABEL}))" ""
+BANNER_BORDER=$(printf '═%.0s' $(seq 1 "$BANNER_WIDTH"))
+echo -e "${CYAN}╔${BANNER_BORDER}╗
+║${BANNER_LINE}║
+╚${BANNER_BORDER}╝${NC}"
 info "Starting Atomic Uninstallation for user: $REAL_USER"
 
 # --- 1. Service & TTY Restoration (Emergency First) ---
 cleanup_services() {
+    stage "1/3 · Service & TTY Restoration"
     info "Preparing system restoration..."
 
     # Disable DIY to prevent respawning
@@ -74,6 +85,7 @@ cleanup_services() {
 
 # --- 2. Robust Display Manager Restoration ---
 restore_display_manager() {
+    stage "2/3 · Display Manager Restoration"
     info "Detecting system Display Manager..."
     local dm_service=""
     local dm_units
@@ -107,6 +119,7 @@ restore_display_manager() {
 
 # --- 3. Comprehensive File Cleanup ---
 remove_components() {
+    stage "3/3 · Comprehensive File Cleanup"
     info "Removing DIY shims and libraries..."
 
     # SteamOS shims — polkit dir gone wholesale; aliases removed one-by-one
@@ -158,6 +171,7 @@ cleanup_services
 restore_display_manager
 remove_components
 
+echo -e "\n${GREEN}━━━ ✅ Uninstallation Complete ━━━${NC}"
 success "UNINSTALLATION COMPLETED!"
 info "The system has been restored. TTY1 is now the primary output."
 

@@ -21,6 +21,7 @@ info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
+stage() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 # --- Root Privilege Check ---
 if [ "$EUID" -ne 0 ]; then
@@ -91,6 +92,7 @@ readonly USER_CONFIG_REL=".config/steamos_diy"
 
 # --- 1. Hardware Audit & Driver Selection ---
 check_gpu_and_drivers() {
+    stage "1/6 · Hardware Audit & Driver Selection"
     info "Auditing Hardware and Graphics Stack..."
     GPU_INFO=$(lspci | grep -iE "vga|3d controller" || true)
     DRIVER_PKGS=""
@@ -116,6 +118,7 @@ check_gpu_and_drivers() {
 
 # --- 2. Dependency Management & Database Sync ---
 install_dependencies() {
+    stage "2/6 · Dependency Management & Database Sync"
     # 2.1. Enable Multilib for 32-bit gaming support
     if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
         info "Enabling multilib repository..."
@@ -145,6 +148,7 @@ install_dependencies() {
 
 # --- 3. File Deployment & SSoT Initialization ---
 deploy_files() {
+    stage "3/6 · File Deployment & SSoT Initialization"
     info "Deploying Single Source of Truth (SSoT) and configurations..."
 
     # Initialize Global SSoT Configuration
@@ -287,6 +291,7 @@ deploy_files() {
 
 # --- 4. SteamOS Compatibility Shim Layer ---
 setup_shim_links() {
+    stage "4/6 · SteamOS Compatibility Shim Layer"
     info "Constructing SteamOS Compatibility Layer (Shims)..."
 
     # Polkit Helper Structure (Intercepts Steam Deck UI Settings)
@@ -317,6 +322,7 @@ setup_shim_links() {
 
 # --- 5. Boot & Systemd Configuration ---
 setup_systemd_lockdown() {
+    stage "5/6 · Boot & Systemd Configuration"
     info "Configuring Systemd for Console Lockdown (TTY1)..."
 
     # Deploy and personalize the main service
@@ -346,6 +352,7 @@ setup_systemd_lockdown() {
 
 # --- 6. Cleanup ---
 disable_display_managers() {
+    stage "6/6 · Cleanup"
     info "Disabling conflicting Display Managers..."
     # Including 'plasmalogin' for Plasma 6 support and other common DMs
     for dm in sddm plasmalogin; do
@@ -354,6 +361,21 @@ disable_display_managers() {
 }
 
 # --- Execution Flow ---
+if $UPDATE_MODE; then
+    BANNER_LABEL="SteamMachine-DIY Updater"
+else
+    BANNER_LABEL="SteamMachine-DIY Installer"
+fi
+# Fixed inner width so the border and the centered label line always match,
+# regardless of "Installer" vs "Updater"'s different length.
+BANNER_WIDTH=41
+BANNER_PAD=$(( (BANNER_WIDTH - ${#BANNER_LABEL}) / 2 ))
+printf -v BANNER_LINE '%*s%s%*s' "$BANNER_PAD" "" "$BANNER_LABEL" \
+    "$((BANNER_WIDTH - BANNER_PAD - ${#BANNER_LABEL}))" ""
+BANNER_BORDER=$(printf '═%.0s' $(seq 1 "$BANNER_WIDTH"))
+echo -e "${CYAN}╔${BANNER_BORDER}╗
+║${BANNER_LINE}║
+╚${BANNER_BORDER}╝${NC}"
 info "Initializing SteamMachine-DIY Deployment for user: $REAL_USER"
 check_gpu_and_drivers
 install_dependencies
@@ -363,6 +385,7 @@ setup_systemd_lockdown
 disable_display_managers
 
 if $UPDATE_MODE; then
+    echo -e "\n${GREEN}━━━ ✅ Update Complete ━━━${NC}"
     success "UPDATE COMPLETED SUCCESSFULLY!"
     warn "Rebooting in 10 seconds to apply the update — press CTRL+C to abort."
     for i in {10..1}; do
@@ -374,6 +397,7 @@ if $UPDATE_MODE; then
     exit 0
 fi
 
+echo -e "\n${GREEN}━━━ ✅ Installation Complete ━━━${NC}"
 success "INSTALLATION COMPLETED SUCCESSFULLY!"
 info "TTY1 is now owned by steamos_diy.service."
 warn "A system reboot is mandatory to initialize the DIY environment."
