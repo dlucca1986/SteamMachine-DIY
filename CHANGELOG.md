@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- `install.sh`/`uninstall.sh`'s terminal output got a small readability pass: a one-time
+  header banner (dynamic label — "Installer" / "Updater" / "Uninstaller" — centered in a
+  box sized to fit each), a `stage()` divider before each install/uninstall stage (numbered,
+  matching the existing `# --- N. ... ---` comments — 6 for install, 3 for uninstall;
+  `finalize_uninstallation` deliberately left unnumbered since it runs as a background
+  epilogue *after* the "Uninstallation Complete" message, not as a user-facing stage), and a
+  clearer completion box at the end of each script. Purely cosmetic — same `info`/`success`/
+  `warn`/`error` functions and message text as before, no new dependency (plain ANSI codes
+  already in use, no `tput`/`figlet`/etc.).
+
 ### Fixed
 - `install.sh`'s `BASE_PKGS` was missing `kate`/`konsole` as explicit dependencies, even
   though the Control Center's "Edit SSoT" button and "Open Konsole Terminal" button target
