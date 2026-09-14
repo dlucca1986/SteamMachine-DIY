@@ -152,8 +152,23 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 | `CORE:` | 🔵 | Blue `#3498db` |
 | `STEAM:` | 🎮 | Green `#2ecc71` |
 | `SYSTEM:` | ⚙️ | Orange `#f39c12` |
-| `DEBUG:` | 🔍 | Grey `#95a5a6` |
-| `ERROR:` | 🚫 | Red `#e74c3c` |
+
+### Message-content markers (`_LOG_ERROR_MARKER` / `_LOG_SUCCESS_MARKER` / `_LOG_NEUTRAL_MARKER`)
+Applied by `_highlight_log_markers()` on top of the identifier colour above — independent
+layers, not mutually exclusive, so a `CORE:` line can be coloured blue for its identifier
+*and* red for an error marker in the same line.
+
+| Pattern | Icon | Colour |
+| :--- | :--- | :--- |
+| `..._ERROR:` / `..._FAIL:` / `..._FAILED:` / `EARLY_EXIT_RECOVERY:` | 🚫 | Red `#e74c3c` |
+| `VALIDATED_*_STABLE` | ✅ | Green `#2ecc71` |
+| `SWITCH_REQUEST:` | — | Grey `#7f8c8d` |
+
+Note: the syslog priority passed to `jlog(..., level="DEBUG"/"INFO"/"WARN"/"ERROR")` is a
+separate concept — it controls syslog severity, not display. `_finalize_export_entry()` in
+`journal.py` never reads or renders it; the displayed line is always
+`[HH:MM:SS] {identifier}: {message}`. No real message ever contains the literal text
+`DEBUG:`/`INFO:`/`WARN:` as a prefix, so there's nothing for the log view to highlight there.
 
 ### Gamescope tags (`gs_levels` + inline)
 | Tag | Icon | Colour |
@@ -185,7 +200,7 @@ yaml_parser.width = 4096
 
 | Goal | Recommended Action |
 | :--- | :--- |
-| **Debug a Crash** | Open **Diagnostics**, filter by `ALL` or `STEAM`, look for `ERROR:` tags or `[Error]` gamescope lines. |
+| **Debug a Crash** | Open **Diagnostics**, filter by `ALL` or `STEAM`, look for red `..._ERROR:`/`..._FAIL:`/`..._FAILED:` markers, `[Error]` gamescope lines, or a green `VALIDATED_*_STABLE` to confirm the switch actually landed. |
 | **Verify Configuration** | Use **Global Options**; the editor highlights the error line (red) and its predecessor (orange) on invalid YAML. |
 | **System Recovery** | If shims or symlinks are broken, use **Restore from Archive** in Maintenance. |
 | **Game Specific Profile** | Use **Game Overrides** → Scan History → select the game → edit and save. |
