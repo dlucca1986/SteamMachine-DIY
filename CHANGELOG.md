@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `SRT_URLOPEN_PREFER_STEAM=1` added to `GAME_MODE_ENV`: links clicked inside Game Mode
+  (store page, community) now open in Steam's own overlay browser instead of steam-runtime-
+  tools' `xdg-open` reaching for a desktop browser that may not exist, or look wrong, inside
+  a gamescope session. Same class of variable as the already-ported `SRT_LOG_TO_JOURNAL`.
+- Troubleshooting doc entry for the known upstream cursor-regrab bug on stretched/custom-
+  aspect gamescope sessions ([gamescope#2042](https://github.com/ValveSoftware/gamescope/issues/2042)):
+  add `--force-grab-cursor` to the affected game's `flags` — usable today via this project's
+  existing flags passthrough, no code change needed.
+
+Both surfaced while researching other gamescope-session forks/projects for portable ideas.
+
 ### Changed
 - `install.sh`/`uninstall.sh`'s terminal output got a small readability pass: a one-time
   header banner (dynamic label — "Installer" / "Updater" / "Uninstaller" — centered in a
