@@ -37,6 +37,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   already masked SDDM/plasmalogin and `getty@tty1`. Now checked upfront; aborts immediately
   with a clear error naming the missing binary and the packages that provide it, instead of
   discovering the gap only after the point of no return.
+- `control_center.py`'s Diagnostics log view had two entries in `log_styles`
+  (`"DEBUG:"`/`"ERROR:"`) that could never actually match: `_apply_log_style` looped the dict
+  and returned on the *first* hit, and every real line already contains its `CORE:`/`STEAM:`/
+  `SYSTEM:` identifier, so that always won first — confirmed live with the real function
+  before fixing it, not just reasoned about. `"ERROR:"` genuinely does appear as a substring
+  in real message text (`SCAN_ERROR:`, `OS_ERROR:`, …) but was still unreachable for the same
+  reason. The more common `_FAIL:`/`_FAILED:` family (18+ distinct tags — `RESTORE_WRITE_FAIL`,
+  `NEXT_SESSION_WRITE_FAILED`, …) was never covered at all. Fixed by making identifier colour
+  and message-content markers independent layers instead of mutually exclusive: `CORE:`/
+  `STEAM:`/`SYSTEM:` still colour the identifier, and a new pattern-based pass separately
+  highlights any `..._ERROR:`/`..._FAIL:`/`..._FAILED:`/`EARLY_EXIT_RECOVERY:` message (red),
+  `VALIDATED_*_STABLE` (green), and `SWITCH_REQUEST:` (neutral) — self-maintaining for future
+  tags following the same naming convention, not a hand-maintained name list. Purely cosmetic
+  (the Diagnostics tab already showed every line's full text regardless), found while looking
+  into a maintainer request to make specific log messages more visually distinct.
 
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
