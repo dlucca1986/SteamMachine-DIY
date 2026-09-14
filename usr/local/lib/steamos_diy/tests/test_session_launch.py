@@ -75,6 +75,7 @@ def test_game_mode_env_matches_real_steamos_agnostic_vars():
     assert session_launch.GAME_MODE_ENV["XCURSOR_SCALE"] == "256"
     assert session_launch.GAME_MODE_ENV["STEAM_MULTIPLE_XWAYLANDS"] == "1"
     assert session_launch.GAME_MODE_ENV["SRT_LOG_TO_JOURNAL"] == "1"
+    assert session_launch.GAME_MODE_ENV["SRT_URLOPEN_PREFER_STEAM"] == "1"
     assert "QT_IM_MODULE" not in session_launch.GAME_MODE_ENV
     assert "GTK_IM_MODULE" not in session_launch.GAME_MODE_ENV
     assert "XCURSOR_THEME" not in session_launch.GAME_MODE_ENV

@@ -75,6 +75,11 @@ GAME_MODE_ENV: dict[str, str] = {
     # stderr would otherwise go — confirmed present in a real Steam
     # install's own runtime, independent of the underlying distro.
     "SRT_LOG_TO_JOURNAL": "1",
+    # Links clicked inside Game Mode (store page, community) open in
+    # Steam's own overlay browser instead of steam-runtime-tools'
+    # xdg-open reaching for a desktop browser that may not exist (or
+    # look wrong) inside a gamescope session.
+    "SRT_URLOPEN_PREFER_STEAM": "1",
     # Proton / vkd3d session defaults (from Valve's gamescope-session)
     "ENABLE_GAMESCOPE_WSI": "1",
     "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
