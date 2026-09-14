@@ -116,6 +116,23 @@ _YAML_INDENT_OFFSET: int = 2
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 
+# Message-content highlighting, layered on top of the identifier colour
+# (CORE:/STEAM:/SYSTEM:) rather than replacing it — a line can be both
+# "from CORE" and "an error", so the two must not be mutually exclusive
+# the way the old single-dict-with-early-return _apply_log_style was.
+# Pattern-based, not an exhaustive name list: every jlog() error/failure
+# tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED: by
+# convention (verified 2026-09-14 — SCAN_ERROR:, RESTORE_WRITE_FAIL:,
+# NEXT_SESSION_WRITE_FAILED:, 26 variants total), so this stays correct
+# for future tags that follow the same convention without needing a
+# name added here by hand. EARLY_EXIT_RECOVERY: is the one real
+# exception to that convention, added explicitly.
+_LOG_ERROR_MARKER = re.compile(
+    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL):|EARLY_EXIT_RECOVERY:"
+)
+_LOG_SUCCESS_MARKER = re.compile(r"VALIDATED_[A-Z]+_STABLE")
+_LOG_NEUTRAL_MARKER = re.compile(r"SWITCH_REQUEST:")
+
 
 def _extract_game_name_from_display(raw: str) -> str:
     """Strip a trailing "(AppID)" suffix from a combo display string.
@@ -313,8 +330,6 @@ class SDYControlCenter(QMainWindow):
             "CORE:": ("🔵", "#3498db"),
             "STEAM:": ("🎮", "#2ecc71"),
             "SYSTEM:": ("⚙️", "#f39c12"),
-            "DEBUG:": ("🔍", "#95a5a6"),
-            "ERROR:": ("🚫", "#e74c3c"),
         }
         self.gs_levels = {
             "[Error]": ("❌", "#ff4444"),
@@ -1176,12 +1191,30 @@ class SDYControlCenter(QMainWindow):
         line = html.escape(line, quote=False)
         for tag, (ico, col) in self.log_styles.items():
             if tag in line:
-                return line.replace(
-                    tag, f"<b style='color:{col};'>{ico} {tag}</b>"
+                # Identifier colour and the message-content markers below
+                # are independent, not mutually exclusive — a line is
+                # both "from CORE" and (say) "an error", so this only
+                # breaks the identifier loop, it doesn't return early.
+                line = line.replace(
+                    tag, f"<b style='color:{col};'>{ico} {tag}</b>", 1
                 )
+                return self._highlight_log_markers(line)
         if "[gamescope]" in line:
             return self._style_gamescope_line(line)
         return line
+
+    @staticmethod
+    def _highlight_log_markers(line):
+        """Bold+colour error/success/switch markers within the message."""
+        line = _LOG_ERROR_MARKER.sub(
+            lambda m: f"<b style='color:#e74c3c;'>🚫 {m.group(0)}</b>", line
+        )
+        line = _LOG_SUCCESS_MARKER.sub(
+            lambda m: f"<b style='color:#2ecc71;'>✅ {m.group(0)}</b>", line
+        )
+        return _LOG_NEUTRAL_MARKER.sub(
+            lambda m: f"<b style='color:#7f8c8d;'>{m.group(0)}</b>", line
+        )
 
     def _style_gamescope_line(self, line):
         line = line.replace(
