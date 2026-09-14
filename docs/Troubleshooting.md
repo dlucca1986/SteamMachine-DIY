@@ -197,6 +197,11 @@ On older or low-power GPUs, Steam's embedded Chromium (CEF) can fail at GPU-acce
 
 **Fix:** force CEF to software compositing with the Steam-client flag `-cef-disable-gpu-compositing` (or, for full software rendering, `-cef-disable-gpu`). These are **Steam client** flags, *not* gamescope flags — they go on the Steam invocation in `session_launch.py` (the `-gamepadui -steamos3 -steamdeck` line), **not** in `config.yaml`'s `flags`. Try the minimal `-cef-disable-gpu-compositing` first; fall back to `-cef-disable-gpu` only if the corruption persists.
 
+### Mouse cursor gets "stuck" after closing the Steam overlay (stretched/custom-aspect sessions)
+On a gamescope session running a stretched or non-native aspect ratio (4:3, 16:10, etc. — not a plain 1:1 inner=outer session), closing the Steam Big Picture overlay can fail to re-grab raw mouse input, leaving the in-game camera/aim stuck or pinned to an edge. This is a [known upstream gamescope issue](https://github.com/ValveSoftware/gamescope/issues/2042), not specific to this project.
+
+**Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` — it's a real gamescope flag (always use relative mouse mode instead of flipping based on cursor visibility), usable today with no code change. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
+
 ### "Another privileged operation is already running…" won't go away
 Backup and Restore each guard against a double-click, and if a `pkexec` call for either ever times out (after 5 minutes), its lock is deliberately left in place rather than cleared — the privileged process it started (a `chown -R`, `backup.py`, `restore.py`) may still be running, and there's no way to confirm it's actually finished. Backup and Restore share one lock (they touch the same files), so a timeout on either one blocks both. Journal-vacuum has its own separate lock and behaves differently: a timeout there almost always just means authentication at the polkit prompt took too long, not that the vacuum itself is stuck, so its lock always clears itself automatically — you don't need to restart to retry it.
 
