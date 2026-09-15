@@ -647,3 +647,32 @@ def test_execute_restore_aborts_when_nothing_matched(tmp_path, monkeypatch):
         restore._execute_restore(
             str(archive), "tester", str(tmp_path), mapping, allowed
         )
+
+
+# ---------------------------------------------------------------------------
+# run_restore — the actual root-privileged entry point (pkexec runs this).
+# Found at 0% coverage by scripts/audit-coverage-critical.py: both halves
+# it delegates to (_prepare_restore/_execute_restore) are tested
+# separately, but the wiring between them at the real entry point never
+# was.
+# ---------------------------------------------------------------------------
+
+
+def test_run_restore_wires_prepare_into_execute(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        restore,
+        "_prepare_restore",
+        lambda archive_path: ("user", "home", "mapping", ("allowed",)),
+    )
+    monkeypatch.setattr(
+        restore,
+        "_execute_restore",
+        lambda *args: calls.append(args),
+    )
+
+    restore.run_restore("/tmp/x.tar.gz")
+
+    assert calls == [
+        ("/tmp/x.tar.gz", "user", "home", "mapping", ("allowed",))
+    ]
