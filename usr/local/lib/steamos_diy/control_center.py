@@ -127,13 +127,16 @@ _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 # SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT:), so this stays correct for future
 # tags that follow the same convention without needing a name added here
 # by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
-# BINARY_NOT_FOUND: are the real exceptions to those conventions, added
-# explicitly.
+# BINARY_NOT_FOUND:/BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/RESTORE_EMPTY:
+# are the real exceptions to those conventions, added explicitly — the
+# last 3 found by scripts/audit-log-markers.py (added 2026-09-15
+# specifically to catch this class of gap mechanically going forward).
 _LOG_ERROR_MARKER = re.compile(
     r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
     r"|\bBAD_[A-Z0-9_]*:"
     r"|\bRESTORE_REJECTED_[A-Z_]*:"
     r"|EARLY_EXIT_RECOVERY:|RESTORE_FATAL:|NO_TARGET:|BINARY_NOT_FOUND:"
+    r"|BACKUP_LINK_SKIPPED:|YAML_NOT_MAPPING:|RESTORE_EMPTY:"
 )
 _LOG_SUCCESS_MARKER = re.compile(r"VALIDATED_[A-Z]+_STABLE")
 _LOG_NEUTRAL_MARKER = re.compile(r"SWITCH_REQUEST:")

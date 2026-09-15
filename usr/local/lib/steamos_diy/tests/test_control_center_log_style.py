@@ -126,12 +126,23 @@ def test_apply_log_style_colours_timeout_suffix():
 
 
 def test_apply_log_style_colours_standalone_error_literals():
-    """RESTORE_FATAL:/NO_TARGET:/BINARY_NOT_FOUND: don't follow any regex
-    convention, so they're matched as explicit literals, same treatment as
-    the pre-existing EARLY_EXIT_RECOVERY: special case."""
+    """These tags don't follow any regex convention, so they're matched
+    as explicit literals, same treatment as the original EARLY_EXIT_RECOVERY:
+    special case. The last 3 (BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/
+    RESTORE_EMPTY:) were found by scripts/audit-log-markers.py, not the
+    manual 2026-09-14/15 sweeps — real gaps the mechanical check catches
+    that a human re-read of the codebase had missed twice already."""
     win = _FakeLogWindow()
 
-    for literal in ("RESTORE_FATAL:", "NO_TARGET:", "BINARY_NOT_FOUND:"):
+    literals = (
+        "RESTORE_FATAL:",
+        "NO_TARGET:",
+        "BINARY_NOT_FOUND:",
+        "BACKUP_LINK_SKIPPED:",
+        "YAML_NOT_MAPPING:",
+        "RESTORE_EMPTY:",
+    )
+    for literal in literals:
         styled = win._apply_log_style(f"[10:00:00] CORE: {literal} details")
         assert "#e74c3c" in styled
         assert literal in styled
