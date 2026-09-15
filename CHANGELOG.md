@@ -64,6 +64,18 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   tags following the same naming convention, not a hand-maintained name list. Purely cosmetic
   (the Diagnostics tab already showed every line's full text regardless), found while looking
   into a maintainer request to make specific log messages more visually distinct.
+- `install.sh`'s `BASE_PKGS` was missing `xdg-utils`, needed by `/usr/bin/xdg-open` for the
+  Control Center's "Browse Config Folder" button — same unverified-transitive-dependency shape
+  as the `kate`/`konsole` gap above, found by a new "external binary/dependency completeness"
+  item added to the periodic KISS audit checklist specifically to catch this class of gap.
+- `control_center.py`'s Diagnostics log-marker regex (`_LOG_ERROR_MARKER`) missed the entire
+  `BAD_*` family (7 tags — malformed user-editable input) and `RESTORE_REJECTED_*` family (7
+  security-relevant archive-rejection tags from the restore path), plus
+  `SIGTERM_TIMEOUT:`/`SIGKILL_TIMEOUT:` and 3 standalone literals (`RESTORE_FATAL:`,
+  `NO_TARGET:`, `BINARY_NOT_FOUND:`) — a broader, more security-relevant gap than the
+  `_FAIL:`/`_FAILED:` one already fixed, found by a new "message-tag coverage" audit item.
+  Extended the regex to cover all of them, without renaming any of the affected tags (they're
+  documented verbatim elsewhere for users to grep in journalctl).
 
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
