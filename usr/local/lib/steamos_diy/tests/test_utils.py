@@ -16,6 +16,7 @@ extraction behavior are worth pinning even without full network mocking."""
 
 import hashlib
 import io
+import json
 import subprocess
 import tarfile
 from types import SimpleNamespace
@@ -262,6 +263,41 @@ def test_release_from_api_ignores_malformed_assets_list():
         {"tag_name": "v9.9.9", "assets": "not-a-list"}
     )
     assert info.checksum_url == ""
+
+
+# ---------------------------------------------------------------------------
+# check_latest_release — the network wrapper around _release_from_api.
+# Found at 0% coverage by scripts/audit-coverage-critical.py: only
+# _release_from_api's own pure-parsing logic was tested directly, never
+# this function's _https_open/json.load/exception-handling around it.
+# ---------------------------------------------------------------------------
+
+
+def test_check_latest_release_parses_a_real_response(monkeypatch):
+    payload = json.dumps({"tag_name": "v9.9.9", "body": "notes"}).encode()
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout: io.BytesIO(payload),
+    )
+    info = utils.check_latest_release()
+    assert info is not None
+    assert info.version == "9.9.9"
+
+
+def test_check_latest_release_returns_none_on_network_error(monkeypatch):
+    def _raise(*_a, **_k):
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("urllib.request.urlopen", _raise)
+    assert utils.check_latest_release() is None
+
+
+def test_check_latest_release_returns_none_on_malformed_json(monkeypatch):
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda req, timeout: io.BytesIO(b"not json"),
+    )
+    assert utils.check_latest_release() is None
 
 
 # ---------------------------------------------------------------------------
