@@ -579,6 +579,33 @@ def test_fetch_expected_sha256_rejects_short_digest(monkeypatch):
     assert utils._fetch_expected_sha256(_CHECKSUM_URL) is None
 
 
+def test_fetch_expected_sha256_returns_none_on_network_error(monkeypatch):
+    """The fail-closed contract must hold on a transport failure too, not
+    just a bad/mismatched digest — a network error while fetching the
+    checksum itself must never be mistaken for "no checksum needed"."""
+
+    def _raise(*_a, **_k):
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("urllib.request.urlopen", _raise)
+    assert utils._fetch_expected_sha256(_CHECKSUM_URL) is None
+
+
+def test_download_verified_tarball_returns_none_on_network_error(
+    monkeypatch,
+):
+    """Same fail-closed contract as above, for a failure mid-download of
+    the tarball itself (not the checksum) — download_release() must never
+    receive a partially-written, unverified temp file."""
+
+    def _raise(*_a, **_k):
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("urllib.request.urlopen", _raise)
+    result = utils._download_verified_tarball(_TARBALL_URL, "a" * 64)
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # default_games_conf_dir
 # ---------------------------------------------------------------------------
