@@ -121,14 +121,19 @@ _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 # "from CORE" and "an error", so the two must not be mutually exclusive
 # the way the old single-dict-with-early-return _apply_log_style was.
 # Pattern-based, not an exhaustive name list: every jlog() error/failure
-# tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED: by
-# convention (verified 2026-09-14 — SCAN_ERROR:, RESTORE_WRITE_FAIL:,
-# NEXT_SESSION_WRITE_FAILED:, 26 variants total), so this stays correct
-# for future tags that follow the same convention without needing a
-# name added here by hand. EARLY_EXIT_RECOVERY: is the one real
-# exception to that convention, added explicitly.
+# tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED:/_TIMEOUT:
+# or starts with BAD_/RESTORE_REJECTED_ by convention (verified
+# 2026-09-15 KISS audit — 7 RESTORE_REJECTED_* variants, 7 BAD_* variants,
+# SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT:), so this stays correct for future
+# tags that follow the same convention without needing a name added here
+# by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
+# BINARY_NOT_FOUND: are the real exceptions to those conventions, added
+# explicitly.
 _LOG_ERROR_MARKER = re.compile(
-    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL):|EARLY_EXIT_RECOVERY:"
+    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
+    r"|\bBAD_[A-Z0-9_]*:"
+    r"|\bRESTORE_REJECTED_[A-Z_]*:"
+    r"|EARLY_EXIT_RECOVERY:|RESTORE_FATAL:|NO_TARGET:|BINARY_NOT_FOUND:"
 )
 _LOG_SUCCESS_MARKER = re.compile(r"VALIDATED_[A-Z]+_STABLE")
 _LOG_NEUTRAL_MARKER = re.compile(r"SWITCH_REQUEST:")

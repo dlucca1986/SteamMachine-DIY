@@ -85,6 +85,58 @@ def test_apply_log_style_colours_early_exit_recovery():
     assert "EARLY_EXIT_RECOVERY:" in styled
 
 
+def test_apply_log_style_colours_restore_rejected_family():
+    """RESTORE_REJECTED_* (7 security-relevant tags, restore.py) — found by
+    the 2026-09-15 KISS audit's new item 13 (message-tag coverage), never
+    matched by the original _ERROR:/_FAIL:/_FAILED: pattern."""
+    win = _FakeLogWindow()
+
+    styled = win._apply_log_style(
+        "[10:00:00] SYSTEM: RESTORE_REJECTED_TRAVERSAL: ../../etc/passwd"
+    )
+
+    assert "#e74c3c" in styled
+    assert "RESTORE_REJECTED_TRAVERSAL:" in styled
+
+
+def test_apply_log_style_colours_bad_family():
+    """BAD_* (malformed user-editable input, e.g. BAD_FLAG_ENTRY,
+    BAD_SSOT_NUM) — same 2026-09-15 audit finding as RESTORE_REJECTED_*."""
+    win = _FakeLogWindow()
+
+    styled = win._apply_log_style(
+        "[10:00:00] STEAM: BAD_FLAG_ENTRY: '--foo' - unterminated quote"
+    )
+
+    assert "#e74c3c" in styled
+    assert "BAD_FLAG_ENTRY:" in styled
+
+
+def test_apply_log_style_colours_timeout_suffix():
+    """SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT: — covered by adding TIMEOUT to the
+    existing suffix alternation, same 2026-09-15 audit finding."""
+    win = _FakeLogWindow()
+
+    styled = win._apply_log_style(
+        "[10:00:00] CORE: SIGTERM_TIMEOUT: escalating"
+    )
+
+    assert "#e74c3c" in styled
+    assert "SIGTERM_TIMEOUT:" in styled
+
+
+def test_apply_log_style_colours_standalone_error_literals():
+    """RESTORE_FATAL:/NO_TARGET:/BINARY_NOT_FOUND: don't follow any regex
+    convention, so they're matched as explicit literals, same treatment as
+    the pre-existing EARLY_EXIT_RECOVERY: special case."""
+    win = _FakeLogWindow()
+
+    for literal in ("RESTORE_FATAL:", "NO_TARGET:", "BINARY_NOT_FOUND:"):
+        styled = win._apply_log_style(f"[10:00:00] CORE: {literal} details")
+        assert "#e74c3c" in styled
+        assert literal in styled
+
+
 def test_apply_log_style_colours_validated_stable_success_markers():
     win = _FakeLogWindow()
 
