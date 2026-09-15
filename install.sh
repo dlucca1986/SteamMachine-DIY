@@ -125,12 +125,13 @@ install_dependencies() {
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     fi
 
-    # Core system and gaming dependencies. kate/konsole are explicit
+    # Core system and gaming dependencies. kate/konsole/xdg-utils are explicit
     # dependencies (not assumed present from a KDE desktop install) — the
-    # Control Center's "Edit SSoT" and "Open Konsole Terminal" buttons,
-    # and the self-update installer handoff, all target these two exact
-    # binaries directly, independent of whichever DE is actually running.
-    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc kate konsole"
+    # Control Center's "Edit SSoT", "Open Konsole Terminal", and "Browse
+    # Config Folder" (xdg-open) buttons, and the self-update installer
+    # handoff, all target these exact binaries directly, independent of
+    # whichever DE is actually running.
+    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc kate konsole xdg-utils"
 
     info "Synchronizing package databases and installing core dependencies..."
     # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
