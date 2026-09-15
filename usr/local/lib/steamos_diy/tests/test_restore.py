@@ -196,6 +196,148 @@ def test_restore_link_rejects_unsafe_target_path(tmp_path):
     assert not link.exists()
 
 
+def test_restore_link_survives_symlink_failure(tmp_path, monkeypatch):
+    """The OSError branch (RESTORE_LINK_FAIL) — an I/O failure recreating
+    one link must not raise, same per-member-skip contract as every other
+    restore rejection."""
+    link = tmp_path / "shim"
+    allowed = (str(tmp_path) + "/",)
+
+    def raise_oserror(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(restore.os, "symlink", raise_oserror)
+
+    restore._restore_link(str(link), str(tmp_path / "target"), allowed)
+
+    assert not link.exists()
+
+
+# ---------------------------------------------------------------------------
+# _is_member_safe — reject hardlinks/symlinks/devices/fifos from a restore
+# archive; only plain files and directories are ever trusted for extraction
+# ---------------------------------------------------------------------------
+
+
+def _member_of_type(name: str, tar_type: bytes) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name=name)
+    info.type = tar_type
+    return info
+
+
+def test_is_member_safe_rejects_symlink():
+    assert not restore._is_member_safe(
+        _member_of_type("evil", tarfile.SYMTYPE)
+    )
+
+
+def test_is_member_safe_rejects_hardlink():
+    assert not restore._is_member_safe(
+        _member_of_type("evil", tarfile.LNKTYPE)
+    )
+
+
+def test_is_member_safe_rejects_device_node():
+    assert not restore._is_member_safe(
+        _member_of_type("evil", tarfile.CHRTYPE)
+    )
+
+
+def test_is_member_safe_rejects_fifo():
+    assert not restore._is_member_safe(
+        _member_of_type("evil", tarfile.FIFOTYPE)
+    )
+
+
+def test_is_member_safe_accepts_regular_file_and_dir():
+    assert restore._is_member_safe(_member_of_type("f", tarfile.REGTYPE))
+    assert restore._is_member_safe(_member_of_type("d/", tarfile.DIRTYPE))
+
+
+# ---------------------------------------------------------------------------
+# _ensure_safe_target — refuse to write through a pre-existing symlink
+# (a malicious archive could plant one to redirect a later write)
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_safe_target_rejects_existing_symlink(tmp_path):
+    target = tmp_path / "shim"
+    target.symlink_to(tmp_path / "somewhere_else")
+
+    assert not restore._ensure_safe_target(str(target))
+
+
+def test_ensure_safe_target_accepts_plain_path(tmp_path):
+    assert restore._ensure_safe_target(str(tmp_path / "new_file"))
+
+
+# ---------------------------------------------------------------------------
+# _iter_link_pairs — new tab-separated manifest vs. legacy restore_links.sh
+# ---------------------------------------------------------------------------
+
+
+def test_iter_link_pairs_reads_new_manifest_format():
+    text = "link1\ttarget1\nlink2\ttarget2\n"
+
+    pairs = list(restore._iter_link_pairs(utils.BACKUP_MANIFEST_NAME, text))
+
+    assert pairs == [("link1", "target1"), ("link2", "target2")]
+
+
+def test_iter_link_pairs_reads_legacy_script_format():
+    text = (
+        "#!/bin/bash\n"
+        'ln -sf "/real/target" "/etc/shim"\n'
+        "echo not a link line\n"
+    )
+
+    pairs = list(restore._iter_link_pairs("restore_links.sh", text))
+
+    assert pairs == [("/etc/shim", "/real/target")]
+
+
+def test_iter_link_pairs_skips_unbalanced_quote_legacy_line():
+    """A malformed legacy line (unbalanced quote) is skipped outright,
+    never degraded to a naive split — a wrong link/target pairing would
+    recreate a bogus symlink, which is worse than skipping one entry."""
+    text = 'ln -sf "/real/target /etc/shim\n'
+
+    pairs = list(restore._iter_link_pairs("restore_links.sh", text))
+
+    assert not pairs
+
+
+# ---------------------------------------------------------------------------
+# _restore_links — reads the archive's links entry and recreates each pair
+# ---------------------------------------------------------------------------
+
+
+def test_restore_links_recreates_pairs_from_manifest(tmp_path):
+    allowed = (str(tmp_path) + "/",)
+    link = tmp_path / "shim"
+    target = str(tmp_path / "real_target")
+    manifest = f"{link}\t{target}\n"
+    tar = _tar_with_member(
+        utils.BACKUP_MANIFEST_NAME, manifest.encode("utf-8")
+    )
+    member = tar.getmember(utils.BACKUP_MANIFEST_NAME)
+
+    restore._restore_links(tar, member, allowed)
+
+    assert link.is_symlink()
+    assert os.readlink(link) == target
+
+
+def test_restore_links_handles_unreadable_member(tmp_path):
+    """tar.extractfile() returning None (e.g. a directory entry mistakenly
+    passed in) must be a no-op, not a crash."""
+    tar = _tar_with_member("d", b"")
+    member = tar.getmember("d")
+    member.type = tarfile.DIRTYPE
+
+    restore._restore_links(tar, member, (str(tmp_path) + "/",))
+
+
 # ---------------------------------------------------------------------------
 # _extract_member — a chmod failure must be a per-member rejection, not
 # escalate to the archive-level except that aborts the whole restore
