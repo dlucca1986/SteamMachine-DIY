@@ -160,7 +160,7 @@ layers, not mutually exclusive, so a `CORE:` line can be coloured blue for its i
 
 | Pattern | Icon | Colour |
 | :--- | :--- | :--- |
-| `..._ERROR:` / `..._FAIL:` / `..._FAILED:` / `..._TIMEOUT:` / `BAD_...:` / `RESTORE_REJECTED_...:` / `EARLY_EXIT_RECOVERY:` / `RESTORE_FATAL:` / `NO_TARGET:` / `BINARY_NOT_FOUND:` | 🚫 | Red `#e74c3c` |
+| `..._ERROR:` / `..._FAIL:` / `..._FAILED:` / `..._TIMEOUT:` / `BAD_...:` / `RESTORE_REJECTED_...:` / `EARLY_EXIT_RECOVERY:` / `RESTORE_FATAL:` / `NO_TARGET:` / `BINARY_NOT_FOUND:` / `BACKUP_LINK_SKIPPED:` / `YAML_NOT_MAPPING:` / `RESTORE_EMPTY:` | 🚫 | Red `#e74c3c` |
 | `VALIDATED_*_STABLE` | ✅ | Green `#2ecc71` |
 | `SWITCH_REQUEST:` | — | Grey `#7f8c8d` |
 

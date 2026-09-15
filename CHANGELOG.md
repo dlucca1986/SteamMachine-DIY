@@ -76,6 +76,11 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   `_FAIL:`/`_FAILED:` one already fixed, found by a new "message-tag coverage" audit item.
   Extended the regex to cover all of them, without renaming any of the affected tags (they're
   documented verbatim elsewhere for users to grep in journalctl).
+- 3 more log tags missed by the same `_LOG_ERROR_MARKER` regex: `BACKUP_LINK_SKIPPED:` (WARN),
+  `YAML_NOT_MAPPING:` (WARN), and `RESTORE_EMPTY:` (ERROR — a restore that appears to run but
+  restores nothing, the exact "looks fine, silently did nothing" case this styling exists to
+  surface). Found by a new local dev script that checks every WARN/ERROR `jlog()` call against
+  the real regex, not by re-reading the codebase by hand — which had already missed these twice.
 
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
