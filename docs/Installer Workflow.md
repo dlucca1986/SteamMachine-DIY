@@ -10,7 +10,7 @@ Before touching anything, the installer verifies `qdbus6` and `startplasma-wayla
 already on `$PATH` — this project augments an existing **KDE Plasma 6 (Wayland)** install
 with a Zero-DM gamescope-first boot path, it does not install Plasma itself (a full desktop
 environment is out of scope for what this installer silently pulls in, unlike the small
-standalone `kate`/`konsole` packages below). Missing either one aborts immediately with a
+standalone `kate`/`konsole`/`xdg-utils` packages below). Missing either one aborts immediately with a
 clear error instead of completing silently — the installer goes on to mask SDDM/plasmalogin
 and `getty@tty1`, so discovering a missing Desktop Mode binary only on first boot would leave
 no obvious way back to a working desktop. Install Plasma (`qt6-tools` + `plasma-workspace`,
@@ -33,7 +33,7 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 Configures system access and installs the software stack:
 
 * **Full System Upgrade**: Before installing any package, the installer runs `pacman -Syu` to synchronize the package databases and upgrade all existing packages. This ensures a consistent system state before the framework is deployed.
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `kate`, `konsole`. The last two are explicit dependencies — the Control Center's "Edit SSoT" and "Open Konsole Terminal" buttons target these two binaries by name, independent of whichever desktop environment is actually running.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `kate`, `konsole`, `xdg-utils`. The last three are explicit dependencies — the Control Center's "Edit SSoT", "Open Konsole Terminal", and "Browse Config Folder" buttons target these exact binaries by name, independent of whichever desktop environment is actually running.
 * **Hardware Groups:** Automatically manages user membership to ensure hardware access and system administration rights. Adds user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`. The `tty` group is required for `notify()` to write to `/dev/tty1`.
 
 ### 3. SSOT Deployment & Filesystem Policy
