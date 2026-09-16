@@ -81,6 +81,13 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   restores nothing, the exact "looks fine, silently did nothing" case this styling exists to
   surface). Found by a new local dev script that checks every WARN/ERROR `jlog()` call against
   the real regex, not by re-reading the codebase by hand — which had already missed these twice.
+- `helpers/steamos-select-branch.py` left stdout empty on every call, including
+  `steamos-select-branch -c` — which a live support-log export showed Steam actually calls on
+  every normal game launch to populate its own (inapplicable-here) update-channel UI, not just
+  on a rarely-visited settings page as originally assumed. `-c`/`-l` now print a fixed `stable`
+  to stdout (this project has no real branches to report, so a single coherent value is enough
+  to answer both queries); an actual branch-switch request keeps logging only, unchanged.
+  Verified live in Game Mode after the fix.
 
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
