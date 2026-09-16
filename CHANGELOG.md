@@ -62,6 +62,45 @@ Both surfaced while researching other gamescope-session forks/projects for porta
     `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
 
 ### Fixed
+- Completing the "never actually read" sweep the bash audit started: `etc/default/steamos_diy.conf`,
+  `etc/systemd/system/steamos_diy.service`, and 3 of the 4 `etc/skel/.config/steamos_diy/*.yaml`
+  files had a stale `# VERSION:` header (2.1.6/2.1.7 against the real 2.1.8) — `bump-version.sh`'s
+  `HEADER_GLOBS` never included any non-`.py`/`install.sh`/`uninstall.sh` file, so every release
+  bump silently skipped them. Caught up to 2.1.8 and added to `HEADER_GLOBS` so future bumps
+  cover them automatically.
+- `etc/skel/.config/steamos_diy/gamescope.example.yaml`'s `--rt` entry had an unterminated
+  quoted string — the file didn't parse as YAML at all under this project's own `ruamel.yaml`
+  loader (confirmed empirically), undermining its purpose as a reference a user could
+  copy-check against. Only surfaces if a user actually opens and saves it (the existing
+  `except YAMLError` dialog would have caught it, not a crash) — closed the quote.
+- `etc/default/steamos_diy.conf`'s `LOG_LEVEL` comment listed only `DEBUG`/`INFO`/`ERROR`,
+  omitting the real, heavily-used `WARN` level (`utils.py`'s `_LEVELS_C`) — the first file a
+  user opens to configure logging didn't mention a whole log level.
+- `usr/local/share/applications/Control_Center.desktop`'s `Exec=` re-hardcoded
+  `python3 /usr/local/lib/steamos_diy/control_center.py` instead of using the project's own
+  installed entrypoint symlink (`sdy-control-center`, `install.sh`) — `Game_Mode.desktop`
+  already used the equivalent CLI-symlink pattern correctly. No user-visible behavior change,
+  just one less place a future path change could be missed.
+- `var/lib/steamos_diy/next_session` was tracked in git as a packaging leftover — `install.sh`
+  always creates the real runtime file fresh at `/var/lib/steamos_diy/next_session` if absent
+  and never reads this tracked copy. Removed.
+- `README.md`'s Control Center GUI dependency row listed `kate`/`konsole` but not `xdg-utils`
+  (the "Browse Config Folder" button's real dependency, added in an earlier session).
+- `docs/Steamos Session Launch.md`'s `GAME_MODE_ENV` capability table was missing
+  `SRT_URLOPEN_PREFER_STEAM` (added to the code earlier today, documented in this same
+  CHANGELOG's Added section, but never added to this reference table).
+- `docs/Utilities Engine.md`'s "Framework Dependencies" table had drifted from the real
+  `utils` imports in 6 of 8 rows — some from today's refactors (`persist_next_session`,
+  `SYSTEMD_CALL_TIMEOUT`), most from changes going back to 2026-08-27
+  (`require_ssot_conf`, `KONSOLE_BIN`, `safe_emit`) that were never propagated here.
+  Regenerated the whole table against the real current imports rather than patching only
+  today's changes.
+- Found by the first-ever full read of every previously-unaudited config/asset file
+  (`etc/systemd/system/steamos_diy.service`, the pacman hook, both `.desktop` files, the
+  `Makefile`, the SSoT template, all 4 skel YAML files) and the first-ever full docs/README
+  accuracy sweep against real code — both triggered by the maintainer asking directly
+  whether the bash scripts had ever been checked, which surfaced that several other file
+  categories never had been either.
 - `install.sh --update` wiped `$LIB_DIR` (including the old, working `libcore.so`) *before*
   building the new C-Core. A `gcc` or `ctypes` load failure at that point — a broken
   toolchain, a full disk, a bad release — exited with the new `.py` files in place and no
