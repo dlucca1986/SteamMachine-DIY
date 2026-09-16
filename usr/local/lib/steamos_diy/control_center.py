@@ -1411,7 +1411,11 @@ class SDYControlCenter(QMainWindow):
         script may genuinely still be writing files.
         """
         if self._pkexec_busy.get(lock_key):
-            self.statusBar().showMessage(
+            # QMainWindow.statusBar() lazily constructs one on first access
+            # and never actually returns None; PyQt6's stub types it as
+            # Optional purely because the underlying Qt method signature
+            # is conservative, not because this can happen here.
+            self.statusBar().showMessage(  # type: ignore[union-attr]
                 "Another privileged operation is already running…", 3000
             )
             return

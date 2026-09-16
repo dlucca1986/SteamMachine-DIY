@@ -32,7 +32,7 @@ jobs:
       - name: Install project + tooling dependencies
         run: |
           pip install PyQt6 ruamel.yaml
-          pip install pylint flake8 ruff bandit radon vulture pytest
+          pip install pylint flake8 ruff bandit radon vulture pytest mypy
 
       - name: pylint (production code)
         run: >
@@ -49,6 +49,11 @@ jobs:
         run: >
           bandit -r usr/local/lib/steamos_diy/
           -x usr/local/lib/steamos_diy/tests
+
+      - name: mypy
+        run: >
+          mypy usr/local/lib/steamos_diy/*.py
+          usr/local/lib/steamos_diy/helpers/*.py
 
       - name: radon cc (baseline B average, fail on any C or worse)
         run: |

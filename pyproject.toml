@@ -15,6 +15,21 @@ ignore = ["EXE001"]
 # there for style reasons (missing-docstring, protected-access aren't
 # checked by Ruff's defaults, so no equivalent disable is needed here).
 
+[tool.mypy]
+# Default (non --check-untyped-defs) mode is intentional, not an oversight:
+# tried --check-untyped-defs against this tree first and it produced 58
+# near-entirely-noise findings in control_center.py/editors.py, almost all
+# "Item None of Any | None has no attribute ..." on PyQt widget attributes
+# that are always assigned during setup but whose containing methods carry
+# no type annotations — exactly the kind of Qt/mypy friction that would
+# demand a large annotation effort (or a pile of per-line suppressions) for
+# little real payoff on a hobby project. Default mode only checks functions
+# that already carry annotations (most of the non-GUI core: utils.py,
+# health.py, journal.py, backup.py, sdy.py, session_launch.py,
+# session_select.py are already fully or near-fully typed) — low noise,
+# real signal, no big annotation push required to adopt it.
+disable_error_code = ["annotation-unchecked"]
+
 [tool.pytest.ini_options]
 # Migrated from pytest.ini, now deleted — this is the single source of
 # truth for pytest config.
