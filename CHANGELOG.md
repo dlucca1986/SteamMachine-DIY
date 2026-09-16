@@ -29,6 +29,12 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   clearer completion box at the end of each script. Purely cosmetic — same `info`/`success`/
   `warn`/`error` functions and message text as before, no new dependency (plain ANSI codes
   already in use, no `tput`/`figlet`/etc.).
+- The `timeout=10` used by 4 independent `journalctl`/`systemctl` `subprocess.run()` calls
+  across `journal.py` (x2), `restore.py`, and `control_center.py` was hardcoded identically
+  in each with no shared source of truth — found by a new local audit script that surfaces
+  repeated hardcoded literals never routed through a constant. Extracted to
+  `utils.SYSTEMD_READ_TIMEOUT`; no behavior change, same value everywhere, just one place to
+  change it next time.
 
 ### Fixed
 - `install.sh`'s `BASE_PKGS` was missing `kate`/`konsole` as explicit dependencies, even
