@@ -39,8 +39,27 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   across `journal.py` (x2), `restore.py`, and `control_center.py` was hardcoded identically
   in each with no shared source of truth — found by a new local audit script that surfaces
   repeated hardcoded literals never routed through a constant. Extracted to
-  `utils.SYSTEMD_READ_TIMEOUT`; no behavior change, same value everywhere, just one place to
+  `utils.SYSTEMD_CALL_TIMEOUT`; no behavior change, same value everywhere, just one place to
   change it next time.
+- Three more pure extractions from the 2026-09-16 periodic KISS audit (the first run with a
+  different model reading the code — a fresh pair of eyes, same checklist), no behavior
+  change in any of them:
+  - `control_center.py` had the same 7-line "read the YAML file or toast the error" block
+    byte-identical in `_enter_template_mode`, `load_global_file`, and `load_game_file` —
+    same three-sites shape as the earlier `shlex` extraction. Now one `_read_or_toast()`
+    method. The function-level duplicate detector added earlier the same day can't see this
+    class (it compares whole functions; these differ outside the shared block).
+  - The "persist the next-boot session target, log `NEXT_SESSION_WRITE_FAILED` if it didn't
+    land" shape was repeated at three sites across `session_launch.py` and
+    `session_select.py`. Now `utils.persist_next_session()` — worth centralizing beyond
+    the line count because that tag is documented in Troubleshooting.md and pattern-matched
+    by the Diagnostics tab, so it must stay identical everywhere. The per-site comments on
+    *why* the write matters stay at the call sites.
+  - Two always-true guards dropped: `load_global_file`/`load_game_file` checked
+    `if self.global_hl:`/`if self.game_hl:` before `rehighlight()`, but both highlighters
+    are assigned during tab setup before either loader can run (the combo signal is
+    connected after `addItems`, so it can't fire during setup), and their sibling
+    `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
 
 ### Fixed
 - `docs/Troubleshooting.md` was missing 2 of 64 distinct `jlog()`/`run_shim()` message tags —
