@@ -34,8 +34,8 @@ fi
 # Zero-DM gamescope-first boot path -- it does not install Plasma itself (a
 # full desktop environment is out of scope for what this installer should
 # silently pull in, unlike the small standalone kate/konsole below). Failing
-# loudly here beats silently completing: this installer goes on to mask
-# SDDM/plasmalogin and getty@tty1, so a missing Desktop Mode binary would
+# loudly here beats silently completing: this installer goes on to disable
+# SDDM/plasmalogin and mask getty@tty1, so a missing Desktop Mode binary would
 # leave the user with no obvious way back to a working desktop on first boot.
 for bin in qdbus6 startplasma-wayland; do
     if ! command -v "$bin" &>/dev/null; then
@@ -236,7 +236,26 @@ deploy_files() {
     fi
     chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DEST"
 
-    # Deploy Python Core Libraries, Helpers & C-Core
+    # Deploy Python Core Libraries, Helpers & C-Core.
+    #
+    # Build and verify the C-Core BEFORE touching $LIB_DIR: on --update the
+    # old, working libcore.so used to be wiped first, so a gcc/ctypes
+    # failure exited with fresh .py files and no .so at all — utils.py then
+    # exits 127 at import, and with getty@tty1 already masked from the
+    # prior install the next boot had neither a session nor a terminal.
+    # Same trap the getty-ordering fix below closed for fresh installs.
+    info "Building C-Core from source (steamos_diy_core.c)..."
+    # Next to $LIB_DIR, not in /tmp: a noexec /tmp (common on hardened
+    # setups) would make the ctypes load check below fail on a perfectly
+    # good build, and same-filesystem keeps the final install a plain copy.
+    TMP_SO="$(mktemp -p "$(dirname "$LIB_DIR")" --suffix=.so)"
+    # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
+    gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$TMP_SO" steamos_diy_core.c \
+        || { rm -f "$TMP_SO"; error "C-Core compilation failed. Check gcc output above."; exit 1; }
+    python3 -c "import ctypes; ctypes.CDLL('$TMP_SO')" 2>/dev/null \
+        || { rm -f "$TMP_SO"; error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
+    info "C-Core verified and loadable."
+
     if $UPDATE_MODE; then
         # Wipe first so files removed or renamed by the new release
         # cannot linger and shadow the fresh deployment.
@@ -251,17 +270,12 @@ deploy_files() {
     # (pytest isn't a runtime dependency, and nothing on the target
     # machine ever imports it).
     rm -rf "$LIB_DIR/tests"
-
-    info "Building C-Core from source (steamos_diy_core.c)..."
-    # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
-    gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
-        || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
-    python3 -c "import ctypes; ctypes.CDLL('$LIB_DIR/libcore.so')" 2>/dev/null \
-        || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
-    info "C-Core verified and loadable."
+    # install -m 644, not mv: mktemp creates 0600 (same reason as the SSoT
+    # render above).
+    install -m 644 "$TMP_SO" "$LIB_DIR/libcore.so"
+    rm -f "$TMP_SO"
 
     chmod 755 "$LIB_DIR"
-    chmod 644 "$LIB_DIR/libcore.so"
     chmod +x "$LIB_DIR"/*.py
     chmod +x "$HELPERS_DIR"/*.py
 
