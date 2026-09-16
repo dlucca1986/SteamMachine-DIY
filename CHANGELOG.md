@@ -62,6 +62,20 @@ Both surfaced while researching other gamescope-session forks/projects for porta
     `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
 
 ### Fixed
+- `install.sh --update` wiped `$LIB_DIR` (including the old, working `libcore.so`) *before*
+  building the new C-Core. A `gcc` or `ctypes` load failure at that point — a broken
+  toolchain, a full disk, a bad release — exited with the new `.py` files in place and no
+  `.so` at all: `utils.py` exits 127 at import, and with `getty@tty1` already masked from
+  the previous install the next boot had neither a session nor a terminal. The same trap the
+  earlier getty-ordering fix closed for fresh installs, left open for updates. The C-Core is
+  now built and load-verified into a temp file next to `$LIB_DIR` (not `/tmp`, which may be
+  `noexec`) before anything is touched, then installed after the copy. Found by the first
+  semantic read of the bash side of the project (the periodic KISS audit had only ever
+  covered the Python tree; `shellcheck` can't see ordering bugs).
+- Comment/doc wording: `install.sh`'s Plasma-precondition comment, `docs/Installer
+  Workflow.md`, and the Plasma-precondition changelog entry above all said the installer
+  "masks SDDM/plasmalogin and `getty@tty1`" — it *disables* the display managers and masks
+  only `getty@tty1`. Wording only, no behavior change.
 - `docs/Troubleshooting.md` was missing 2 of 64 distinct `jlog()`/`run_shim()` message tags —
   `NEXT_SESSION_WRITE_FAILED` and `NOFILE_LIMIT_RAISE_FAILED` — found by a new local script
   that cross-checks every static tag against the doc file. `NEXT_SESSION_WRITE_FAILED` is the
@@ -89,7 +103,7 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   augments an existing KDE Plasma install, it doesn't install Plasma itself). Running the
   installer on a system without Plasma already present completed silently, then left Desktop
   Mode permanently unlaunchable on first boot — with no way back, since the same install run
-  already masked SDDM/plasmalogin and `getty@tty1`. Now checked upfront; aborts immediately
+  already disabled SDDM/plasmalogin and masked `getty@tty1`. Now checked upfront; aborts immediately
   with a clear error naming the missing binary and the packages that provide it, instead of
   discovering the gap only after the point of no return.
 - `control_center.py`'s Diagnostics log view had two entries in `log_styles`
