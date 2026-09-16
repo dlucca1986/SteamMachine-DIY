@@ -18,6 +18,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   existing flags passthrough, no code change needed.
 
 Both surfaced while researching other gamescope-session forks/projects for portable ideas.
+- `mypy` added as a new quality gate (default mode, not `--check-untyped-defs` — see
+  `pyproject.toml`'s `[tool.mypy]` comment for why): a class of bug invisible to
+  pylint/flake8/ruff, now checked on every commit for the codebase's already fully/near-fully
+  typed core (`utils.py`, `health.py`, `journal.py`, `backup.py`, `sdy.py`,
+  `session_launch.py`, `session_select.py`). Found and fixed one real issue on introduction —
+  see the Fixed section below.
 
 ### Changed
 - `install.sh`/`uninstall.sh`'s terminal output got a small readability pass: a one-time
@@ -37,6 +43,12 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   change it next time.
 
 ### Fixed
+- `control_center.py::_run_pkexec`'s busy-guard branch called `self.statusBar().showMessage(...)`
+  without accounting for PyQt6's stub typing `statusBar()` as `QStatusBar | None` — found by
+  the new mypy gate on introduction. `QMainWindow.statusBar()` always lazily constructs one in
+  practice and never returns `None`, so fixed with a narrow, justified
+  `# type: ignore[union-attr]` rather than a defensive null-check for a scenario that can't
+  actually happen.
 - `install.sh`'s `BASE_PKGS` was missing `kate`/`konsole` as explicit dependencies, even
   though the Control Center's "Edit SSoT" button and "Open Konsole Terminal" button target
   these two binaries by name — previously assumed present only because the officially
