@@ -65,6 +65,7 @@ Before the user's `env_vars`, the launcher applies a fixed map of **compositor/M
 | `ENABLE_GAMESCOPE_WSI=1`, `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3`, `WINEDLLOVERRIDES=dxgi=n` | Proton/vkd3d session defaults (session tweak, no Steam control) |
 | `STEAM_MULTIPLE_XWAYLANDS=1` | Per-game Xwayland isolation (session tweak, no Steam control) |
 | `SRT_LOG_TO_JOURNAL=1` | Routes Steam's own `steam-runtime-tools` logger to the journal (session tweak, no Steam control) |
+| `SRT_URLOPEN_PREFER_STEAM=1` | Links clicked in Game Mode open in Steam's own overlay browser instead of `steam-runtime-tools`' `xdg-open` reaching for a desktop browser (session tweak, no Steam control) |
 | `QT_QPA_PLATFORM_THEME=kde` | Correct icons/readable text for Qt apps inside gamescope (session tweak, no Steam control) |
 | `XCURSOR_SCALE=256` | Cursor scale inside the embedded session (session tweak, no Steam control) |
 

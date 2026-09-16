@@ -92,13 +92,13 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 
 | Component | `utils` imports used |
 | :--- | :--- |
-| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `shlex_split_or_fallback`, `spawn_native`, `get_ssot_var`, `get_ssot_num` |
-| `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
+| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `apply_env_map`, `get_ssot_num`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `notify`, `persist_next_session`, `read_session_target`, `sd_notify_ready`, `shlex_split_or_fallback`, `spawn_native` |
+| `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `get_ssot_var`, `jlog`, `notify`, `persist_next_session`, `spawn_native` |
 | `sdy.py` | `apply_env_map`, `default_games_conf_dir`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `shlex_split_or_fallback` |
-| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `verify_archive` |
-| `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `control_center.py` | `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `VERSION`, `get_ssot_var`, `spawn_native`, `write_atomic` |
-| `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native`, `verify_file_sha256` |
+| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `require_ssot_conf`, `verify_archive` |
+| `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SYSTEMCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `require_ssot_conf`, `verify_archive` |
+| `control_center.py` | `CONFIG_FILE_NAME`, `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `KONSOLE_BIN`, `PYTHON3_BIN`, `SSOT_CONF_PATH`, `SYSTEMD_CALL_TIMEOUT`, `USER_CONFIG_REL`, `VERSION`, `clear_ssot_cache`, `get_ssot_var`, `safe_emit`, `spawn_native`, `write_atomic` |
+| `updater.py` | `KONSOLE_BIN`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `safe_emit`, `spawn_native`, `verify_file_sha256` |
 | `health.py` | `CORE_LIB_PATH`, `DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `clear_ssot_cache`, `get_ssot_var`, `shlex_split_or_fallback` |
 | `journal.py` | `JOURNALCTL_BIN`, `jlog` |
 | Compatibility shims | `run_shim` (which internally calls `jlog`) |
