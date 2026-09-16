@@ -34,7 +34,7 @@ general:
     wayland  => use Wayland backend
   --cursor: "path to default cursor image"
   -R, --ready-fd: "notify FD when ready"
-  --rt: "Use realtime scheduling
+  --rt: "Use realtime scheduling"
   -T, --stats-path: "write statistics to path"
   -C, --hide-cursor-delay: "hide cursor image after delay"
   -e, --steam: "enable Steam integration (overlay and features)"
