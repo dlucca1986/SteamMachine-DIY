@@ -21,15 +21,31 @@ sys.path.insert(
 )
 
 try:
-    from utils import run_shim
+    from utils import jlog, run_shim
 except (ImportError, SystemExit):
     # No utils available (missing module, or utils.py's own C-Core load
     # failure raising SystemExit): simulate success so Steam doesn't
     # stall on the UI.
     sys.exit(0)
 
+# This project has no real branches to report — a single fixed value is
+# enough to answer Steam's -c (current branch)/-l (branch list) queries
+# coherently instead of leaving stdout empty, which is what Steam's own
+# (inapplicable-here) update-channel UI reads from. Confirmed live
+# 2026-09-16: Steam calls -c on every normal game launch, not just when
+# a settings page is opened, so this is exercised far more than it looks.
+_FAKE_BRANCH = "stable"
+
 if __name__ == "__main__":
     selected = sys.argv[1] if len(sys.argv) > 1 else "stable"
+    if selected in ("-c", "-l"):
+        jlog(
+            "SYSTEM",
+            f"[Branch] Query intercepted: {selected}. Reporting: "
+            f"{_FAKE_BRANCH}",
+        )
+        print(_FAKE_BRANCH)
+        sys.exit(0)
     run_shim(
         "SYSTEM",
         f"[Branch] Switch intercepted: {selected}. Status: OK",
