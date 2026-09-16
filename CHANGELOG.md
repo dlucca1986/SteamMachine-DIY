@@ -43,6 +43,12 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   change it next time.
 
 ### Fixed
+- `docs/Troubleshooting.md` was missing 2 of 64 distinct `jlog()`/`run_shim()` message tags —
+  `NEXT_SESSION_WRITE_FAILED` and `NOFILE_LIMIT_RAISE_FAILED` — found by a new local script
+  that cross-checks every static tag against the doc file. `NEXT_SESSION_WRITE_FAILED` is the
+  more significant of the two: the code's own comment calls it "the single most important
+  write in the launcher," since a failed write leaves `next_session` pointing at whatever it
+  already held instead of the safe Desktop fallback.
 - `control_center.py::_run_pkexec`'s busy-guard branch called `self.statusBar().showMessage(...)`
   without accounting for PyQt6's stub typing `statusBar()` as `QStatusBar | None` — found by
   the new mypy gate on introduction. `QMainWindow.statusBar()` always lazily constructs one in
