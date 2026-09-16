@@ -104,6 +104,15 @@ JOURNALCTL_BIN: str = "/usr/bin/journalctl"
 PYTHON3_BIN: str = "/usr/bin/python3"
 KONSOLE_BIN: str = "/usr/bin/konsole"
 
+# Shared timeout for short-lived systemctl/journalctl status/read calls —
+# was independently hardcoded as the same 10 in journal.py (x2),
+# restore.py, and control_center.py with no shared source of truth, found
+# by a 2026-09-16 audit for repeated literals never routed through a
+# constant. Not SSoT-backed like the SSOT_* config values: nobody has
+# asked to tune this at runtime, it's centralized purely to stop future
+# edits from updating some call sites and not others.
+SYSTEMD_READ_TIMEOUT: int = 10
+
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
 # The loaded flag lives in a mutable cell so clear_ssot_cache can reset

@@ -79,6 +79,7 @@ from utils import (
     KONSOLE_BIN,
     PYTHON3_BIN,
     SSOT_CONF_PATH,
+    SYSTEMD_READ_TIMEOUT,
     USER_CONFIG_REL,
     VERSION,
     clear_ssot_cache,
@@ -1082,7 +1083,7 @@ class SDYControlCenter(QMainWindow):
                         text=True,
                         errors="replace",
                         check=True,
-                        timeout=10,
+                        timeout=SYSTEMD_READ_TIMEOUT,
                     )
                     # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)
