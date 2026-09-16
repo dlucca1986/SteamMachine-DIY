@@ -20,8 +20,8 @@ from utils import (
     get_ssot_var,
     jlog,
     notify,
+    persist_next_session,
     spawn_native,
-    write_atomic,
 )
 
 # ---------------------------------------------------------------------------
@@ -90,15 +90,11 @@ def select() -> None:
     target = _resolve_target(sys.argv[1])
 
     next_session_path = get_ssot_var("next_session", NEXT_SESSION_PATH)
-    if not write_atomic(next_session_path, target):
-        # DISPATCH_FAILED's "state persisted" message below would be a lie
-        # if this didn't actually land — surface it separately so the two
-        # failure modes (persist vs. dispatch) aren't conflated in the log.
-        jlog(
-            "CORE",
-            f"NEXT_SESSION_WRITE_FAILED: {next_session_path}",
-            level="ERROR",
-        )
+    # DISPATCH_FAILED's "state persisted" message below would be a lie if
+    # this didn't actually land — persist_next_session logs the failure
+    # separately so the two failure modes (persist vs. dispatch) aren't
+    # conflated in the log.
+    persist_next_session(next_session_path, target)
     jlog("CORE", f"SWITCH_REQUEST: {target}")
     notify(f"Switching to {target.capitalize()}...")
 

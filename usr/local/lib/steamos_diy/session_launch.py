@@ -33,11 +33,11 @@ from utils import (
     jlog,
     load_yaml_safe,
     notify,
+    persist_next_session,
     read_session_target,
     sd_notify_ready,
     shlex_split_or_fallback,
     spawn_native,
-    write_atomic,
 )
 
 # ---------------------------------------------------------------------------
@@ -244,12 +244,7 @@ def _monitor_process(
         return False  # Exited early — treat as crash
     except subprocess.TimeoutExpired:
         jlog("CORE", f"VALIDATED_{target.upper()}_STABLE", level="DEBUG")
-        if not write_atomic(next_path, target):
-            jlog(
-                "CORE",
-                f"NEXT_SESSION_WRITE_FAILED: {next_path}",
-                level="ERROR",
-            )
+        persist_next_session(next_path, target)
         notify("Stable", clear_after=True)
         sd_notify_ready()
         return True  # Still running — stable
@@ -309,16 +304,12 @@ def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     )
     target = "desktop"
     notify("Recovery: Starting Desktop...")
-    if not write_atomic(next_path, target):
-        # The single most important write in this file: if it doesn't
-        # land, the next boot re-reads whatever next_session already held
-        # (possibly the same target that just crashed) instead of the
-        # desktop fallback this whole function exists to guarantee.
-        jlog(
-            "CORE",
-            f"NEXT_SESSION_WRITE_FAILED: {next_path}",
-            level="ERROR",
-        )
+    # The single most important write in this file: if it doesn't land,
+    # the next boot re-reads whatever next_session already held (possibly
+    # the same target that just crashed) instead of the desktop fallback
+    # this whole function exists to guarantee — hence the ERROR-level log
+    # persist_next_session emits on failure.
+    persist_next_session(next_path, target)
     _terminate_gracefully(proc)
     return target
 

@@ -20,6 +20,7 @@ import threading
 import time
 
 import session_launch
+import utils
 
 
 def test_build_gamescope_args_survives_malformed_flag(set_ssot):
@@ -266,12 +267,13 @@ def test_monitor_process_logs_when_write_atomic_fails(
     """Regression: write_atomic() used to be void, so a persist failure
     on the stable path (symlink/FIFO at the tmp path, a failed rename)
     was invisible here (found via a third full-file review pass,
-    2026-09-03)."""
+    2026-09-03). Patched at the utils level since 2026-09-16, when the
+    write-or-log shape moved into utils.persist_next_session()."""
     set_ssot()
-    monkeypatch.setattr(session_launch, "write_atomic", lambda *a: False)
+    monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     logged = []
     monkeypatch.setattr(
-        session_launch,
+        utils,
         "jlog",
         lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
     )
@@ -369,12 +371,14 @@ def test_handle_recovery_logs_when_write_atomic_fails(set_ssot, monkeypatch):
     in the file (persists the desktop fallback after a crash) -- a
     silent failure here used to mean the next boot could re-read
     whatever next_session already held, possibly the same target that
-    just crashed (found via a third full-file review pass, 2026-09-03)."""
+    just crashed (found via a third full-file review pass, 2026-09-03).
+    Patched at the utils level since 2026-09-16, when the write-or-log
+    shape moved into utils.persist_next_session()."""
     set_ssot(TERM_TIMEOUT="1.0")
-    monkeypatch.setattr(session_launch, "write_atomic", lambda *a: False)
+    monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     logged = []
     monkeypatch.setattr(
-        session_launch,
+        utils,
         "jlog",
         lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
     )

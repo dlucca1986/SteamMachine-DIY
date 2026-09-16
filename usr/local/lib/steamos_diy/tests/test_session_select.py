@@ -6,6 +6,7 @@ must stay written even if the spawn fails — a helper crash must not
 strand the system without a target for the next boot."""
 
 import session_select
+import utils
 
 
 def test_resolve_target_maps_desktop_keywords():
@@ -70,7 +71,7 @@ def test_select_with_no_argv_is_a_noop(monkeypatch):
     monkeypatch.setattr(session_select.sys, "argv", ["session_select.py"])
     writes = []
     monkeypatch.setattr(
-        session_select, "write_atomic", lambda *a: writes.append(a)
+        session_select, "persist_next_session", lambda *a: writes.append(a)
     )
 
     session_select.select()
@@ -86,11 +87,11 @@ def test_select_persists_state_even_when_dispatch_fails(
     )
     writes = []
 
-    def fake_write_atomic(*a):
+    def fake_persist(*a):
         writes.append(a)
         return True
 
-    monkeypatch.setattr(session_select, "write_atomic", fake_write_atomic)
+    monkeypatch.setattr(session_select, "persist_next_session", fake_persist)
     monkeypatch.setattr(
         session_select, "spawn_native", lambda path, args: 0
     )
@@ -112,15 +113,18 @@ def test_select_logs_when_write_atomic_fails(monkeypatch, tmp_path):
     select() -- the DISPATCH_FAILED log's "state persisted" claim could
     be a lie. Now logs NEXT_SESSION_WRITE_FAILED separately when the
     write itself didn't land (found via a third full-file review pass,
-    2026-09-03)."""
+    2026-09-03). Patched at the utils level since 2026-09-16, when the
+    write-or-log shape moved into utils.persist_next_session(): this
+    still exercises select() -> the real helper -> the failure log,
+    not just the helper in isolation."""
     monkeypatch.setattr(
         session_select.sys, "argv", ["session_select.py", "steam"]
     )
-    monkeypatch.setattr(session_select, "write_atomic", lambda *a: False)
+    monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     monkeypatch.setattr(session_select, "spawn_native", lambda path, args: 1)
     logs = []
     monkeypatch.setattr(
-        session_select,
+        utils,
         "jlog",
         lambda tag, msg, level="INFO": logs.append((tag, msg, level)),
     )

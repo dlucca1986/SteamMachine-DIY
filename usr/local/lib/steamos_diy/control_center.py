@@ -79,7 +79,7 @@ from utils import (
     KONSOLE_BIN,
     PYTHON3_BIN,
     SSOT_CONF_PATH,
-    SYSTEMD_READ_TIMEOUT,
+    SYSTEMD_CALL_TIMEOUT,
     USER_CONFIG_REL,
     VERSION,
     clear_ssot_cache,
@@ -798,17 +798,26 @@ class SDYControlCenter(QMainWindow):
         )
         return self.conf_root / fname
 
+    def _read_or_toast(self, path: Path) -> str | None:
+        """Read a YAML file for an editor; on failure, toast and return
+        None so the caller can bail without touching the editor."""
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as err:
+            # Same QMainWindow.statusBar() Optional-stub caveat as the
+            # ignore in _run_pkexec: never actually None at runtime.
+            self.statusBar().showMessage(  # type: ignore[union-attr]
+                f"Could not load {path.name}: {err}", 3000
+            )
+            return None
+
     def _enter_template_mode(self, context, state, widgets):
         editor, save_btn, tmp_btn, hl, target_combo = widgets
         t_path = self._template_path_for(context)
         if not t_path.exists():
             return
-        try:
-            content = t_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as err:
-            self.statusBar().showMessage(
-                f"Could not load {t_path.name}: {err}", 3000
-            )
+        content = self._read_or_toast(t_path)
+        if content is None:
             return
         state["cache"] = editor.toPlainText()
         editor.setPlainText(content)
@@ -896,16 +905,11 @@ class SDYControlCenter(QMainWindow):
         """Load the selected global YAML file into the editor."""
         path = self.conf_root / self.combo_global_files.currentText()
         if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as err:
-                self.statusBar().showMessage(
-                    f"Could not load {path.name}: {err}", 3000
-                )
+            content = self._read_or_toast(path)
+            if content is None:
                 return
             self.global_editor.setPlainText(content)
-            if self.global_hl:
-                self.global_hl.rehighlight()
+            self.global_hl.rehighlight()
             self.global_editor.document().setModified(False)
 
     def save_global_config(self):
@@ -926,19 +930,14 @@ class SDYControlCenter(QMainWindow):
         name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as err:
-                self.statusBar().showMessage(
-                    f"Could not load {path.name}: {err}", 3000
-                )
+            content = self._read_or_toast(path)
+            if content is None:
                 return
             self.game_editor.setPlainText(content)
         else:
             scaffold = self._scaffold_game_profile(raw, name)
             self.game_editor.setPlainText(scaffold)
-        if self.game_hl:
-            self.game_hl.rehighlight()
+        self.game_hl.rehighlight()
         self.game_editor.document().setModified(False)
 
     def _scaffold_game_profile(self, raw, name):
@@ -1083,7 +1082,7 @@ class SDYControlCenter(QMainWindow):
                         text=True,
                         errors="replace",
                         check=True,
-                        timeout=SYSTEMD_READ_TIMEOUT,
+                        timeout=SYSTEMD_CALL_TIMEOUT,
                     )
                     # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)

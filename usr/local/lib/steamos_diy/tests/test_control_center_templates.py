@@ -85,11 +85,12 @@ class _FakeStatusBar:
 class _FakeWindow:
     """Stand-in for SDYControlCenter's toggle_template + the
     _enter_template_mode/_exit_template_mode/_template_path_for/
-    _template_widgets_for/load_global_file/load_game_file it delegates
-    to (bound straight from the real class - only the Qt-widget leaves
-    are faked)."""
+    _template_widgets_for/_read_or_toast/load_global_file/load_game_file
+    it delegates to (bound straight from the real class - only the
+    Qt-widget leaves are faked)."""
 
     _template_widgets_for = _SCC._template_widgets_for
+    _read_or_toast = _SCC._read_or_toast
     _enter_template_mode = _SCC._enter_template_mode
     _exit_template_mode = _SCC._exit_template_mode
     _template_path_for = _SCC._template_path_for
