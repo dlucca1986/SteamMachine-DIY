@@ -53,6 +53,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
 | `STEAM` | `BAD_FLAG_ENTRY: <flag> - <error>` | WARN | A `flags:` entry had an unbalanced quote; degraded to a naive whitespace split and still ran. |
+| `STEAM` | `NOFILE_LIMIT_RAISE_FAILED: <error>` | WARN | Couldn't raise the process's open-file-descriptor limit before launch — the session still starts, just with whatever limit it already had. |
 | `STEAM` | `LAUNCH_ARGS: <full gamescope+Steam argv>` | INFO | The exact command line used to launch this session — first place to look for a wrong flag. |
 | `STEAM` | `POST_START_CMDS_SKIPPED: session crashed before delay elapsed` | DEBUG | `post_start_cmds` were **not** run because the session was already detected as crashed by the time the delay elapsed. |
 | `STEAM` | `BAD_POST_START_CMD: <cmd> - <error>` | WARN | A `post_start_cmds` entry had an unbalanced quote; degraded to a naive split and still ran. |
@@ -68,6 +69,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `CORE` | `SIG_<N>: Shutting down...` | INFO | `SIGTERM`/`SIGINT` received — clean shutdown in progress, not a crash. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
 | `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | Couldn't restart the launcher service live to apply the switch immediately, but the target was still written to disk — it takes effect on the next boot/restart regardless. |
+| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted both from a post-crash Desktop-recovery write and from a switch request's own persist step. |
 
 ### Game launch (`sdy.py`)
 
