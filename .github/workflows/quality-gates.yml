@@ -11,6 +11,13 @@ on:
   pull_request:
     branches: [testing, stable]
 
+# Every step below is read-only (checkout, install tooling, run linters/tests)
+# — no release, no PR comment, no push. Explicit least-privilege GITHUB_TOKEN
+# scope instead of inheriting the repo/org default (which can be read-write),
+# per CodeQL's actions/missing-workflow-permissions finding (2026-09-20).
+permissions:
+  contents: read
+
 jobs:
   gates:
     runs-on: ubuntu-latest
