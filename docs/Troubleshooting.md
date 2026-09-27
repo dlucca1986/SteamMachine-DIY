@@ -60,8 +60,8 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command fired successfully. |
 | `STEAM` | `POST_START_CMDS_FAILED: <error>` | ERROR | The entire post-start daemon thread crashed unexpectedly (not a single bad command — something broke the loop itself). |
 | `CORE` | `VALIDATED_<TARGET>_STABLE` | DEBUG | The session survived the validation window and was declared stable. |
-| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | The session process ignored `SIGTERM`; force-killing with `SIGKILL`. |
-| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | The process survived even `SIGKILL` — almost always stuck in uninterruptible I/O (D-state). Nothing more the launcher can do; systemd's own `TimeoutStopSec` eventually reaps the cgroup. |
+| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | During crash recovery (after `EARLY_EXIT_RECOVERY`), the session process ignored `SIGTERM`; force-killing with `SIGKILL`. Never logged by a normal stop/reboot. |
+| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | During crash recovery, the process survived even `SIGKILL` — almost always stuck in uninterruptible I/O (D-state). Nothing more the launcher can do; systemd's own `TimeoutStopSec` eventually reaps the cgroup. |
 | `CORE` | `EARLY_EXIT_RECOVERY: process exited during the validation window...` | ERROR | A crash (or a switch request that raced the launch) was detected — forcing a fallback to Desktop. |
 | `CORE` | `BINARY_NOT_FOUND: <path> - <error>` | ERROR | The configured session binary (gamescope/Steam/Plasma) doesn't exist at that path — check the relevant `bin_*` SSoT key. |
 | `CORE` | `OS_ERROR: <error>` | ERROR | A generic OS-level failure spawning the session (permissions, resource limits, etc). |

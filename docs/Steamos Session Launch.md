@@ -94,7 +94,7 @@ The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit 
 
 | Event | Handler | Exit code | systemd effect |
 | :--- | :--- | :--- | :--- |
-| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — terminates child gracefully, then exits | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
+| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` (built by `_make_term_handler`) — forwards `SIGTERM` to the session and exits; the child is reaped on the way out. It deliberately does **not** wait/escalate itself: it runs on the main thread, which is blocked in `proc.wait()`, so a wait from inside the handler could never reap the child. Escalation for a session ignoring `SIGTERM` is left to the unit's `TimeoutStopSec` | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
 | Session ended naturally (switch or crash recovery) | `run()` — exits after `NOTIFY_DELAY` pause | `75` (`EX_TEMPFAIL`) | Restart triggered — launcher re-reads `next_session` and spawns the new target |
 
 `NOTIFY_DELAY` (SSoT, default `0.4s`) is a brief sleep inserted between the TTY transition message and `sys.exit(75)`, giving the user time to read the message before the service restarts.

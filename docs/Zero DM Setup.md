@@ -41,7 +41,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 >
 > If the limit is ever hit, `steamos_diy.service` stops retrying and TTY1 goes black — with `getty@tty1` masked, there is no automatic way back. **Recovery**: switch to another TTY (`Ctrl+Alt+F2`) or SSH in, then run `sudo systemctl reset-failed steamos_diy.service && sudo systemctl start steamos_diy.service` after fixing the underlying issue (check `journalctl -t CORE -t STEAM -t SYSTEM` for the crash cause first — `-u steamos_diy.service` only shows the restart loop itself, not why each attempt failed).
 *   **TTY Cleanup**: `TTYReset=yes` and `TTYVTDisallocate=yes` ensure the terminal is fully reset between session restarts, preventing display artifacts.
-*   **Kill Policy**: `KillMode=mixed` sends `SIGTERM` to the main process only (not the whole cgroup), allowing `session_launch.py`'s signal handler to drain the child process before exiting. `TimeoutStopSec=10` sets the hard limit before systemd escalates to `SIGKILL`.
+*   **Kill Policy**: `KillMode=mixed` sends `SIGTERM` to the main process only (not the whole cgroup), allowing `session_launch.py`'s signal handler to forward it to the session (gamescope/Steam or the desktop) and exit once that has ended. `TimeoutStopSec=10` sets the hard limit before systemd escalates to `SIGKILL` on everything left in the cgroup — the only escalation path for a session that ignores `SIGTERM` on a normal stop.
 
 > [!IMPORTANT]
 > **Plasma 6 & plasmalogin**
