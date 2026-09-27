@@ -62,6 +62,25 @@ Both surfaced while researching other gamescope-session forks/projects for porta
     `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
 
 ### Fixed
+- Control Center, Game Profiles tab: a "Scan History" could make the next Save overwrite the
+  **wrong game's profile**. Repopulating the combo only restored its text when it wasn't in the
+  refreshed list, so a listed selection that wasn't the first entry fell back to the first one
+  while the editor still held the selected game's profile — and Save targets the combo's text.
+  Confirmed against a real `QComboBox`; the existing test only used a single item, which is the
+  first entry either way. Found by the 2026-09-27 KISS audit, while fixing the entry below.
+- Control Center: switching the target file in either YAML editor's selector silently dropped
+  unsaved edits — only closing the window asked. It now prompts Discard / Cancel first, and
+  Cancel puts the selector back on the file the edits belong to. Deliberately no Save option
+  there: by the time the selector's signal fires it already names the new file, so saving would
+  write the edits over it. The Control Center doc also claimed unsaved edits were cached across
+  game switches, which was never true (only across template-preview toggles) — corrected.
+- `install.sh`: a `set -e` abort between building the C-Core into its temp file next to
+  `/usr/local/lib/steamos_diy` and installing it left a stray `tmp.*.so` behind; an `EXIT` trap
+  now removes it on every path.
+- `updater.py`'s comment (and the Utilities Engine doc) claimed the `install.sh` re-hash right
+  before `pkexec` closed the TOCTOU window "down to the few ms" before exec. It narrows it: the
+  (unbounded) `pkexec` password prompt still follows the check, and the other extracted files
+  `install.sh` copies as root are never re-verified. Accepted residual, now described honestly.
 - Completing the "never actually read" sweep the bash audit started: `etc/default/steamos_diy.conf`,
   `etc/systemd/system/steamos_diy.service`, and 3 of the 4 `etc/skel/.config/steamos_diy/*.yaml`
   files had a stale `# VERSION:` header (2.1.6/2.1.7 against the real 2.1.8) — `bump-version.sh`'s
