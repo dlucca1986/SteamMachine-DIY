@@ -79,6 +79,9 @@ class _FakeEditableCombo:
     def setCurrentIndex(self, index):  # pylint: disable=invalid-name
         self._text = self.items[index]
 
+    def findText(self, text):  # pylint: disable=invalid-name
+        return self.items.index(text) if text in self.items else -1
+
 
 # pylint: disable-next=too-few-public-methods
 class _FakeComboWindow:
@@ -95,6 +98,7 @@ class _FakeComboWindow:
     _update_game_combo_ui = (
         control_center.SDYControlCenter._update_game_combo_ui
     )
+    _select_game_text = control_center.SDYControlCenter._select_game_text
 
     def __init__(self, games_conf_dir, typed_text=""):
         self.games_conf_dir = games_conf_dir

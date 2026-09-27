@@ -22,16 +22,9 @@ review pass)."""
 from types import SimpleNamespace
 
 import control_center
+from test_control_center import _FakeDocument
 
 _SCC = control_center.SDYControlCenter
-
-
-class _FakeDocument:  # pylint: disable=too-few-public-methods
-    def __init__(self):
-        self.modified = None
-
-    def setModified(self, value):  # pylint: disable=invalid-name
-        self.modified = value
 
 
 class _FakeEditor:
@@ -53,12 +46,40 @@ class _FakeCombo:
     def __init__(self, text=""):
         self._text = text
         self.enabled = True
+        self.signals_blocked = False
 
     def currentText(self):  # pylint: disable=invalid-name
         return self._text
 
     def setEnabled(self, value):  # pylint: disable=invalid-name
         self.enabled = value
+
+    def blockSignals(self, value):  # pylint: disable=invalid-name
+        self.signals_blocked = value
+
+    def setCurrentText(self, text):  # pylint: disable=invalid-name
+        self._text = text
+
+    def findText(self, _text):  # pylint: disable=invalid-name
+        return -1  # unlisted: exercises the setEditText branch
+
+    def setEditText(self, text):  # pylint: disable=invalid-name
+        self._text = text
+
+
+# pylint: disable-next=too-few-public-methods
+class _FakeQMessageBox:
+    """Fakes the classmethod-style QMessageBox.question(...) call site."""
+
+    StandardButton = SimpleNamespace(Discard=2, Cancel=4)
+
+    def __init__(self, reply):
+        self._reply = reply
+        self.asked = 0
+
+    def question(self, *_args, **_kwargs):
+        self.asked += 1
+        return self._reply
 
 
 def _noop_widget():
@@ -98,6 +119,8 @@ class _FakeWindow:
     toggle_template = _SCC.toggle_template
     load_global_file = _SCC.load_global_file
     load_game_file = _SCC.load_game_file
+    _confirm_discard = _SCC._confirm_discard
+    _select_game_text = _SCC._select_game_text
 
     def __init__(self, conf_root):
         self.conf_root = conf_root
@@ -114,8 +137,8 @@ class _FakeWindow:
         self.game_temp_btn = _noop_widget()
         self.game_hl = _noop_widget()
         self.view_states = {
-            "global": {"is_template": False, "cache": ""},
-            "games": {"is_template": False, "cache": ""},
+            "global": {"is_template": False, "cache": "", "loaded": ""},
+            "games": {"is_template": False, "cache": "", "loaded": ""},
         }
 
     def statusBar(self):  # pylint: disable=invalid-name
@@ -194,3 +217,81 @@ def test_enter_template_mode_survives_non_utf8_content(tmp_path):
     assert win.combo_global_files.enabled is True  # unchanged
     assert win.global_editor.toPlainText() == "live: global\n"  # unchanged
     assert win.statusBar().messages
+
+
+# ---------------------------------------------------------------------------
+# load_global_file / load_game_file - switching the combo to another file
+# must not silently drop unsaved edits (KISS audit, 2026-09-27): closeEvent
+# already guarded them, a file switch didn't.
+# ---------------------------------------------------------------------------
+
+
+def _dirty_window(tmp_path, monkeypatch, reply):
+    (tmp_path / "config.example.yaml").write_text("other: global\n")
+    games_dir = tmp_path / "games.d"
+    games_dir.mkdir()
+    (games_dir / "OtherGame.yaml").write_text("other: game\n")
+    box = _FakeQMessageBox(reply)
+    monkeypatch.setattr(control_center, "QMessageBox", box)
+    win = _FakeWindow(tmp_path)
+    win.view_states["global"]["loaded"] = "config.yaml"
+    win.view_states["games"]["loaded"] = "MyGame"
+    win.global_editor.document().setModified(True)
+    win.game_editor.document().setModified(True)
+    return win, box
+
+
+def test_global_switch_cancel_keeps_edits_and_reverts_combo(
+    tmp_path, monkeypatch
+):
+    win, box = _dirty_window(tmp_path, monkeypatch, reply=4)
+    win.combo_global_files = _FakeCombo("config.example.yaml")
+
+    win.load_global_file()
+
+    assert box.asked == 1
+    assert win.global_editor.toPlainText() == "live: global\n"
+    assert win.combo_global_files.currentText() == "config.yaml"
+    assert win.combo_global_files.signals_blocked is False
+
+
+def test_global_switch_discard_loads_new_file(tmp_path, monkeypatch):
+    win, _box = _dirty_window(tmp_path, monkeypatch, reply=2)
+    win.combo_global_files = _FakeCombo("config.example.yaml")
+
+    win.load_global_file()
+
+    assert win.global_editor.toPlainText() == "other: global\n"
+    assert win.view_states["global"]["loaded"] == "config.example.yaml"
+
+
+def test_game_switch_cancel_keeps_edits_and_reverts_combo(
+    tmp_path, monkeypatch
+):
+    win, box = _dirty_window(tmp_path, monkeypatch, reply=4)
+    win.combo_games = _FakeCombo("OtherGame")
+
+    win.load_game_file("OtherGame")
+
+    assert box.asked == 1
+    assert win.game_editor.toPlainText() == "live: game\n"
+    assert win.combo_games.currentText() == "MyGame"
+
+
+def test_game_switch_discard_loads_new_file(tmp_path, monkeypatch):
+    win, _box = _dirty_window(tmp_path, monkeypatch, reply=2)
+
+    win.load_game_file("OtherGame")
+
+    assert win.game_editor.toPlainText() == "other: game\n"
+    assert win.view_states["games"]["loaded"] == "OtherGame"
+
+
+def test_clean_editor_switches_without_asking(tmp_path, monkeypatch):
+    win, box = _dirty_window(tmp_path, monkeypatch, reply=4)
+    win.game_editor.document().setModified(False)
+
+    win.load_game_file("OtherGame")
+
+    assert box.asked == 0
+    assert win.game_editor.toPlainText() == "other: game\n"

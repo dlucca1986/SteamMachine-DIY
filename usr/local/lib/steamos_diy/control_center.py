@@ -383,10 +383,12 @@ class SDYControlCenter(QMainWindow):
         self.service_label = None
         self._service_timer = None
 
-        # Per-tab template view state
+        # Per-tab editor state: template view, plus the combo entry the
+        # editor's content was last loaded from ("loaded"), so a declined
+        # discard can put the combo back on it.
         self.view_states = {
-            "global": {"is_template": False, "cache": ""},
-            "games": {"is_template": False, "cache": ""},
+            "global": {"is_template": False, "cache": "", "loaded": ""},
+            "games": {"is_template": False, "cache": "", "loaded": ""},
         }
 
         self._setup_ui()
@@ -901,9 +903,46 @@ class SDYControlCenter(QMainWindow):
             sels.append(sel)
         editor.setExtraSelections(sels)
 
+    def _confirm_discard(self, editor, loaded):
+        """Ask before a file switch drops unsaved edits; True to proceed.
+
+        Discard/Cancel only, no Save (unlike closeEvent): by the time the
+        combo signal fires, currentText() already names the NEW file, so
+        the save_* methods would write these edits over it.
+        """
+        if not editor.document().isModified():
+            return True
+        reply = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            f"Discard unsaved changes to {loaded or 'the editor'}?",
+            QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        return reply == QMessageBox.StandardButton.Discard
+
+    def _select_game_text(self, text):
+        """Show *text* in the editable games combo, selecting it if listed.
+
+        setEditText() alone would leave the index on another entry.
+        """
+        idx = self.combo_games.findText(text)
+        if idx >= 0:
+            self.combo_games.setCurrentIndex(idx)
+        else:
+            self.combo_games.setEditText(text)
+
     def load_global_file(self):
         """Load the selected global YAML file into the editor."""
-        path = self.conf_root / self.combo_global_files.currentText()
+        state = self.view_states["global"]
+        name = self.combo_global_files.currentText()
+        if not self._confirm_discard(self.global_editor, state["loaded"]):
+            # Signals blocked: currentTextChanged would re-enter here.
+            self.combo_global_files.blockSignals(True)
+            self.combo_global_files.setCurrentText(state["loaded"])
+            self.combo_global_files.blockSignals(False)
+            return
+        path = self.conf_root / name
         if path.exists():
             content = self._read_or_toast(path)
             if content is None:
@@ -911,6 +950,7 @@ class SDYControlCenter(QMainWindow):
             self.global_editor.setPlainText(content)
             self.global_hl.rehighlight()
             self.global_editor.document().setModified(False)
+            state["loaded"] = name
 
     def save_global_config(self):
         """Atomically save the global YAML editor content to disk."""
@@ -927,6 +967,11 @@ class SDYControlCenter(QMainWindow):
         """
         if not raw or "/" in raw:
             return
+        state = self.view_states["games"]
+        if not self._confirm_discard(self.game_editor, state["loaded"]):
+            # `activated` only fires on user interaction, so no re-entry.
+            self._select_game_text(state["loaded"])
+            return
         name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
@@ -939,6 +984,7 @@ class SDYControlCenter(QMainWindow):
             self.game_editor.setPlainText(scaffold)
         self.game_hl.rehighlight()
         self.game_editor.document().setModified(False)
+        state["loaded"] = raw
 
     def _scaffold_game_profile(self, raw, name):
         """Build default YAML profile; includes SDY_ID header if AppID present.
@@ -1119,10 +1165,8 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.addItems(items)
         else:
             self.combo_games.setPlaceholderText("Journal unavailable.")
-        if typed in items:
-            self.combo_games.setCurrentIndex(items.index(typed))
-        elif typed:
-            self.combo_games.setEditText(typed)
+        if typed:
+            self._select_game_text(typed)
 
     def _merge_on_disk_profiles(self, detected):
         gdir = self.games_conf_dir
