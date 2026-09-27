@@ -183,8 +183,13 @@ class UpdateManager(QObject):
         # time: the QMessageBox above can block on the user for an
         # unbounded time, during which src_dir (under the user's own
         # home, writable by that same user) could be tampered with by
-        # anything else already running as that user — this closes the
-        # TOCTOU window down to the few ms between this check and exec.
+        # anything else already running as that user. This narrows the
+        # TOCTOU window, it does not close it: pkexec's password prompt
+        # still sits between this check and bash reading install.sh, and
+        # the other extracted files install.sh then copies as root are
+        # not re-checked at all. Closing it fully would need the verify
+        # to run root-side — not worth it against a same-user attacker,
+        # who could just as well spoof the password prompt itself.
         install_sh = src_dir / "install.sh"
         try:
             verified = verify_file_sha256(install_sh, expected_sha256)
