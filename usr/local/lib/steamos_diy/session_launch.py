@@ -20,6 +20,7 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from utils import (
@@ -387,6 +388,37 @@ def _run_session(
     return target, ret_code
 
 
+def _make_term_handler(
+    proc_holder: list[subprocess.Popen[Any] | None],
+) -> Callable[[int, Any], None]:
+    """Build the SIGTERM/SIGINT handler bound to run()'s proc_holder cell.
+
+    The handler only signals the child and exits — it must NOT wait on it
+    (i.e. no _terminate_gracefully here). It runs on the main thread,
+    which in the stable phase is blocked inside _run_session's untimed
+    proc.wait(): that call holds Popen's internal waitpid lock, so a wait
+    from inside the handler can never reap the child and always ran out
+    both TERM_TIMEOUT windows — ~10s per stop/reboot, plus a false
+    SIGTERM_TIMEOUT/SIGKILL_TIMEOUT pair in the journal (KISS audit,
+    2026-09-27). sys.exit() unwinds out of that wait, releasing the lock,
+    and the `with Popen` block's own __exit__ then reaps the child;
+    escalation to SIGKILL for a child ignoring SIGTERM is left to the
+    unit's KillMode=mixed + TimeoutStopSec, which fires within the same
+    10s the old in-handler escalation needed anyway.
+
+    Exit code 0 — explicit stop, do NOT trigger a systemd restart.
+    """
+
+    def _handle_term(signum: int, _frame: Any) -> None:
+        jlog("CORE", f"SIG_{signum}: Shutting down...")
+        live_proc = proc_holder[0]
+        if live_proc is not None and live_proc.returncode is None:
+            live_proc.terminate()
+        sys.exit(0)
+
+    return _handle_term
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -408,17 +440,7 @@ def run() -> None:
     # without flake8 F824 false-positives).
     proc_holder: list[subprocess.Popen[Any] | None] = [None]
 
-    def _handle_term(signum: int, _frame: Any) -> None:
-        """Drain the live process and exit cleanly on SIGTERM/SIGINT.
-
-        Exit code 0 — explicit stop, do NOT trigger a systemd restart.
-        """
-        jlog("CORE", f"SIG_{signum}: Shutting down...")
-        live_proc = proc_holder[0]
-        if live_proc is not None:
-            _terminate_gracefully(live_proc)
-        sys.exit(0)
-
+    _handle_term = _make_term_handler(proc_holder)
     signal.signal(signal.SIGTERM, _handle_term)
     signal.signal(signal.SIGINT, _handle_term)
 

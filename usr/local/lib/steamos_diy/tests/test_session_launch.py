@@ -15,10 +15,13 @@ Desktop after a crash or is left with a black screen — arguably the
 most safety-critical behavior in the whole project, and previously
 untested."""
 
+import os
+import signal
 import subprocess
 import threading
 import time
 
+import pytest
 import session_launch
 import utils
 
@@ -341,6 +344,43 @@ def test_terminate_gracefully_returns_even_if_still_alive_after_sigkill(
     session_launch._terminate_gracefully(_StuckProc())
 
     assert calls["kill"] == 1
+
+
+def test_term_handler_stops_stable_session_promptly(tmp_path, set_ssot):
+    """Regression: the SIGTERM handler used to call _terminate_gracefully,
+    whose proc.wait() can never reap the child while the interrupted main
+    thread is itself blocked in _run_session's untimed stable-phase
+    proc.wait() (Popen's waitpid lock is held) — every stop ran out both
+    TERM_TIMEOUT windows and logged a false SIGTERM_TIMEOUT/SIGKILL_TIMEOUT
+    pair (KISS audit, 2026-09-27). Runs on pytest's main thread because
+    Python only delivers signals there, exactly like the real launcher."""
+    set_ssot(TERM_TIMEOUT="2.0")
+    proc_holder = [None]
+    previous = signal.signal(
+        signal.SIGTERM, session_launch._make_term_handler(proc_holder)
+    )
+    # Fires well after the 0.1s validation window, i.e. in the stable phase.
+    timer = threading.Timer(0.6, os.kill, (os.getpid(), signal.SIGTERM))
+    start = time.monotonic()
+    try:
+        timer.start()
+        with pytest.raises(SystemExit) as exc:
+            session_launch._run_session(
+                ["/bin/sleep", "30"],
+                str(tmp_path / "next_session"),
+                "steam",
+                0.1,
+                proc_holder,
+                [],
+            )
+    finally:
+        timer.cancel()
+        signal.signal(signal.SIGTERM, previous)
+
+    assert exc.value.code == 0
+    # Old code: >= 2 x TERM_TIMEOUT (4s). Fixed: child reaped right away.
+    assert time.monotonic() - start < 2.0
+    assert proc_holder[0] is None
 
 
 # ---------------------------------------------------------------------------

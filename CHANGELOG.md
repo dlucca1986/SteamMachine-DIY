@@ -62,6 +62,16 @@ Both surfaced while researching other gamescope-session forks/projects for porta
     `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
 
 ### Fixed
+- `session_launch.py`: every stop of a running session (reboot, shutdown, `systemctl stop`,
+  `install.sh --update`) took ~10 seconds and logged a false `SIGTERM_TIMEOUT` (WARN) +
+  `SIGKILL_TIMEOUT` (ERROR, "D-state?") pair. The SIGTERM handler waited on the session
+  process, but it runs on the main thread, which in the stable phase is itself blocked in an
+  untimed `proc.wait()` holding Popen's internal waitpid lock — the handler's wait could
+  never reap the already-exited child and always ran out both 5s `TERM_TIMEOUT` windows.
+  The handler now only signals the child and exits; the surrounding `with Popen` block reaps
+  it, and a child ignoring SIGTERM is still killed by the unit's `KillMode=mixed` +
+  `TimeoutStopSec`. Reproduced in a scratch script, regression-tested, and confirmed on real
+  hardware: stop now completes in ~85ms after `SIG_15`, with no timeout entries.
 - Control Center, Game Profiles tab: a "Scan History" could make the next Save overwrite the
   **wrong game's profile**. Repopulating the combo only restored its text when it wasn't in the
   refreshed list, so a listed selection that wasn't the first entry fell back to the first one
