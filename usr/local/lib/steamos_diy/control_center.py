@@ -1106,7 +1106,11 @@ class SDYControlCenter(QMainWindow):
         # editable combo) — clear() resets the line-edit text along with
         # the item list, and a subsequent Save silently no-ops on the
         # now-empty currentText(). Restore whatever the user had typed
-        # instead of discarding it.
+        # instead of discarding it. An already-listed selection must be
+        # restored too: addItems() on the cleared combo auto-selects
+        # index 0, so the combo showed the FIRST game while the editor
+        # still held the selected one's profile — and Save (which targets
+        # currentText()) overwrote the first game's file with it.
         typed = self.combo_games.currentText()
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
@@ -1115,7 +1119,9 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.addItems(items)
         else:
             self.combo_games.setPlaceholderText("Journal unavailable.")
-        if typed and typed not in items:
+        if typed in items:
+            self.combo_games.setCurrentIndex(items.index(typed))
+        elif typed:
             self.combo_games.setEditText(typed)
 
     def _merge_on_disk_profiles(self, detected):

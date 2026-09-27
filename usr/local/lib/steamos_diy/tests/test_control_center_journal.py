@@ -76,6 +76,9 @@ class _FakeEditableCombo:
     def setEditText(self, text):  # pylint: disable=invalid-name
         self._text = text
 
+    def setCurrentIndex(self, index):  # pylint: disable=invalid-name
+        self._text = self.items[index]
+
 
 # pylint: disable-next=too-few-public-methods
 class _FakeComboWindow:
@@ -119,3 +122,20 @@ def test_update_game_combo_ui_leaves_a_real_selection_untouched(tmp_path):
 
     assert win.combo_games.currentText() == "OtherGame"
     assert win.combo_games.items == ["OtherGame"]
+
+
+def test_update_game_combo_ui_keeps_a_non_first_selection(tmp_path):
+    """Regression: only a typed entry NOT in the new item list was
+    restored, so a listed selection that wasn't the first item fell back
+    to index 0 (addItems auto-selects it) while the editor still held the
+    selected game's profile — Save, which targets currentText(), then
+    overwrote the first game's file with it (KISS audit, 2026-09-27;
+    confirmed against a real QComboBox). The test above only ever used a
+    single item, which is index 0 either way."""
+    gdir = tmp_path / "games.d"
+    win = _FakeComboWindow(gdir, typed_text="Beta (20)")
+
+    win._update_game_combo_ui({"Alpha": "10", "Beta": "20"})
+
+    assert win.combo_games.items[0] != "Beta (20)"  # precondition
+    assert win.combo_games.currentText() == "Beta (20)"
