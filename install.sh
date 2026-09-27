@@ -249,11 +249,14 @@ deploy_files() {
     # setups) would make the ctypes load check below fail on a perfectly
     # good build, and same-filesystem keeps the final install a plain copy.
     TMP_SO="$(mktemp -p "$(dirname "$LIB_DIR")" --suffix=.so)"
+    # Any exit from here on (including a set -e abort in the copy steps
+    # below) must not leave a stray tmp.*.so behind in /usr/local/lib.
+    trap 'rm -f "$TMP_SO"' EXIT
     # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
     gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$TMP_SO" steamos_diy_core.c \
-        || { rm -f "$TMP_SO"; error "C-Core compilation failed. Check gcc output above."; exit 1; }
+        || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
     python3 -c "import ctypes; ctypes.CDLL('$TMP_SO')" 2>/dev/null \
-        || { rm -f "$TMP_SO"; error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
+        || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
     info "C-Core verified and loadable."
 
     if $UPDATE_MODE; then
