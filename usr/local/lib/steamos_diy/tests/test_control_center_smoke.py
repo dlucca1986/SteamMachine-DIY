@@ -168,3 +168,4 @@ def test_save_and_beautify_survive_an_unbuildable_scalar(qapp, captured):
         win.close()
 
     assert len(captured) == 1 and captured[0].startswith("dialog critical")
+

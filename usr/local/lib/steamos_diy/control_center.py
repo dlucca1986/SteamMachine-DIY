@@ -390,12 +390,18 @@ class SDYControlCenter(QMainWindow):
         self.service_label = None
         self._service_timer = None
 
-        # Per-tab editor state: template view, plus the combo entry the
-        # editor's content was last loaded from ("loaded"), so a declined
-        # discard can put the combo back on it.
+        # Per-tab editor state: template view ("cache" holds the real
+        # content during a preview, "dirty" whether it had unsaved edits),
+        # plus the combo entry the editor's content was last loaded from
+        # ("loaded"), so a declined discard can put the combo back on it.
         self.view_states = {
-            "global": {"is_template": False, "cache": "", "loaded": ""},
-            "games": {"is_template": False, "cache": "", "loaded": ""},
+            context: {
+                "is_template": False,
+                "cache": "",
+                "dirty": False,
+                "loaded": "",
+            }
+            for context in ("global", "games")
         }
 
         self._setup_ui()
@@ -834,6 +840,12 @@ class SDYControlCenter(QMainWindow):
         if content is None:
             return
         state["cache"] = editor.toPlainText()
+        # The preview must not read as dirty, but the real content's own
+        # unsaved-edits flag has to survive the round trip: it used to be
+        # cleared on the way in and never restored, so after a preview
+        # neither closeEvent nor a file switch warned about edits that
+        # were still sitting in the editor.
+        state["dirty"] = editor.document().isModified()
         editor.setPlainText(content)
         tmp_btn.setText("⬅️ Back to Editor")
         state["is_template"] = True
@@ -858,7 +870,7 @@ class SDYControlCenter(QMainWindow):
         save_btn.setEnabled(True)
         target_combo.setEnabled(True)
         hl.rehighlight()
-        editor.document().setModified(False)
+        editor.document().setModified(state["dirty"])
 
     def _atomic_save(self, path, content, editor):
         """Validate YAML and persist via the C-Core atomic-write path."""
@@ -1072,6 +1084,12 @@ class SDYControlCenter(QMainWindow):
     # Qt override; camelCase name is mandated by QMainWindow's own API.
     def closeEvent(self, event):  # pylint: disable=invalid-name
         """Qt override: warn before discarding unsaved editor changes."""
+        # Leave any template preview first: edits made before it live only
+        # in the preview's cache, where _dirty_editors can't see them and
+        # the save callables can't reach them.
+        for context, state in self.view_states.items():
+            if state["is_template"]:
+                self.toggle_template(context)
         dirty = self._dirty_editors()
         if not dirty:
             event.accept()

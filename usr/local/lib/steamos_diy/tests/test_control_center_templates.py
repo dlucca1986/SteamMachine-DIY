@@ -138,8 +138,13 @@ class _FakeWindow:
         self.game_temp_btn = _noop_widget()
         self.game_hl = _noop_widget()
         self.view_states = {
-            "global": {"is_template": False, "cache": "", "loaded": ""},
-            "games": {"is_template": False, "cache": "", "loaded": ""},
+            context: {
+                "is_template": False,
+                "cache": "",
+                "dirty": False,
+                "loaded": "",
+            }
+            for context in ("global", "games")
         }
 
     def statusBar(self):  # pylint: disable=invalid-name
@@ -310,3 +315,31 @@ def test_save_game_profile_without_a_name_says_so(tmp_path):
 
     assert win.statusBar().messages
     assert not (tmp_path / "games.d").exists()
+
+
+def test_template_preview_preserves_the_unsaved_edits_flag(tmp_path):
+    """Regression: entering a preview cleared the editor's modified flag
+    and leaving it never restored it — the edits came back, but neither
+    closeEvent nor a file switch warned about them any more (2026-11-09
+    audit, confirmed on the real window)."""
+    (tmp_path / "config.example.yaml").write_text("template: global\n")
+    win = _FakeWindow(tmp_path)
+    win.global_editor.document().setModified(True)
+
+    win.toggle_template("global")
+    assert win.global_editor.document().isModified() is False  # preview
+
+    win.toggle_template("global")
+    assert win.global_editor.toPlainText() == "live: global\n"
+    assert win.global_editor.document().isModified() is True
+
+
+def test_template_preview_keeps_a_clean_editor_clean(tmp_path):
+    (tmp_path / "config.example.yaml").write_text("template: global\n")
+    win = _FakeWindow(tmp_path)
+    win.global_editor.document().setModified(False)
+
+    win.toggle_template("global")
+    win.toggle_template("global")
+
+    assert win.global_editor.document().isModified() is False
