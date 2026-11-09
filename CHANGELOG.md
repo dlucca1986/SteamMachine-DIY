@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   had one real side effect: it stopped Qt from auto-selecting the first game after a scan, a game
   the editor never loaded — so a Save would have written the editor over that game's file. The
   selector now explicitly stays unselected instead of relying on it.
+- Control Center, Game Overrides tab: Save with no game selected or typed did nothing and said
+  nothing — the edit just stayed unsaved, and choosing "Save" when closing the window then kept it
+  open just as silently. It now shows "Select or type a game name before saving".
 
 ---
 

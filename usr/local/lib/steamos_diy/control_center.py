@@ -1012,6 +1012,12 @@ class SDYControlCenter(QMainWindow):
         """Atomically save the current game profile YAML to disk."""
         raw = self.combo_games.currentText().strip()
         if not raw:
+            # Used to return silently: the edit stayed unsaved with no
+            # word, and closeEvent's Save then kept the window open just
+            # as silently (the editor still reads as dirty).
+            self.statusBar().showMessage(
+                "Select or type a game name before saving", 3000
+            )
             return
         if "/" in raw:
             # Same guard as load_game_file: a "/" would escape games.d/.
@@ -1080,9 +1086,10 @@ class SDYControlCenter(QMainWindow):
             for save in dirty:
                 save()
             if self._dirty_editors():
-                # _atomic_save() left the document modified: it hit a
-                # YAMLError/OSError and already showed the error dialog.
-                # Don't discard the edit by closing anyway.
+                # A save left the document modified: _atomic_save() hit
+                # a YAMLError/OSError (error dialog already shown), or
+                # save_game_profile() had no game name (status-bar
+                # message). Don't discard the edit by closing anyway.
                 event.ignore()
                 return
         event.accept()

@@ -120,6 +120,7 @@ class _FakeWindow:
     load_global_file = _SCC.load_global_file
     load_game_file = _SCC.load_game_file
     _confirm_discard = _SCC._confirm_discard
+    save_game_profile = _SCC.save_game_profile
     _select_game_text = _SCC._select_game_text
 
     def __init__(self, conf_root):
@@ -295,3 +296,17 @@ def test_clean_editor_switches_without_asking(tmp_path, monkeypatch):
 
     assert box.asked == 0
     assert win.game_editor.toPlainText() == "other: game\n"
+
+
+def test_save_game_profile_without_a_name_says_so(tmp_path):
+    """Regression: with no game selected or typed, Save returned without
+    writing and without a word — the edit just stayed unsaved, and
+    closeEvent's Save kept the window open just as silently (found
+    2026-11-09, same silent-no-op class as the Scan History fix)."""
+    win = _FakeWindow(tmp_path)
+    win.combo_games = _FakeCombo("   ")
+
+    win.save_game_profile()
+
+    assert win.statusBar().messages
+    assert not (tmp_path / "games.d").exists()
