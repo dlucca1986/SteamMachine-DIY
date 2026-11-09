@@ -72,12 +72,15 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   it, and a child ignoring SIGTERM is still killed by the unit's `KillMode=mixed` +
   `TimeoutStopSec`. Reproduced in a scratch script, regression-tested, and confirmed on real
   hardware: stop now completes in ~85ms after `SIG_15`, with no timeout entries.
-- Control Center, Game Profiles tab: a "Scan History" could make the next Save overwrite the
-  **wrong game's profile**. Repopulating the combo only restored its text when it wasn't in the
-  refreshed list, so a listed selection that wasn't the first entry fell back to the first one
-  while the editor still held the selected game's profile — and Save targets the combo's text.
-  Confirmed against a real `QComboBox`; the existing test only used a single item, which is the
-  first entry either way. Found by the 2026-09-27 KISS audit, while fixing the entry below.
+- Control Center, Game Profiles tab: after a "Scan History", the next Save **silently did
+  nothing**. Repopulating the combo only restored its text when it wasn't in the refreshed list,
+  so an already-listed selection was lost — the combo was left with no selection and empty text
+  while the editor still held the game's profile, and Save (which targets the combo's text)
+  returned without writing or saying anything. The selection is now restored. Found by the
+  2026-09-27 KISS audit, while fixing the entry below. *Corrected 2026-11-09: this entry
+  originally said Save overwrote the first game's profile instead — that only happens on a combo
+  without a placeholder, which auto-selects the first entry; re-checked on the real Control Center
+  window, where the scan's placeholder keeps the selection empty.*
 - Control Center: switching the target file in either YAML editor's selector silently dropped
   unsaved edits — only closing the window asked. It now prompts Discard / Cancel first, and
   Cancel puts the selector back on the file the edits belong to. Deliberately no Save option

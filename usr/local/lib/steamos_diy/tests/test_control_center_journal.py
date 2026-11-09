@@ -62,12 +62,14 @@ class _FakeEditableCombo:
         self._text = ""
 
     def addItems(self, items):  # pylint: disable=invalid-name
-        # Real QComboBox auto-selects index 0 when items land on a
-        # freshly-cleared (no current selection) combo — for an editable
-        # combo that also updates the line-edit text.
+        # No auto-selection, matching the real app: refresh_detected_games
+        # sets the combo's placeholder before every scan, and with a
+        # placeholder set a real QComboBox leaves the index at -1 (text
+        # "") after addItems on a cleared combo. Without one it would
+        # auto-select index 0 instead — the behavior this fake used to
+        # model, which made the 2026-09-27 fix describe the wrong failure
+        # (verified on the real window, 2026-11-09).
         self.items = list(items)
-        if items:
-            self._text = items[0]
 
     # pylint: disable-next=invalid-name,unused-argument
     def setPlaceholderText(self, text):
@@ -130,12 +132,14 @@ def test_update_game_combo_ui_leaves_a_real_selection_untouched(tmp_path):
 
 def test_update_game_combo_ui_keeps_a_non_first_selection(tmp_path):
     """Regression: only a typed entry NOT in the new item list was
-    restored, so a listed selection that wasn't the first item fell back
-    to index 0 (addItems auto-selects it) while the editor still held the
-    selected game's profile — Save, which targets currentText(), then
-    overwrote the first game's file with it (KISS audit, 2026-09-27;
-    confirmed against a real QComboBox). The test above only ever used a
-    single item, which is index 0 either way."""
+    restored, so an already-listed selection was lost on every Scan
+    History — the combo ended up with no selection and empty text while
+    the editor still held the game's profile, and the next Save (which
+    targets currentText()) silently did nothing (fixed 2026-09-27).
+    Originally described as "overwrote the first game's file": true only
+    for a QComboBox without a placeholder, which auto-selects index 0 —
+    re-verified on the real window 2026-11-09, where the scan's
+    placeholder keeps the index at -1."""
     gdir = tmp_path / "games.d"
     win = _FakeComboWindow(gdir, typed_text="Beta (20)")
 
