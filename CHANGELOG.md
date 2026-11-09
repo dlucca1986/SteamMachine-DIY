@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- Docs: the Backup & Recovery page now states plainly what restore's security checks do *not*
+  cover. A backup archive carries the project's code, the systemd unit and the symlink list, and
+  restore puts them back as root — so an archive is as sensitive as a root password, and the
+  checks stop damaged or foreign archives, not one deliberately modified by a program already
+  running as you. Accepted limit of the design (no code change), same class as the updater's.
+
 ### Fixed
 - `install.sh`: on a user account that had never logged into a desktop (no `~/.config` yet), the
   installer created `~/.config` itself — as root, and only its own `steamos_diy` subfolder was

@@ -82,6 +82,13 @@ The restore tool implements multiple layers of validation before writing anythin
 * **Link manifest validation**: Every `link → target` pair from the manifest (or mined from a legacy script) must resolve inside the allow-list on **both** ends, or it is rejected and logged. No shell is ever involved in link reconstruction.
 * **Atomic extraction**: Each file is written to a temporary sibling and `os.replace()`d into place — a crash or power loss mid-restore can never leave a target missing or truncated, and (like `backup.py`'s own archive write) this still avoids `ETXTBSY` when replacing a currently-running binary, since `os.replace()` swaps the directory entry instead of truncating the file in place.
 
+> [!WARNING]
+> **What these checks do not cover — treat a backup archive like a root password**
+>
+> The layers above reject archives that are damaged, malformed, or come from another tool. They cannot tell a genuine backup from one that was deliberately modified: an archive legitimately contains the project's own code (`/usr/local/lib/steamos_diy`), the systemd unit and the symlink manifest, and a restore puts all of that back with root privileges. Archives are stored in `~/.config/steamos_diy/backups/`, a folder your own user (and any program running as you) can write to.
+>
+> This is an accepted limit of the design, not something the restore tool tries to defend against: only restore archives you created yourself or fully trust, and keep copies you care about somewhere other programs can't modify them.
+
 ## ⚠️ Important Notes
 * **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.
 * **Ownership**: The restore tool is aware of your `SUDO_USER` and will ensure that files in your home directory are not locked as "root" after extraction.
