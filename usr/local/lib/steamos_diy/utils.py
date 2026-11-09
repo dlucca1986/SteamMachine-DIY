@@ -231,7 +231,11 @@ def _load_ssot_cache() -> None:
                 _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
     except (OSError, UnicodeDecodeError) as err:
         jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
-    os.environ.update(_SSOT_CACHE)
+    # Not os.environ.update(): one entry the OS refuses as an environment
+    # variable (a line starting with "=", a NUL byte) raised straight out
+    # of every get_ssot_var() caller — session_launch.py included, which
+    # then crash-looped at boot over a single stray character.
+    apply_env_map(_SSOT_CACHE)
 
 
 @overload
@@ -379,12 +383,23 @@ def persist_next_session(path: str | Path, target: str) -> bool:
 
 
 def apply_env_map(data_dict: dict[str, Any] | None) -> None:
-    """Inject *data_dict* into os.environ; skips None values."""
+    """Inject *data_dict* into os.environ; skips None values.
+
+    An entry the OS can't take as an environment variable — an empty
+    name, a name containing "=", a NUL byte in either part — is skipped
+    with a warning instead of raising: the input is hand-edited config
+    (the SSoT, a YAML env_vars block) read on the session boot path and
+    on every game launch, where one bad line must not take down the rest.
+    """
     if not isinstance(data_dict, dict):
         return
     for key, val in data_dict.items():
-        if val is not None:
+        if val is None:
+            continue
+        try:
             os.environ[str(key)] = str(val)
+        except (ValueError, OSError) as err:
+            jlog("CORE", f"BAD_ENV_ENTRY: {key!r} - {err}", level="WARN")
 
 
 def spawn_native(path: str, args: list[str]) -> int:

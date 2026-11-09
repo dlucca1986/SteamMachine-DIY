@@ -17,6 +17,7 @@ extraction behavior are worth pinning even without full network mocking."""
 import hashlib
 import io
 import json
+import os
 import subprocess
 import tarfile
 from types import SimpleNamespace
@@ -47,6 +48,46 @@ def test_get_ssot_num_falls_back_on_stray_comma(set_ssot):
     """A decimal comma is a realistic hand-edit mistake (locale habit)."""
     set_ssot(POST_START_DELAY="2,0")
     assert utils.get_ssot_num("POST_START_DELAY", 2.0) == 2.0
+
+
+def test_get_ssot_var_survives_a_line_the_os_rejects(tmp_path, monkeypatch):
+    """Regression: the parsed SSoT was pushed into os.environ in one
+    update(), which raises on an entry the OS refuses as an environment
+    variable — a line starting with "=" (empty name) or one holding a NUL
+    byte. That escaped every get_ssot_var() caller, session_launch.py
+    included: one stray character crash-looped the session at boot
+    (2026-11-09 audit). The rest of the file must still load."""
+    conf_path = tmp_path / "steamos_diy.conf"
+    conf_path.write_text("=oops\nbin_gs=/usr/bin/a\x00b\nTERM_TIMEOUT=7.5\n")
+    monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
+    utils.clear_ssot_cache()
+
+    assert utils.get_ssot_var("TERM_TIMEOUT", "5.0") == "7.5"
+    assert os.environ["TERM_TIMEOUT"] == "7.5"
+
+
+def test_apply_env_map_skips_entries_the_os_rejects(monkeypatch):
+    """Regression: a YAML env_vars key holding "=" (or empty, or a NUL in
+    the value) raised ValueError/OSError out of apply_env_map — uncaught
+    on the session boot path and on every game launch through sdy."""
+    logged = []
+    monkeypatch.setattr(
+        utils,
+        "jlog",
+        lambda tag, msg, level="INFO": logged.append((msg, level)),
+    )
+
+    utils.apply_env_map(
+        {"MANGOHUD=1": 1, "": "x", "SDY_BAD": "a\x00b", "SDY_GOOD": 1}
+    )
+
+    assert os.environ["SDY_GOOD"] == "1"
+    assert "SDY_BAD" not in os.environ
+    assert len(logged) == 3
+    assert all(
+        msg.startswith("BAD_ENV_ENTRY:") and level == "WARN"
+        for msg, level in logged
+    )
 
 
 def test_get_ssot_var_survives_non_utf8_conf_file(tmp_path, monkeypatch):

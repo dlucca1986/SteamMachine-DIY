@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- A single malformed line could stop the session from starting. An SSoT line beginning with `=`,
+  or an `env_vars:` key containing `=` (or empty, or a NUL byte in a value), is something the OS
+  refuses as an environment variable; the resulting error was not handled anywhere, so the session
+  launcher crashed on every start (black TTY once systemd gives up) and `sdy` failed to launch the
+  game. Such an entry is now skipped with a `BAD_ENV_ENTRY` warning and everything else is
+  applied. Found by the 2026-11-09 audit.
 - Control Center: after a successful restore the Global Options and Game Overrides editors kept
   showing the configuration from *before* the restore, so the next Save wrote it straight back
   over the restored file. Editors with nothing unsaved in them are now re-read from disk when an

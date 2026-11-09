@@ -134,6 +134,7 @@ Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejec
 | :--- | :--- | :--- | :--- |
 | `CORE` | `SSOT_READ_ERROR: <error>` | DEBUG | Couldn't read or decode `/etc/default/steamos_diy.conf` — every SSoT lookup degrades to its own built-in default for the rest of the process. |
 | `CORE` | `BAD_SSOT_NUM: <key> - using <default>` | WARN | A numeric SSoT value (a timeout, delay, or count) didn't parse as a valid finite number — the built-in default was used instead. |
+| `CORE` | `BAD_ENV_ENTRY: <name> - <error>` | WARN | An entry from the SSoT or from a YAML `env_vars:` block can't be an environment variable (empty name, a `=` inside the name, a NUL byte) — that one entry was skipped, everything else was applied. Check the named line. |
 | `CORE` | `YAML_LOAD_ERROR: <path> - <error>` | DEBUG | Couldn't read or decode a YAML config/profile file. |
 | `CORE` | `YAML_PARSE_ERROR: <path> - <error>` | DEBUG | The YAML file has a syntax error. |
 | `CORE` | `YAML_NOT_MAPPING: <path>` | WARN | The YAML file parsed successfully but its root isn't a `key: value` mapping (e.g. a bare list) — treated as empty. |

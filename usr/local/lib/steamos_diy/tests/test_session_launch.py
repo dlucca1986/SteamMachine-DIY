@@ -67,6 +67,20 @@ def test_build_gamescope_args_survives_non_list_flags(set_ssot):
     assert args[0].endswith("gamescope")
 
 
+def test_build_gamescope_args_survives_a_bad_env_var_name(set_ssot):
+    """Regression: an env_vars key the OS refuses (here one holding "=")
+    raised out of _build_gamescope_args, which run() calls before
+    _run_session's try/except even starts — same boot crash-loop as the
+    non-list flags case above (2026-11-09 audit)."""
+    set_ssot()
+    cfg = {"env_vars": {"MANGOHUD=1": 1, "SDY_TEST_OK": "yes"}}
+
+    args = session_launch._build_gamescope_args(cfg)
+
+    assert args[0].endswith("gamescope")
+    assert os.environ["SDY_TEST_OK"] == "yes"
+
+
 def test_game_mode_env_matches_real_steamos_agnostic_vars():
     """Pins the vars ported from Valve's gamescope-session that are both
     hardware/user-config agnostic AND verified functional on this
