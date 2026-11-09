@@ -915,13 +915,18 @@ def test_show_completion_message_refreshes_stale_ssot_cache_on_success(
     ssot_path.write_text(f"user_config={new_root / 'config.yaml'}\n")
 
     win = SimpleNamespace(
-        conf_root=old_root, games_conf_dir=old_root / "games.d"
+        conf_root=old_root,
+        games_conf_dir=old_root / "games.d",
+        _reload_clean_editors=lambda: reloaded.append(win.conf_root),
     )
+    reloaded: list = []
     control_center.SDYControlCenter._show_completion_message(
         win, "Restore Complete", "Restored!", False
     )
 
     assert win.conf_root == new_root
+    # Editors re-read from disk too, and only after the paths moved.
+    assert reloaded == [new_root]
     assert calls and calls[0][0] == "information"
     utils.clear_ssot_cache()
 

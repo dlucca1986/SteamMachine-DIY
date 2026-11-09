@@ -119,6 +119,7 @@ class _FakeWindow:
     toggle_template = _SCC.toggle_template
     load_global_file = _SCC.load_global_file
     _reselect_loaded_global_file = _SCC._reselect_loaded_global_file
+    _reload_clean_editors = _SCC._reload_clean_editors
     load_game_file = _SCC.load_game_file
     _confirm_discard = _SCC._confirm_discard
     save_game_profile = _SCC.save_game_profile
@@ -390,3 +391,57 @@ def test_game_load_failure_puts_the_combo_back(tmp_path):
 
     assert win.combo_games.currentText() == "MyGame"
     assert win.game_editor.toPlainText() == "live: game\n"
+
+
+# ---------------------------------------------------------------------------
+# _reload_clean_editors — after a restore the editors must show what is
+# now on disk, or the next Save writes the pre-restore text back over the
+# restored file (2026-11-09 audit, confirmed on the real window).
+# ---------------------------------------------------------------------------
+
+
+def _window_with_files_changed_on_disk(tmp_path):
+    (tmp_path / "config.yaml").write_text("restored: global\n")
+    games_dir = tmp_path / "games.d"
+    games_dir.mkdir()
+    (games_dir / "MyGame.yaml").write_text("restored: game\n")
+    win = _FakeWindow(tmp_path)
+    win.view_states["global"]["loaded"] = "config.yaml"
+    win.view_states["games"]["loaded"] = "MyGame"
+    win.global_editor.document().setModified(False)
+    win.game_editor.document().setModified(False)
+    return win
+
+
+def test_reload_clean_editors_picks_up_restored_files(tmp_path):
+    win = _window_with_files_changed_on_disk(tmp_path)
+
+    win._reload_clean_editors()
+
+    assert win.global_editor.toPlainText() == "restored: global\n"
+    assert win.game_editor.toPlainText() == "restored: game\n"
+
+
+def test_reload_clean_editors_never_touches_unsaved_edits(
+    tmp_path, monkeypatch
+):
+    box = _FakeQMessageBox(reply=2)  # would answer "Discard" if asked
+    monkeypatch.setattr(control_center, "QMessageBox", box)
+    win = _window_with_files_changed_on_disk(tmp_path)
+    win.global_editor.document().setModified(True)
+    win.game_editor.document().setModified(True)
+
+    win._reload_clean_editors()
+
+    assert box.asked == 0
+    assert win.global_editor.toPlainText() == "live: global\n"
+    assert win.game_editor.toPlainText() == "live: game\n"
+
+
+def test_reload_clean_editors_leaves_a_template_preview_alone(tmp_path):
+    win = _window_with_files_changed_on_disk(tmp_path)
+    win.view_states["global"]["is_template"] = True
+
+    win._reload_clean_editors()
+
+    assert win.global_editor.toPlainText() == "live: global\n"

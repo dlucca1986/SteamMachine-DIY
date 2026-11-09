@@ -1459,7 +1459,33 @@ class SDYControlCenter(QMainWindow):
         self.conf_root, self.games_conf_dir = _resolve_config_paths(
             Path.home() / USER_CONFIG_REL
         )
+        self._reload_clean_editors()
         QMessageBox.information(self, title, message)
+
+    def _reload_clean_editors(self):
+        """Re-read from disk each editor that holds nothing unsaved.
+
+        A restore replaces the config files themselves, not just the
+        SSoT: without this the editors kept showing the pre-restore text,
+        and the next Save wrote it straight back over the restored file.
+        An editor with unsaved edits is left alone (reloading would drop
+        them without asking), and so is a template preview. Runs for
+        every successful operation, like the SSoT re-read above — for a
+        backup or vacuum it just re-reads unchanged files.
+        """
+        state = self.view_states["global"]
+        if (
+            not state["is_template"]
+            and not self.global_editor.document().isModified()
+        ):
+            self.load_global_file()
+        state = self.view_states["games"]
+        if (
+            state["loaded"]
+            and not state["is_template"]
+            and not self.game_editor.document().isModified()
+        ):
+            self.load_game_file(state["loaded"])
 
     def _on_pkexec_lock_released(self, lock_key: str) -> None:
         """Re-enable the button(s) tied to *lock_key* (main-thread slot)."""

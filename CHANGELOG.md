@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- Control Center: after a successful restore the Global Options and Game Overrides editors kept
+  showing the configuration from *before* the restore, so the next Save wrote it straight back
+  over the restored file. Editors with nothing unsaved in them are now re-read from disk when an
+  operation completes; one holding unsaved edits is left untouched.
 - Control Center: when the file picked in an editor's selector could not be loaded (not valid
   UTF-8, unreadable), the selector moved to the new name while the editor kept the previous file's
   text — and Save, which writes the editor to whatever the selector names, then put that text
