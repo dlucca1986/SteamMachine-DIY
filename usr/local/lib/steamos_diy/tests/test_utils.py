@@ -693,13 +693,24 @@ def test_write_atomic_returns_true_on_success(monkeypatch, tmp_path):
     callers no way to learn a write failed (symlink/FIFO refused at
     tmp_path, a short write, a failed rename) short of grepping syslog.
     Now forwards the C-side int return as bool (found via a third
-    full-file review pass, 2026-09-03)."""
-    monkeypatch.setattr(utils._LIB, "c_write_atomic", lambda *_a: 1)
+    full-file review pass, 2026-09-03).
+
+    Swaps the whole utils._LIB (a module attribute) rather than patching
+    c_write_atomic on conftest's shared MagicMock: since pytest 9.x,
+    monkeypatch only restores attributes found in the target's __dict__,
+    and a MagicMock child lives elsewhere — so undo() DELETED it, and the
+    next test patching it failed with AttributeError (found 2026-11-09,
+    pytest 9.2.0)."""
+    monkeypatch.setattr(
+        utils, "_LIB", SimpleNamespace(c_write_atomic=lambda *_a: 1)
+    )
 
     assert utils.write_atomic(tmp_path / "f", "content") is True
 
 
 def test_write_atomic_returns_false_on_failure(monkeypatch, tmp_path):
-    monkeypatch.setattr(utils._LIB, "c_write_atomic", lambda *_a: 0)
+    monkeypatch.setattr(
+        utils, "_LIB", SimpleNamespace(c_write_atomic=lambda *_a: 0)
+    )
 
     assert utils.write_atomic(tmp_path / "f", "content") is False
