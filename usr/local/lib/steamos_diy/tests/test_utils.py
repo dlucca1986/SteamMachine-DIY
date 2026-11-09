@@ -749,6 +749,38 @@ def test_write_atomic_returns_true_on_success(monkeypatch, tmp_path):
     assert utils.write_atomic(tmp_path / "f", "content") is True
 
 
+def test_write_atomic_passes_a_non_utf8_path_through_unchanged(monkeypatch):
+    """Regression: the path was encoded with str.encode("utf-8"), which
+    raises on a name Python decoded from non-UTF-8 bytes; os.fsencode is
+    the inverse of that decoding and hands the C side the original
+    bytes."""
+    seen = []
+    monkeypatch.setattr(
+        utils,
+        "_LIB",
+        SimpleNamespace(c_write_atomic=lambda path, _val: seen.append(path)),
+    )
+
+    utils.write_atomic(os.fsdecode(b"/cfg/Pok\xe9mon.yaml"), "x")
+
+    assert seen == [b"/cfg/Pok\xe9mon.yaml"]
+
+
+def test_jlog_never_raises_on_a_non_utf8_path(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        utils,
+        "_LIB",
+        SimpleNamespace(c_jlog=lambda _tag, msg, _prio: seen.append(msg)),
+    )
+
+    utils.jlog("STEAM", "GAME_LAUNCH: " + os.fsdecode(b"Pok\xe9mon"))
+
+    # [-1]: the first jlog of a test also logs the isolated SSoT's own
+    # (expected) read error ahead of this message.
+    assert seen[-1] == b"GAME_LAUNCH: Pok\\udce9mon"
+
+
 def test_write_atomic_returns_false_on_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(
         utils, "_LIB", SimpleNamespace(c_write_atomic=lambda *_a: 0)

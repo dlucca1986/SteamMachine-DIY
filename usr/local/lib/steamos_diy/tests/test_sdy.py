@@ -11,6 +11,8 @@ bug where searching for AppID "220" also matched a profile declaring
 "SDY_ID: 2201290") and a future edit could silently reintroduce that
 class of bug without a regression test pinning the exact-match contract."""
 
+import os
+
 import pytest
 import sdy
 
@@ -88,6 +90,24 @@ def test_exec_game_survives_embedded_null_byte(monkeypatch):
 
     assert exc_info.value.code == 1
     assert any("EXECUTION_FAILED" in msg for _tag, msg, _lvl in logged)
+
+
+def test_exec_game_launches_a_binary_with_a_non_utf8_name(monkeypatch):
+    """Regression: with the real jlog (not a fake), the GAME_LAUNCH line
+    raised UnicodeEncodeError for a stem Python had decoded from
+    non-UTF-8 bytes — a ValueError, so _exec_game's own except turned it
+    into EXECUTION_FAILED + exit(1) before os.execvpe was ever called.
+    The game never started, over its own log line (2026-11-09 audit,
+    reproduced end to end through sdy.run())."""
+    name = os.fsdecode(b"Pok\xe9mon")  # carries a lone surrogate
+    launched = []
+    monkeypatch.setattr(
+        sdy.os, "execvpe", lambda *args: launched.append(args[1])
+    )
+
+    sdy._exec_game([f"/games/{name}.sh"], name, "123")
+
+    assert launched == [[f"/games/{name}.sh"]]
 
 
 # ---------------------------------------------------------------------------

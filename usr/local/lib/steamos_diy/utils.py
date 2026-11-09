@@ -156,13 +156,20 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
     Filters in Python before any C call to skip suppressed levels cheaply.
     _JLOG_REENTRY prevents infinite recursion when get_ssot_var itself
     triggers a log call (e.g. a decode error while reading LOG_LEVEL).
+
+    The message is encoded with backslashreplace, never strictly: a path
+    Python decoded from non-UTF-8 bytes (a file name from argv or
+    scandir) carries lone surrogates, and a strict encode raised
+    UnicodeEncodeError out of the *caller* — sdy refused to launch a game
+    whose executable name held one such byte, purely over its own
+    GAME_LAUNCH log line.
     """
     if getattr(_JLOG_REENTRY, "active", False):
         # Already inside jlog: skip threshold lookup and emit directly
         # at the requested level. This avoids recursion via get_ssot_var.
         _LIB.c_jlog(
             tag.replace(":", "").strip().encode("utf-8"),
-            message.encode("utf-8"),
+            message.encode("utf-8", "backslashreplace"),
             _LEVELS_C.get(level.upper(), _DEFAULT_LEVEL_C),
         )
         return
@@ -181,7 +188,7 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
 
         _LIB.c_jlog(
             tag.replace(":", "").strip().encode("utf-8"),
-            message.encode("utf-8"),
+            message.encode("utf-8", "backslashreplace"),
             _LEVELS_C.get(level.upper(), _DEFAULT_LEVEL_C),
         )
     finally:
@@ -355,9 +362,7 @@ def write_atomic(path: str | Path, val: str) -> bool:
     the write landed.
     """
     return bool(
-        _LIB.c_write_atomic(
-            str(path).encode("utf-8"), str(val).encode("utf-8")
-        )
+        _LIB.c_write_atomic(os.fsencode(path), str(val).encode("utf-8"))
     )
 
 

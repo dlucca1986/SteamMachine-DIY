@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- `sdy` refused to launch a game whose executable file name contains a byte that isn't valid
+  UTF-8 (old or badly-extracted game files): writing its own `GAME_LAUNCH` log line failed on that
+  name, and the failure was reported as `EXECUTION_FAILED` before the game was even started. Log
+  messages can no longer fail on such names (the odd byte is shown escaped), and `write_atomic`
+  passes paths to the C-Core with their original bytes. Reproduced end to end, 2026-11-09 audit.
 - A single malformed line could stop the session from starting. An SSoT line beginning with `=`,
   or an `env_vars:` key containing `=` (or empty, or a NUL byte in a value), is something the OS
   refuses as an environment variable; the resulting error was not handled anywhere, so the session
