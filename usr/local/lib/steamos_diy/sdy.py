@@ -74,9 +74,14 @@ def _header_declares_id(path: str, appid: str) -> bool:
 def _iter_yaml_files(directory: str):
     """Yield DirEntry for every *.yaml in *directory*; silent on error."""
     try:
-        for entry in os.scandir(directory):
-            if entry.is_file() and entry.name.endswith(".yaml"):
-                yield entry
+        # `with`: _find_profile_by_id returns on the first match, leaving
+        # this generator suspended mid-scan; closing it then runs the
+        # context exit instead of leaving the iterator to be reclaimed
+        # by GC (a ResourceWarning under pytest, found 2026-11-09).
+        with os.scandir(directory) as it:
+            for entry in it:
+                if entry.is_file() and entry.name.endswith(".yaml"):
+                    yield entry
     except OSError as err:
         jlog("CORE", f"SCAN_ERROR: {directory} - {err}", level="DEBUG")
 
