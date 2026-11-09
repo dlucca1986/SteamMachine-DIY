@@ -638,8 +638,10 @@ def test_run_pkexec_survives_emit_on_torn_down_window(monkeypatch):
 
 
 class _FakeCombo:  # pylint: disable=too-few-public-methods
-    def setPlaceholderText(self, text):  # pylint: disable=invalid-name
-        pass
+    # The scan hint goes on the line edit (an editable combo never paints
+    # its own placeholder) — see control_center._GAME_COMBO_HINT.
+    def lineEdit(self):  # pylint: disable=invalid-name
+        return SimpleNamespace(setPlaceholderText=lambda _text: None)
 
 
 class _FakeGamesWindow:  # pylint: disable=too-few-public-methods

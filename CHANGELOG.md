@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- Control Center, Game Overrides tab: the game selector's "Scanning history..." and "Journal
+  unavailable." messages were never visible — they were set as the combo box's own placeholder,
+  which an editable Qt combo box never paints, so the user only ever saw an empty box. They now
+  live on the selector's text field (verified by rendering the real widget), the idle state shows
+  a "Select or type a game name…" hint, and the empty-result text no longer blames the journal (an
+  empty result also just means no recent games and no saved profiles). That invisible placeholder
+  had one real side effect: it stopped Qt from auto-selecting the first game after a scan, a game
+  the editor never loaded — so a Save would have written the editor over that game's file. The
+  selector now explicitly stays unselected instead of relying on it.
+
+---
+
 ## [2.1.9] — 2026-11-09 — Hardening & Audit Fixes
 
 ### Added

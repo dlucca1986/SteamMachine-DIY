@@ -49,10 +49,20 @@ def test_refresh_detected_games_caps_journalctl_line_count(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+# pylint: disable-next=too-few-public-methods
+class _FakeLineEdit:
+    def __init__(self):
+        self.placeholder = ""
+
+    def setPlaceholderText(self, text):  # pylint: disable=invalid-name
+        self.placeholder = text
+
+
 class _FakeEditableCombo:
     def __init__(self, text=""):
         self._text = text
         self.items = []
+        self._line_edit = _FakeLineEdit()
 
     def currentText(self):  # pylint: disable=invalid-name
         return self._text
@@ -62,24 +72,26 @@ class _FakeEditableCombo:
         self._text = ""
 
     def addItems(self, items):  # pylint: disable=invalid-name
-        # No auto-selection, matching the real app: refresh_detected_games
-        # sets the combo's placeholder before every scan, and with a
-        # placeholder set a real QComboBox leaves the index at -1 (text
-        # "") after addItems on a cleared combo. Without one it would
-        # auto-select index 0 instead — the behavior this fake used to
-        # model, which made the 2026-09-27 fix describe the wrong failure
-        # (verified on the real window, 2026-11-09).
+        # A real QComboBox auto-selects index 0 when items land on a
+        # cleared combo — unless the combo has a placeholderText set,
+        # which keeps the index at -1. The app set one before every scan
+        # until 2026-11-09 (invisible on an editable combo; its hints now
+        # live on the line edit), so the auto-pick is real again and
+        # _update_game_combo_ui must undo it explicitly. Verified on the
+        # real window both ways, 2026-11-09. No setPlaceholderText() here
+        # on purpose: a call on the combo itself would be invisible again.
         self.items = list(items)
+        if items:
+            self._text = items[0]
 
-    # pylint: disable-next=invalid-name,unused-argument
-    def setPlaceholderText(self, text):
-        pass
+    def lineEdit(self):  # pylint: disable=invalid-name
+        return self._line_edit
 
     def setEditText(self, text):  # pylint: disable=invalid-name
         self._text = text
 
     def setCurrentIndex(self, index):  # pylint: disable=invalid-name
-        self._text = self.items[index]
+        self._text = self.items[index] if index >= 0 else ""
 
     def findText(self, text):  # pylint: disable=invalid-name
         return self.items.index(text) if text in self.items else -1
@@ -147,3 +159,38 @@ def test_update_game_combo_ui_keeps_a_non_first_selection(tmp_path):
 
     assert win.combo_games.items[0] != "Beta (20)"  # precondition
     assert win.combo_games.currentText() == "Beta (20)"
+
+
+def test_update_game_combo_ui_never_auto_picks_a_game(tmp_path):
+    """Regression guard: with nothing selected before the scan, the combo
+    must stay unselected afterwards. addItems() auto-picks the first entry
+    on a real QComboBox, but `activated` doesn't fire programmatically, so
+    the editor never loads that game — a Save would write the editor's
+    content over its file. Until 2026-11-09 an invisible combo placeholder
+    suppressed the auto-pick by accident; it's now explicit."""
+    win = _FakeComboWindow(tmp_path / "games.d", typed_text="")
+
+    win._update_game_combo_ui({"Alpha": "10", "Beta": "20"})
+
+    assert win.combo_games.currentText() == ""
+
+
+def test_update_game_combo_ui_hints_live_on_the_line_edit(tmp_path):
+    """Regression: "Scanning history..."/"Journal unavailable." were set
+    on the editable combo itself, which never paints its placeholder —
+    the user only ever saw an empty box (found 2026-11-09 by rendering
+    the real widget). An empty result also wasn't necessarily a journal
+    failure, so the empty-state text no longer claims one."""
+    win = _FakeComboWindow(tmp_path / "games.d")
+
+    win._update_game_combo_ui({})
+    assert (
+        win.combo_games.lineEdit().placeholder
+        == control_center._GAME_COMBO_EMPTY
+    )
+
+    win._update_game_combo_ui({"Alpha": "10"})
+    assert (
+        win.combo_games.lineEdit().placeholder
+        == control_center._GAME_COMBO_HINT
+    )

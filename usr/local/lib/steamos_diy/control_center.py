@@ -107,6 +107,13 @@ _BUTTON_RESET_MS: int = 2000
 # session with hours/days of accumulated journal lines.
 _LOG_FILTER_DEBOUNCE_MS: int = 200
 
+# Game Overrides combo hints. Set on the combo's line edit, not on the
+# combo: an editable QComboBox never paints its own placeholderText, so
+# these were invisible until 2026-11-09.
+_GAME_COMBO_HINT: str = "Select or type a game name…"
+_GAME_COMBO_SCANNING: str = "Scanning history..."
+_GAME_COMBO_EMPTY: str = "No games found — type a name to add one"
+
 # YAML formatter
 _YAML_WIDTH: int = 4096
 _YAML_INDENT_MAPPING: int = 2
@@ -682,6 +689,7 @@ class SDYControlCenter(QMainWindow):
         header = QHBoxLayout()
         self.combo_games = QComboBox()
         self.combo_games.setEditable(True)
+        self.combo_games.lineEdit().setPlaceholderText(_GAME_COMBO_HINT)
         # `activated` (selection/Enter) — NOT currentTextChanged. The latter
         # fires per keystroke on an editable combo, re-scaffolding the editor
         # and discarding edits while the user is still typing a name.
@@ -1091,7 +1099,7 @@ class SDYControlCenter(QMainWindow):
         if self._scan_games_busy:
             return
         self._scan_games_busy = True
-        self.combo_games.setPlaceholderText("Scanning history...")
+        self.combo_games.lineEdit().setPlaceholderText(_GAME_COMBO_SCANNING)
         home = os.path.expanduser("~")
 
         def worker() -> None:
@@ -1145,28 +1153,31 @@ class SDYControlCenter(QMainWindow):
         """Repopulate combo from detected games + on-disk profiles.
 
         Args:
-            detected: {name: appid_or_name}; empty dict triggers placeholder.
+            detected: {name: appid_or_name}; empty dict (no games found, or
+                the journal couldn't be read) shows _GAME_COMBO_EMPTY.
         """
-        # A scan can finish mid-edit (a "Scan History" click while the
-        # user is still typing a manually-added game's name into this
-        # editable combo) — clear() resets the line-edit text along with
-        # the item list, and a subsequent Save silently no-ops on the
-        # now-empty currentText(). Restore whatever the user had typed
-        # instead of discarding it. An already-listed selection must be
-        # restored too: addItems() on the cleared combo auto-selects
-        # index 0, so the combo showed the FIRST game while the editor
-        # still held the selected one's profile — and Save (which targets
-        # currentText()) overwrote the first game's file with it.
+        # clear() resets the line-edit text along with the item list, so
+        # whatever the combo showed before the scan — a listed selection,
+        # or a name still being typed — is restored afterwards; otherwise
+        # Save, which targets currentText(), silently no-oped on the empty
+        # text while the editor still held that game's profile.
+        #
+        # Nothing to restore -> index -1, never addItems()' auto-picked
+        # first entry: the editor holds nothing for that game (`activated`
+        # doesn't fire programmatically), so a Save would write the editor
+        # over its file. Until 2026-11-09 an invisible combo placeholder
+        # suppressed the auto-pick by accident; this makes it explicit.
         typed = self.combo_games.currentText()
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
         self.combo_games.clear()
-        if items:
-            self.combo_games.addItems(items)
-        else:
-            self.combo_games.setPlaceholderText("Journal unavailable.")
+        self.combo_games.addItems(items)
+        self.combo_games.setCurrentIndex(-1)
         if typed:
             self._select_game_text(typed)
+        self.combo_games.lineEdit().setPlaceholderText(
+            _GAME_COMBO_HINT if items else _GAME_COMBO_EMPTY
+        )
 
     def _merge_on_disk_profiles(self, detected):
         gdir = self.games_conf_dir
