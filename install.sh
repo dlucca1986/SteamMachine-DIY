@@ -211,6 +211,12 @@ deploy_files() {
     compgen -G "$CONFIG_DEST/*.yaml" > /dev/null 2>&1 && HAS_EXISTING_YAML=true
     compgen -G "$CONFIG_SRC/*.yaml" > /dev/null 2>&1 && HAS_SRC_YAML=true
 
+    # This runs as root, and only $CONFIG_DEST is chowned further down: a
+    # ~/.config that mkdir -p had to create (a user who has never logged
+    # into a desktop yet) would stay root-owned, and the desktop could
+    # then not write its own settings. Create that one as the user.
+    [ -d "$(dirname "$CONFIG_DEST")" ] \
+        || install -d -o "$REAL_USER" -g "$(id -gn "$REAL_USER")" "$(dirname "$CONFIG_DEST")"
     mkdir -p "$CONFIG_DEST/games.d"
 
     if ! $HAS_SRC_YAML; then

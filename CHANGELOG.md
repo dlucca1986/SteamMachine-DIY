@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- `install.sh`: on a user account that had never logged into a desktop (no `~/.config` yet), the
+  installer created `~/.config` itself — as root, and only its own `steamos_diy` subfolder was
+  handed back to the user. The desktop then could not write its settings there. A missing
+  `~/.config` is now created owned by the user.
 - A `config.yaml` or game profile that fails to parse is ignored as a whole — and that used to
   leave no trace: the `YAML_PARSE_ERROR` / `YAML_LOAD_ERROR` messages were logged at DEBUG, below
   the default `LOG_LEVEL=INFO`, so a syntax error just produced a session without your flags and
