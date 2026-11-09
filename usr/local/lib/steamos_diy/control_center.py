@@ -111,7 +111,7 @@ _LOG_FILTER_DEBOUNCE_MS: int = 200
 # combo: an editable QComboBox never paints its own placeholderText, so
 # these were invisible until 2026-11-09.
 _GAME_COMBO_HINT: str = "Select or type a game name…"
-_GAME_COMBO_SCANNING: str = "Scanning history..."
+_GAME_COMBO_SCANNING: str = "Scanning history…"
 _GAME_COMBO_EMPTY: str = "No games found — type a name to add one"
 
 # YAML formatter
@@ -1160,8 +1160,10 @@ class SDYControlCenter(QMainWindow):
         """Repopulate combo from detected games + on-disk profiles.
 
         Args:
-            detected: {name: appid_or_name}; empty dict (no games found, or
-                the journal couldn't be read) shows _GAME_COMBO_EMPTY.
+            detected: {name: appid_or_name} from the journal scan (empty
+                if nothing was found or the journal couldn't be read). Saved
+                games.d profiles are merged in either way, so
+                _GAME_COMBO_EMPTY shows only when both yield nothing.
         """
         # clear() resets the line-edit text along with the item list, so
         # whatever the combo showed before the scan — a listed selection,
