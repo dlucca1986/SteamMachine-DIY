@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Session Launcher
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Core Session Manager
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -20,6 +20,7 @@ import subprocess  # nosec B404
 import sys
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from utils import (
@@ -33,11 +34,11 @@ from utils import (
     jlog,
     load_yaml_safe,
     notify,
+    persist_next_session,
     read_session_target,
     sd_notify_ready,
     shlex_split_or_fallback,
     spawn_native,
-    write_atomic,
 )
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,11 @@ GAME_MODE_ENV: dict[str, str] = {
     # stderr would otherwise go — confirmed present in a real Steam
     # install's own runtime, independent of the underlying distro.
     "SRT_LOG_TO_JOURNAL": "1",
+    # Links clicked inside Game Mode (store page, community) open in
+    # Steam's own overlay browser instead of steam-runtime-tools'
+    # xdg-open reaching for a desktop browser that may not exist (or
+    # look wrong) inside a gamescope session.
+    "SRT_URLOPEN_PREFER_STEAM": "1",
     # Proton / vkd3d session defaults (from Valve's gamescope-session)
     "ENABLE_GAMESCOPE_WSI": "1",
     "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
@@ -239,12 +245,7 @@ def _monitor_process(
         return False  # Exited early — treat as crash
     except subprocess.TimeoutExpired:
         jlog("CORE", f"VALIDATED_{target.upper()}_STABLE", level="DEBUG")
-        if not write_atomic(next_path, target):
-            jlog(
-                "CORE",
-                f"NEXT_SESSION_WRITE_FAILED: {next_path}",
-                level="ERROR",
-            )
+        persist_next_session(next_path, target)
         notify("Stable", clear_after=True)
         sd_notify_ready()
         return True  # Still running — stable
@@ -304,16 +305,12 @@ def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     )
     target = "desktop"
     notify("Recovery: Starting Desktop...")
-    if not write_atomic(next_path, target):
-        # The single most important write in this file: if it doesn't
-        # land, the next boot re-reads whatever next_session already held
-        # (possibly the same target that just crashed) instead of the
-        # desktop fallback this whole function exists to guarantee.
-        jlog(
-            "CORE",
-            f"NEXT_SESSION_WRITE_FAILED: {next_path}",
-            level="ERROR",
-        )
+    # The single most important write in this file: if it doesn't land,
+    # the next boot re-reads whatever next_session already held (possibly
+    # the same target that just crashed) instead of the desktop fallback
+    # this whole function exists to guarantee — hence the ERROR-level log
+    # persist_next_session emits on failure.
+    persist_next_session(next_path, target)
     _terminate_gracefully(proc)
     return target
 
@@ -391,6 +388,37 @@ def _run_session(
     return target, ret_code
 
 
+def _make_term_handler(
+    proc_holder: list[subprocess.Popen[Any] | None],
+) -> Callable[[int, Any], None]:
+    """Build the SIGTERM/SIGINT handler bound to run()'s proc_holder cell.
+
+    The handler only signals the child and exits — it must NOT wait on it
+    (i.e. no _terminate_gracefully here). It runs on the main thread,
+    which in the stable phase is blocked inside _run_session's untimed
+    proc.wait(): that call holds Popen's internal waitpid lock, so a wait
+    from inside the handler can never reap the child and always ran out
+    both TERM_TIMEOUT windows — ~10s per stop/reboot, plus a false
+    SIGTERM_TIMEOUT/SIGKILL_TIMEOUT pair in the journal (KISS audit,
+    2026-09-27). sys.exit() unwinds out of that wait, releasing the lock,
+    and the `with Popen` block's own __exit__ then reaps the child;
+    escalation to SIGKILL for a child ignoring SIGTERM is left to the
+    unit's KillMode=mixed + TimeoutStopSec, which fires within the same
+    10s the old in-handler escalation needed anyway.
+
+    Exit code 0 — explicit stop, do NOT trigger a systemd restart.
+    """
+
+    def _handle_term(signum: int, _frame: Any) -> None:
+        jlog("CORE", f"SIG_{signum}: Shutting down...")
+        live_proc = proc_holder[0]
+        if live_proc is not None and live_proc.returncode is None:
+            live_proc.terminate()
+        sys.exit(0)
+
+    return _handle_term
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -412,17 +440,7 @@ def run() -> None:
     # without flake8 F824 false-positives).
     proc_holder: list[subprocess.Popen[Any] | None] = [None]
 
-    def _handle_term(signum: int, _frame: Any) -> None:
-        """Drain the live process and exit cleanly on SIGTERM/SIGINT.
-
-        Exit code 0 — explicit stop, do NOT trigger a systemd restart.
-        """
-        jlog("CORE", f"SIG_{signum}: Shutting down...")
-        live_proc = proc_holder[0]
-        if live_proc is not None:
-            _terminate_gracefully(live_proc)
-        sys.exit(0)
-
+    _handle_term = _make_term_handler(proc_holder)
     signal.signal(signal.SIGTERM, _handle_term)
     signal.signal(signal.SIGINT, _handle_term)
 

@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 PyQt6 dashboard for system management, YAML configuration editing, and log analysis.
@@ -42,7 +42,7 @@ Text editor for YAML configuration files with real-time validation.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser — converting tabs to two spaces, fixing indentation and normalising spacing while preserving comments and quoting. The reformat is applied as a **single undoable edit** (one `Ctrl+Z` reverts it) and the scroll position is preserved; the outcome is reported in the status bar (`✨ YAML formatted` / `Already clean` / `Nothing to format` for a comments-only document / `Syntax error — see highlight`). It only reformats documents that already parse — broken YAML surfaces as a syntax error instead, and string *values* (e.g. the content inside each `flags` entry) are left verbatim.
 * **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file. **Ctrl+S** saves the editor on the active tab (`_save_current_tab()`).
-* **Unsaved-changes guard**: closing the window with pending edits in either YAML editor prompts Save / Discard / Cancel (`closeEvent` → `_dirty_editors()`) instead of dropping them silently. The editor's modified flag is cleared on load, template toggle and save, so the prompt only appears for genuine unsaved edits — and template previews never count as dirty.
+* **Unsaved-changes guard**: closing the window with pending edits in either YAML editor prompts Save / Discard / Cancel (`closeEvent` → `_dirty_editors()`) instead of dropping them silently. Switching the target file in either editor's selector with pending edits prompts Discard / Cancel (`_confirm_discard()`) — no Save option there, since by then the selector already names the new file; Cancel puts the selector back on the file the edits belong to. The editor's modified flag is cleared on load, template toggle and save, so the prompt only appears for genuine unsaved edits — and template previews never count as dirty.
 * **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
 
 ### 4. Game Overrides (Tab Index 3)
@@ -52,7 +52,7 @@ Per-game YAML profile editor backed by journal-based game discovery.
 * **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
 * **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable; the profile is loaded (or scaffolded) on selection — typing a new name does not reload until you confirm it.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
-* **Unsaved edits**: `view_states["games"]` caches unsaved editor content while switching between games or toggling templates.
+* **Unsaved edits**: `view_states["games"]` caches unsaved editor content while toggling the template preview, and remembers which game the editor was loaded from, so a cancelled switch (see the unsaved-changes guard above) can restore the selector.
 * **Save**: `save_game_profile()` writes to `games.d/<Name>.yaml` via `_atomic_save()`.
 
 ---
@@ -152,8 +152,23 @@ Rule-based highlighter applied to both editors. Rules are evaluated per visible 
 | `CORE:` | 🔵 | Blue `#3498db` |
 | `STEAM:` | 🎮 | Green `#2ecc71` |
 | `SYSTEM:` | ⚙️ | Orange `#f39c12` |
-| `DEBUG:` | 🔍 | Grey `#95a5a6` |
-| `ERROR:` | 🚫 | Red `#e74c3c` |
+
+### Message-content markers (`_LOG_ERROR_MARKER` / `_LOG_SUCCESS_MARKER` / `_LOG_NEUTRAL_MARKER`)
+Applied by `_highlight_log_markers()` on top of the identifier colour above — independent
+layers, not mutually exclusive, so a `CORE:` line can be coloured blue for its identifier
+*and* red for an error marker in the same line.
+
+| Pattern | Icon | Colour |
+| :--- | :--- | :--- |
+| `..._ERROR:` / `..._FAIL:` / `..._FAILED:` / `..._TIMEOUT:` / `BAD_...:` / `RESTORE_REJECTED_...:` / `EARLY_EXIT_RECOVERY:` / `RESTORE_FATAL:` / `NO_TARGET:` / `BINARY_NOT_FOUND:` / `BACKUP_LINK_SKIPPED:` / `YAML_NOT_MAPPING:` / `RESTORE_EMPTY:` | 🚫 | Red `#e74c3c` |
+| `VALIDATED_*_STABLE` | ✅ | Green `#2ecc71` |
+| `SWITCH_REQUEST:` | — | Grey `#7f8c8d` |
+
+Note: the syslog priority passed to `jlog(..., level="DEBUG"/"INFO"/"WARN"/"ERROR")` is a
+separate concept — it controls syslog severity, not display. `_finalize_export_entry()` in
+`journal.py` never reads or renders it; the displayed line is always
+`[HH:MM:SS] {identifier}: {message}`. No real message ever contains the literal text
+`DEBUG:`/`INFO:`/`WARN:` as a prefix, so there's nothing for the log view to highlight there.
 
 ### Gamescope tags (`gs_levels` + inline)
 | Tag | Icon | Colour |
@@ -185,7 +200,7 @@ yaml_parser.width = 4096
 
 | Goal | Recommended Action |
 | :--- | :--- |
-| **Debug a Crash** | Open **Diagnostics**, filter by `ALL` or `STEAM`, look for `ERROR:` tags or `[Error]` gamescope lines. |
+| **Debug a Crash** | Open **Diagnostics**, filter by `ALL` or `STEAM`, look for red `..._ERROR:`/`..._FAIL:`/`..._FAILED:` markers, `[Error]` gamescope lines, or a green `VALIDATED_*_STABLE` to confirm the switch actually landed. |
 | **Verify Configuration** | Use **Global Options**; the editor highlights the error line (red) and its predecessor (orange) on invalid YAML. |
 | **System Recovery** | If shims or symlinks are broken, use **Restore from Archive** in Maintenance. |
 | **Game Specific Profile** | Use **Game Overrides** → Scan History → select the game → edit and save. |

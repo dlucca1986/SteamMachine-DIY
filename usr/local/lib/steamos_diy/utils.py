@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Shared Library
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Shared library. Mandatory C-Core integration.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -59,7 +59,7 @@ except OSError as err:
 
 # Runtime project version — kept in sync with the file headers by the
 # release bump (a plain-text substitution across the whole tree).
-VERSION: str = "2.1.8"
+VERSION: str = "2.1.9"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
 NEXT_SESSION_PATH: str = "/var/lib/steamos_diy/next_session"
@@ -103,6 +103,18 @@ SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
 JOURNALCTL_BIN: str = "/usr/bin/journalctl"
 PYTHON3_BIN: str = "/usr/bin/python3"
 KONSOLE_BIN: str = "/usr/bin/konsole"
+
+# Shared timeout for short-lived systemctl/journalctl calls (journal
+# reads, `daemon-reload`) — was independently hardcoded as the same 10 in
+# journal.py (x2), restore.py, and control_center.py with no shared source
+# of truth, found by a 2026-09-16 audit for repeated literals never routed
+# through a constant. Not SSoT-backed like the SSOT_* config values:
+# nobody has asked to tune this at runtime, it's centralized purely to
+# stop future edits from updating some call sites and not others.
+# health.py's `systemctl show` deliberately keeps its own 5s: that value
+# is coupled to control_center.py's 4s poll interval (see the
+# _service_status_busy comment there), not to this one.
+SYSTEMD_CALL_TIMEOUT: int = 10
 
 # In-process cache for SSoT values, filled by one full parse on first
 # access — a missing key then costs a dict miss, not a disk re-read.
@@ -343,6 +355,22 @@ def write_atomic(path: str | Path, val: str) -> bool:
             str(path).encode("utf-8"), str(val).encode("utf-8")
         )
     )
+
+
+def persist_next_session(path: str | Path, target: str) -> bool:
+    """write_atomic() for the next-boot session target, logging the
+    shared NEXT_SESSION_WRITE_FAILED tag on failure.
+
+    One place for that tag: it's documented in Troubleshooting.md and
+    pattern-matched by the Diagnostics tab, and the same write-or-log
+    shape was independently repeated at 3 sites across session_launch.py
+    and session_select.py before this existed. Why a failed write matters
+    differs per site, so those comments stay at the call sites.
+    """
+    if write_atomic(path, target):
+        return True
+    jlog("CORE", f"NEXT_SESSION_WRITE_FAILED: {path}", level="ERROR")
+    return False
 
 
 # ---------------------------------------------------------------------------

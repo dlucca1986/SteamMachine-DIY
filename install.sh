@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Master Installer
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Hardware Audit, Dependency Management, SSoT Patching & Systemd.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -21,12 +21,28 @@ info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
+stage() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 # --- Root Privilege Check ---
 if [ "$EUID" -ne 0 ]; then
     error "Elevated privileges required. Please run as root (sudo ./install.sh)"
     exit 1
 fi
+
+# --- Desktop Environment Precondition ---
+# This project augments an existing KDE Plasma 6 (Wayland) install with a
+# Zero-DM gamescope-first boot path -- it does not install Plasma itself (a
+# full desktop environment is out of scope for what this installer should
+# silently pull in, unlike the small standalone kate/konsole below). Failing
+# loudly here beats silently completing: this installer goes on to disable
+# SDDM/plasmalogin and mask getty@tty1, so a missing Desktop Mode binary would
+# leave the user with no obvious way back to a working desktop on first boot.
+for bin in qdbus6 startplasma-wayland; do
+    if ! command -v "$bin" &>/dev/null; then
+        error "Missing '$bin' -- SteamMachine-DIY requires an existing KDE Plasma 6 (Wayland) install (packages: qt6-tools, plasma-workspace). Install Plasma first, then re-run this installer."
+        exit 1
+    fi
+done
 
 # --- Execution Mode ---
 # --update: non-interactive upgrade over an existing installation.
@@ -76,6 +92,7 @@ readonly USER_CONFIG_REL=".config/steamos_diy"
 
 # --- 1. Hardware Audit & Driver Selection ---
 check_gpu_and_drivers() {
+    stage "1/6 · Hardware Audit & Driver Selection"
     info "Auditing Hardware and Graphics Stack..."
     GPU_INFO=$(lspci | grep -iE "vga|3d controller" || true)
     DRIVER_PKGS=""
@@ -101,14 +118,20 @@ check_gpu_and_drivers() {
 
 # --- 2. Dependency Management & Database Sync ---
 install_dependencies() {
+    stage "2/6 · Dependency Management & Database Sync"
     # 2.1. Enable Multilib for 32-bit gaming support
     if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
         info "Enabling multilib repository..."
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     fi
 
-    # Core system and gaming dependencies
-    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc"
+    # Core system and gaming dependencies. kate/konsole/xdg-utils are explicit
+    # dependencies (not assumed present from a KDE desktop install) — the
+    # Control Center's "Edit SSoT", "Open Konsole Terminal", and "Browse
+    # Config Folder" (xdg-open) buttons, and the self-update installer
+    # handoff, all target these exact binaries directly, independent of
+    # whichever DE is actually running.
+    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc kate konsole xdg-utils"
 
     info "Synchronizing package databases and installing core dependencies..."
     # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
@@ -126,6 +149,7 @@ install_dependencies() {
 
 # --- 3. File Deployment & SSoT Initialization ---
 deploy_files() {
+    stage "3/6 · File Deployment & SSoT Initialization"
     info "Deploying Single Source of Truth (SSoT) and configurations..."
 
     # Initialize Global SSoT Configuration
@@ -212,7 +236,29 @@ deploy_files() {
     fi
     chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DEST"
 
-    # Deploy Python Core Libraries, Helpers & C-Core
+    # Deploy Python Core Libraries, Helpers & C-Core.
+    #
+    # Build and verify the C-Core BEFORE touching $LIB_DIR: on --update the
+    # old, working libcore.so used to be wiped first, so a gcc/ctypes
+    # failure exited with fresh .py files and no .so at all — utils.py then
+    # exits 127 at import, and with getty@tty1 already masked from the
+    # prior install the next boot had neither a session nor a terminal.
+    # Same trap the getty-ordering fix below closed for fresh installs.
+    info "Building C-Core from source (steamos_diy_core.c)..."
+    # Next to $LIB_DIR, not in /tmp: a noexec /tmp (common on hardened
+    # setups) would make the ctypes load check below fail on a perfectly
+    # good build, and same-filesystem keeps the final install a plain copy.
+    TMP_SO="$(mktemp -p "$(dirname "$LIB_DIR")" --suffix=.so)"
+    # Any exit from here on (including a set -e abort in the copy steps
+    # below) must not leave a stray tmp.*.so behind in /usr/local/lib.
+    trap 'rm -f "$TMP_SO"' EXIT
+    # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
+    gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$TMP_SO" steamos_diy_core.c \
+        || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
+    python3 -c "import ctypes; ctypes.CDLL('$TMP_SO')" 2>/dev/null \
+        || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
+    info "C-Core verified and loadable."
+
     if $UPDATE_MODE; then
         # Wipe first so files removed or renamed by the new release
         # cannot linger and shadow the fresh deployment.
@@ -227,17 +273,12 @@ deploy_files() {
     # (pytest isn't a runtime dependency, and nothing on the target
     # machine ever imports it).
     rm -rf "$LIB_DIR/tests"
-
-    info "Building C-Core from source (steamos_diy_core.c)..."
-    # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
-    gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$LIB_DIR/libcore.so" steamos_diy_core.c \
-        || { error "C-Core compilation failed. Check gcc output above."; exit 1; }
-    python3 -c "import ctypes; ctypes.CDLL('$LIB_DIR/libcore.so')" 2>/dev/null \
-        || { error "libcore.so compiled but is not loadable. Check architecture/dependencies."; exit 1; }
-    info "C-Core verified and loadable."
+    # install -m 644, not mv: mktemp creates 0600 (same reason as the SSoT
+    # render above).
+    install -m 644 "$TMP_SO" "$LIB_DIR/libcore.so"
+    rm -f "$TMP_SO"
 
     chmod 755 "$LIB_DIR"
-    chmod 644 "$LIB_DIR/libcore.so"
     chmod +x "$LIB_DIR"/*.py
     chmod +x "$HELPERS_DIR"/*.py
 
@@ -268,6 +309,7 @@ deploy_files() {
 
 # --- 4. SteamOS Compatibility Shim Layer ---
 setup_shim_links() {
+    stage "4/6 · SteamOS Compatibility Shim Layer"
     info "Constructing SteamOS Compatibility Layer (Shims)..."
 
     # Polkit Helper Structure (Intercepts Steam Deck UI Settings)
@@ -298,6 +340,7 @@ setup_shim_links() {
 
 # --- 5. Boot & Systemd Configuration ---
 setup_systemd_lockdown() {
+    stage "5/6 · Boot & Systemd Configuration"
     info "Configuring Systemd for Console Lockdown (TTY1)..."
 
     # Deploy and personalize the main service
@@ -327,6 +370,7 @@ setup_systemd_lockdown() {
 
 # --- 6. Cleanup ---
 disable_display_managers() {
+    stage "6/6 · Cleanup"
     info "Disabling conflicting Display Managers..."
     # Including 'plasmalogin' for Plasma 6 support and other common DMs
     for dm in sddm plasmalogin; do
@@ -335,6 +379,21 @@ disable_display_managers() {
 }
 
 # --- Execution Flow ---
+if $UPDATE_MODE; then
+    BANNER_LABEL="SteamMachine-DIY Updater"
+else
+    BANNER_LABEL="SteamMachine-DIY Installer"
+fi
+# Fixed inner width so the border and the centered label line always match,
+# regardless of "Installer" vs "Updater"'s different length.
+BANNER_WIDTH=41
+BANNER_PAD=$(( (BANNER_WIDTH - ${#BANNER_LABEL}) / 2 ))
+printf -v BANNER_LINE '%*s%s%*s' "$BANNER_PAD" "" "$BANNER_LABEL" \
+    "$((BANNER_WIDTH - BANNER_PAD - ${#BANNER_LABEL}))" ""
+BANNER_BORDER=$(printf '═%.0s' $(seq 1 "$BANNER_WIDTH"))
+echo -e "${CYAN}╔${BANNER_BORDER}╗
+║${BANNER_LINE}║
+╚${BANNER_BORDER}╝${NC}"
 info "Initializing SteamMachine-DIY Deployment for user: $REAL_USER"
 check_gpu_and_drivers
 install_dependencies
@@ -344,6 +403,7 @@ setup_systemd_lockdown
 disable_display_managers
 
 if $UPDATE_MODE; then
+    echo -e "\n${GREEN}━━━ ✅ Update Complete ━━━${NC}"
     success "UPDATE COMPLETED SUCCESSFULLY!"
     warn "Rebooting in 10 seconds to apply the update — press CTRL+C to abort."
     for i in {10..1}; do
@@ -355,6 +415,7 @@ if $UPDATE_MODE; then
     exit 0
 fi
 
+echo -e "\n${GREEN}━━━ ✅ Installation Complete ━━━${NC}"
 success "INSTALLATION COMPLETED SUCCESSFULLY!"
 info "TTY1 is now owned by steamos_diy.service."
 warn "A system reboot is mandatory to initialize the DIY environment."

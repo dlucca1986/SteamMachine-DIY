@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 The shared utility module (`utils.py`) and its integration with the native `libcore.so`.
@@ -82,7 +82,7 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 | `VERSION` | The running project version. Single runtime source, kept in sync with the file headers by the release bump. |
 | `check_latest_release()` | Queries the GitHub Releases API (fixed `https` URL, 10s timeout) and returns a `ReleaseInfo(version, is_newer, notes, tarball_url, html_url, checksum_url)` — or `None` when the network or the reply is unusable (logged as `UPDATE_CHECK_FAIL`, never raised). `checksum_url` is the release's `SHA256SUMS` asset URL (`""` if the release has none). Versions compare as integer tuples, so `2.10.0 > 2.9.0`. |
 | `download_release(info, dest_root)` | Requires `info.checksum_url`: fetches and validates the expected SHA-256 (`_fetch_expected_sha256()`), streams the tarball while hashing it (`_download_verified_tarball()`), and aborts — nothing extracted — if the checksum asset is missing, malformed, or doesn't match (`UPDATE_CHECKSUM_FAIL`/`UPDATE_DOWNLOAD_FAIL`). Only after the digest matches does it prune previous `v*` downloads and unpack under `dest_root/v<version>/`. Extraction uses the tarfile `data` filter (rejects absolute paths, traversal and special members) and only accepts `https://` URLs (`_require_https()`, shared with `_fetch_expected_sha256()`). Returns an `ExtractedRelease(dir, install_sh_sha256)` — the inner export directory holding `install.sh` plus that file's own SHA-256 — or `None` on failure. |
-| `verify_file_sha256(path, expected)` | Re-hashes a file already on disk and compares it to `expected`. `updater.py::_on_download` calls this on `install.sh` immediately before handing it to `pkexec`, closing the TOCTOU window between download-time verification and execution (see checklist item 19 in `CLAUDE.md`). |
+| `verify_file_sha256(path, expected)` | Re-hashes a file already on disk and compares it to `expected`. `updater.py::_on_download` calls this on `install.sh` immediately before handing it to `pkexec`, narrowing (not closing) the TOCTOU window between download-time verification and execution — pkexec's password prompt still follows the check, and the other extracted files aren't re-verified. |
 | `_https_open(url, extra_headers=None)` | Shared `Request`/`urlopen(timeout=...)` plumbing behind every GitHub network call above — each caller keeps its own error handling since what's recoverable (and what to log) differs per call. |
 | `UPDATES_DIR_NAME` | `"updates"` — the download folder name under `~/.config/steamos_diy/`, shared with `backup.py` which excludes it from archives. |
 
@@ -92,15 +92,15 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 
 | Component | `utils` imports used |
 | :--- | :--- |
-| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `write_atomic`, `read_session_target`, `load_yaml_safe`, `apply_env_map`, `notify`, `jlog`, `sd_notify_ready`, `shlex_split_or_fallback`, `spawn_native`, `get_ssot_var`, `get_ssot_num` |
-| `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `write_atomic`, `spawn_native`, `notify`, `jlog`, `get_ssot_var` |
+| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `apply_env_map`, `get_ssot_num`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `notify`, `persist_next_session`, `read_session_target`, `sd_notify_ready`, `shlex_split_or_fallback`, `spawn_native` |
+| `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `get_ssot_var`, `jlog`, `notify`, `persist_next_session`, `spawn_native` |
 | `sdy.py` | `apply_env_map`, `default_games_conf_dir`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `shlex_split_or_fallback` |
-| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `SSOT_CONF_PATH`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `verify_archive` |
-| `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `verify_archive` |
-| `control_center.py` | `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `SSOT_CONF_PATH`, `USER_CONFIG_REL`, `VERSION`, `get_ssot_var`, `spawn_native`, `write_atomic` |
-| `updater.py` | `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `spawn_native`, `verify_file_sha256` |
+| `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `require_ssot_conf`, `verify_archive` |
+| `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SYSTEMCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `require_ssot_conf`, `verify_archive` |
+| `control_center.py` | `CONFIG_FILE_NAME`, `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `KONSOLE_BIN`, `PYTHON3_BIN`, `SSOT_CONF_PATH`, `SYSTEMD_CALL_TIMEOUT`, `USER_CONFIG_REL`, `VERSION`, `clear_ssot_cache`, `get_ssot_var`, `safe_emit`, `spawn_native`, `write_atomic` |
+| `updater.py` | `KONSOLE_BIN`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `safe_emit`, `spawn_native`, `verify_file_sha256` |
 | `health.py` | `CORE_LIB_PATH`, `DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `clear_ssot_cache`, `get_ssot_var`, `shlex_split_or_fallback` |
-| `journal.py` | `JOURNALCTL_BIN`, `jlog` |
+| `journal.py` | `JOURNALCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `jlog` |
 | Compatibility shims | `run_shim` (which internally calls `jlog`) |
 
 Session-binary fallbacks (`DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`) and `CORE_LIB_PATH` are the single source of truth for the SSoT `bin_*` defaults and the `libcore.so` path — every consumer imports them from here rather than re-declaring its own copy. Likewise, `GAMES_CONF_SUBDIR` (and `default_games_conf_dir()`, which builds on it) is the shared fallback for the `games_conf_dir` SSoT key, used by both `sdy.py` and `control_center.py` so they can't silently disagree on where per-game profiles live if that key is ever unset. `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` are a narrower case: unlike the SSoT-backed group above, no deployment ever needs a different `systemctl`/`journalctl` path on a systemd distro, so these exist purely to stop `health.py`/`restore.py`/`journal.py`/`control_center.py` from each re-declaring the same literal.

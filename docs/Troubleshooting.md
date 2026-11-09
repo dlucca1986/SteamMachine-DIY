@@ -1,4 +1,4 @@
-[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
@@ -53,14 +53,15 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
 | `STEAM` | `BAD_FLAG_ENTRY: <flag> - <error>` | WARN | A `flags:` entry had an unbalanced quote; degraded to a naive whitespace split and still ran. |
+| `STEAM` | `NOFILE_LIMIT_RAISE_FAILED: <error>` | WARN | Couldn't raise the process's open-file-descriptor limit before launch — the session still starts, just with whatever limit it already had. |
 | `STEAM` | `LAUNCH_ARGS: <full gamescope+Steam argv>` | INFO | The exact command line used to launch this session — first place to look for a wrong flag. |
 | `STEAM` | `POST_START_CMDS_SKIPPED: session crashed before delay elapsed` | DEBUG | `post_start_cmds` were **not** run because the session was already detected as crashed by the time the delay elapsed. |
 | `STEAM` | `BAD_POST_START_CMD: <cmd> - <error>` | WARN | A `post_start_cmds` entry had an unbalanced quote; degraded to a naive split and still ran. |
 | `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command fired successfully. |
 | `STEAM` | `POST_START_CMDS_FAILED: <error>` | ERROR | The entire post-start daemon thread crashed unexpectedly (not a single bad command — something broke the loop itself). |
 | `CORE` | `VALIDATED_<TARGET>_STABLE` | DEBUG | The session survived the validation window and was declared stable. |
-| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | The session process ignored `SIGTERM`; force-killing with `SIGKILL`. |
-| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | The process survived even `SIGKILL` — almost always stuck in uninterruptible I/O (D-state). Nothing more the launcher can do; systemd's own `TimeoutStopSec` eventually reaps the cgroup. |
+| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | During crash recovery (after `EARLY_EXIT_RECOVERY`), the session process ignored `SIGTERM`; force-killing with `SIGKILL`. Never logged by a normal stop/reboot. |
+| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | During crash recovery, the process survived even `SIGKILL` — almost always stuck in uninterruptible I/O (D-state). Nothing more the launcher can do; systemd's own `TimeoutStopSec` eventually reaps the cgroup. |
 | `CORE` | `EARLY_EXIT_RECOVERY: process exited during the validation window...` | ERROR | A crash (or a switch request that raced the launch) was detected — forcing a fallback to Desktop. |
 | `CORE` | `BINARY_NOT_FOUND: <path> - <error>` | ERROR | The configured session binary (gamescope/Steam/Plasma) doesn't exist at that path — check the relevant `bin_*` SSoT key. |
 | `CORE` | `OS_ERROR: <error>` | ERROR | A generic OS-level failure spawning the session (permissions, resource limits, etc). |
@@ -68,6 +69,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `CORE` | `SIG_<N>: Shutting down...` | INFO | `SIGTERM`/`SIGINT` received — clean shutdown in progress, not a crash. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
 | `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | Couldn't restart the launcher service live to apply the switch immediately, but the target was still written to disk — it takes effect on the next boot/restart regardless. |
+| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted both from a post-crash Desktop-recovery write and from a switch request's own persist step. |
 
 ### Game launch (`sdy.py`)
 
@@ -196,6 +198,11 @@ One message is logged directly by the C library, not through Python's `jlog()` �
 On older or low-power GPUs, Steam's embedded Chromium (CEF) can fail at GPU-accelerated compositing, leaving the **Store** and **Library** pages black, flickering, or visually corrupted while the rest of Game Mode renders fine.
 
 **Fix:** force CEF to software compositing with the Steam-client flag `-cef-disable-gpu-compositing` (or, for full software rendering, `-cef-disable-gpu`). These are **Steam client** flags, *not* gamescope flags — they go on the Steam invocation in `session_launch.py` (the `-gamepadui -steamos3 -steamdeck` line), **not** in `config.yaml`'s `flags`. Try the minimal `-cef-disable-gpu-compositing` first; fall back to `-cef-disable-gpu` only if the corruption persists.
+
+### Mouse cursor gets "stuck" after closing the Steam overlay (stretched/custom-aspect sessions)
+On a gamescope session running a stretched or non-native aspect ratio (4:3, 16:10, etc. — not a plain 1:1 inner=outer session), closing the Steam Big Picture overlay can fail to re-grab raw mouse input, leaving the in-game camera/aim stuck or pinned to an edge. This is a [known upstream gamescope issue](https://github.com/ValveSoftware/gamescope/issues/2042), not specific to this project.
+
+**Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` — it's a real gamescope flag (always use relative mouse mode instead of flipping based on cursor visibility), usable today with no code change. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
 
 ### "Another privileged operation is already running…" won't go away
 Backup and Restore each guard against a double-click, and if a `pkexec` call for either ever times out (after 5 minutes), its lock is deliberately left in place rather than cleared — the privileged process it started (a `chown -R`, `backup.py`, `restore.py`) may still be running, and there's no way to confirm it's actually finished. Backup and Restore share one lock (they touch the same files), so a timeout on either one blocks both. Journal-vacuum has its own separate lock and behaves differently: a timeout there almost always just means authentication at the polkit prompt took too long, not that the vacuum itself is stuck, so its lock always clears itself automatically — you don't need to restart to retry it.

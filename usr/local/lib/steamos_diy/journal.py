@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
 #               No Qt dependency — fully testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
@@ -21,7 +21,7 @@ import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
 
-from utils import JOURNALCTL_BIN, jlog
+from utils import JOURNALCTL_BIN, SYSTEMD_CALL_TIMEOUT, jlog
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -262,7 +262,7 @@ def fetch_tagged_entries(
         text=True,
         errors="replace",
         check=True,
-        timeout=10,
+        timeout=SYSTEMD_CALL_TIMEOUT,
     )
     return parse_export_format(res.stdout, launches)
 
@@ -322,7 +322,7 @@ def _run_journalctl_iso() -> str:
             text=True,
             errors="replace",
             check=False,
-            timeout=10,
+            timeout=SYSTEMD_CALL_TIMEOUT,
         )
         return res.stdout or ""
     except (OSError, subprocess.SubprocessError) as err:

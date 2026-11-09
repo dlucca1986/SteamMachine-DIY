@@ -1,7 +1,20 @@
-[![Version](https://img.shields.io/badge/Version-2.1.8-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
+[![Version](https://img.shields.io/badge/Version-2.1.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 What `install.sh` does, stage by stage.
+
+---
+
+## ✅ Precondition Check
+Before touching anything, the installer verifies `qdbus6` and `startplasma-wayland` are
+already on `$PATH` — this project augments an existing **KDE Plasma 6 (Wayland)** install
+with a Zero-DM gamescope-first boot path, it does not install Plasma itself (a full desktop
+environment is out of scope for what this installer silently pulls in, unlike the small
+standalone `kate`/`konsole`/`xdg-utils` packages below). Missing either one aborts immediately with a
+clear error instead of completing silently — the installer goes on to disable SDDM/plasmalogin
+and mask `getty@tty1`, so discovering a missing Desktop Mode binary only on first boot would leave
+no obvious way back to a working desktop. Install Plasma (`qt6-tools` + `plasma-workspace`,
+or the full `plasma` group) first if this check fails.
 
 ---
 
@@ -20,7 +33,7 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 Configures system access and installs the software stack:
 
 * **Full System Upgrade**: Before installing any package, the installer runs `pacman -Syu` to synchronize the package databases and upgrade all existing packages. This ensures a consistent system state before the framework is deployed.
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `kate`, `konsole`, `xdg-utils`. The last three are explicit dependencies — the Control Center's "Edit SSoT", "Open Konsole Terminal", and "Browse Config Folder" buttons target these exact binaries by name, independent of whichever desktop environment is actually running.
 * **Hardware Groups:** Automatically manages user membership to ensure hardware access and system administration rights. Adds user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`. The `tty` group is required for `notify()` to write to `/dev/tty1`.
 
 ### 3. SSOT Deployment & Filesystem Policy
@@ -29,7 +42,7 @@ Defines the Single **Source of Truth** (SSoT) strategy:
 * **System Master:** Generates `/etc/default/steamos_diy.conf`, using `sed` to inject the real **Home** path (`{{HOME}}`). The **Username** (`{{USER}}`) and **UID** (`{{UID}}`) placeholders are patched into the systemd service file in stage 5.
 * **User Config Deployment:** Copies YAML templates from `etc/skel/.config/steamos_diy/` to `~/.config/steamos_diy/`. On a **fresh install** (no existing YAMLs), all templates are copied directly. On **reinstall**, the script detects existing configs and interactively asks `"Do you want to overwrite existing YAML configs? (y/N):"` — answering yes overwrites all files (`cp -f`); answering no copies only new files without touching existing ones (`cp -n`).
 * **Binary Hierarchy:** Installs all core logic in `/usr/local/lib/steamos_diy/` with execution permissions.
-* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -march=native -fPIC -Wall -Wextra -shared` (same flags as the project `Makefile` for dev/prod parity). After compilation, the library is verified with `ctypes.CDLL()` — if either step fails, installation is aborted with a clear error message.
+* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -march=native -fPIC -Wall -Wextra -shared` (same flags as the project `Makefile` for dev/prod parity). It is built into a temporary file next to `/usr/local/lib/steamos_diy` (not `/tmp`, which may be mounted `noexec`) and verified with `ctypes.CDLL()` **before** the existing install directory is touched — if either step fails, installation is aborted with a clear error message and, on `--update`, the previous working `libcore.so` is still in place. The temporary file is removed on every exit path.
 * **State Management:** Initializes the session tracker at `/var/lib/steamos_diy/next_session`.
 * **Desktop Entries:** Installs `Control_Center.desktop` and `Game_Mode.desktop` to `/usr/local/share/applications/`, making both accessible from the KDE application launcher.
 

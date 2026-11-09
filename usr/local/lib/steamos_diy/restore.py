@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -26,6 +26,7 @@ from utils import (
     BACKUP_MANIFEST_NAME,
     BACKUP_SCRIPT_NAME,
     SYSTEMCTL_BIN,
+    SYSTEMD_CALL_TIMEOUT,
     check_root,
     fix_ownership,
     get_backup_mapping,
@@ -438,7 +439,7 @@ def _reload_systemd() -> None:
             [SYSTEMCTL_BIN, "daemon-reload"],
             check=True,
             capture_output=True,
-            timeout=10,
+            timeout=SYSTEMD_CALL_TIMEOUT,
         )
     except (subprocess.SubprocessError, OSError) as err:
         jlog("SYSTEM", f"RESTORE_DAEMON_RELOAD_FAIL: {err}", level="ERROR")

@@ -5,6 +5,215 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.1.9] — 2026-11-09 — Hardening & Audit Fixes
+
+### Added
+- `SRT_URLOPEN_PREFER_STEAM=1` added to `GAME_MODE_ENV`: links clicked inside Game Mode
+  (store page, community) now open in Steam's own overlay browser instead of steam-runtime-
+  tools' `xdg-open` reaching for a desktop browser that may not exist, or look wrong, inside
+  a gamescope session. Same class of variable as the already-ported `SRT_LOG_TO_JOURNAL`.
+- Troubleshooting doc entry for the known upstream cursor-regrab bug on stretched/custom-
+  aspect gamescope sessions ([gamescope#2042](https://github.com/ValveSoftware/gamescope/issues/2042)):
+  add `--force-grab-cursor` to the affected game's `flags` — usable today via this project's
+  existing flags passthrough, no code change needed.
+
+Both surfaced while researching other gamescope-session forks/projects for portable ideas.
+- `mypy` added as a new quality gate (default mode, not `--check-untyped-defs` — see
+  `pyproject.toml`'s `[tool.mypy]` comment for why): a class of bug invisible to
+  pylint/flake8/ruff, now checked on every commit for the codebase's already fully/near-fully
+  typed core (`utils.py`, `health.py`, `journal.py`, `backup.py`, `sdy.py`,
+  `session_launch.py`, `session_select.py`). Found and fixed one real issue on introduction —
+  see the Fixed section below.
+
+### Changed
+- `install.sh`/`uninstall.sh`'s terminal output got a small readability pass: a one-time
+  header banner (dynamic label — "Installer" / "Updater" / "Uninstaller" — centered in a
+  box sized to fit each), a `stage()` divider before each install/uninstall stage (numbered,
+  matching the existing `# --- N. ... ---` comments — 6 for install, 3 for uninstall;
+  `finalize_uninstallation` deliberately left unnumbered since it runs as a background
+  epilogue *after* the "Uninstallation Complete" message, not as a user-facing stage), and a
+  clearer completion box at the end of each script. Purely cosmetic — same `info`/`success`/
+  `warn`/`error` functions and message text as before, no new dependency (plain ANSI codes
+  already in use, no `tput`/`figlet`/etc.).
+- The `timeout=10` used by 4 independent `journalctl`/`systemctl` `subprocess.run()` calls
+  across `journal.py` (x2), `restore.py`, and `control_center.py` was hardcoded identically
+  in each with no shared source of truth — found by a new local audit script that surfaces
+  repeated hardcoded literals never routed through a constant. Extracted to
+  `utils.SYSTEMD_CALL_TIMEOUT`; no behavior change, same value everywhere, just one place to
+  change it next time.
+- Three more pure extractions from the 2026-09-16 periodic KISS audit (the first run with a
+  different model reading the code — a fresh pair of eyes, same checklist), no behavior
+  change in any of them:
+  - `control_center.py` had the same 7-line "read the YAML file or toast the error" block
+    byte-identical in `_enter_template_mode`, `load_global_file`, and `load_game_file` —
+    same three-sites shape as the earlier `shlex` extraction. Now one `_read_or_toast()`
+    method. The function-level duplicate detector added earlier the same day can't see this
+    class (it compares whole functions; these differ outside the shared block).
+  - The "persist the next-boot session target, log `NEXT_SESSION_WRITE_FAILED` if it didn't
+    land" shape was repeated at three sites across `session_launch.py` and
+    `session_select.py`. Now `utils.persist_next_session()` — worth centralizing beyond
+    the line count because that tag is documented in Troubleshooting.md and pattern-matched
+    by the Diagnostics tab, so it must stay identical everywhere. The per-site comments on
+    *why* the write matters stay at the call sites.
+  - Two always-true guards dropped: `load_global_file`/`load_game_file` checked
+    `if self.global_hl:`/`if self.game_hl:` before `rehighlight()`, but both highlighters
+    are assigned during tab setup before either loader can run (the combo signal is
+    connected after `addItems`, so it can't fire during setup), and their sibling
+    `_enter_template_mode`/`_exit_template_mode` already call `rehighlight()` unguarded.
+
+### Fixed
+- `session_launch.py`: every stop of a running session (reboot, shutdown, `systemctl stop`,
+  `install.sh --update`) took ~10 seconds and logged a false `SIGTERM_TIMEOUT` (WARN) +
+  `SIGKILL_TIMEOUT` (ERROR, "D-state?") pair. The SIGTERM handler waited on the session
+  process, but it runs on the main thread, which in the stable phase is itself blocked in an
+  untimed `proc.wait()` holding Popen's internal waitpid lock — the handler's wait could
+  never reap the already-exited child and always ran out both 5s `TERM_TIMEOUT` windows.
+  The handler now only signals the child and exits; the surrounding `with Popen` block reaps
+  it, and a child ignoring SIGTERM is still killed by the unit's `KillMode=mixed` +
+  `TimeoutStopSec`. Reproduced in a scratch script, regression-tested, and confirmed on real
+  hardware: stop now completes in ~85ms after `SIG_15`, with no timeout entries.
+- Control Center, Game Profiles tab: a "Scan History" could make the next Save overwrite the
+  **wrong game's profile**. Repopulating the combo only restored its text when it wasn't in the
+  refreshed list, so a listed selection that wasn't the first entry fell back to the first one
+  while the editor still held the selected game's profile — and Save targets the combo's text.
+  Confirmed against a real `QComboBox`; the existing test only used a single item, which is the
+  first entry either way. Found by the 2026-09-27 KISS audit, while fixing the entry below.
+- Control Center: switching the target file in either YAML editor's selector silently dropped
+  unsaved edits — only closing the window asked. It now prompts Discard / Cancel first, and
+  Cancel puts the selector back on the file the edits belong to. Deliberately no Save option
+  there: by the time the selector's signal fires it already names the new file, so saving would
+  write the edits over it. The Control Center doc also claimed unsaved edits were cached across
+  game switches, which was never true (only across template-preview toggles) — corrected.
+- `install.sh`: a `set -e` abort between building the C-Core into its temp file next to
+  `/usr/local/lib/steamos_diy` and installing it left a stray `tmp.*.so` behind; an `EXIT` trap
+  now removes it on every path.
+- `updater.py`'s comment (and the Utilities Engine doc) claimed the `install.sh` re-hash right
+  before `pkexec` closed the TOCTOU window "down to the few ms" before exec. It narrows it: the
+  (unbounded) `pkexec` password prompt still follows the check, and the other extracted files
+  `install.sh` copies as root are never re-verified. Accepted residual, now described honestly.
+- Completing the "never actually read" sweep the bash audit started: `etc/default/steamos_diy.conf`,
+  `etc/systemd/system/steamos_diy.service`, and 3 of the 4 `etc/skel/.config/steamos_diy/*.yaml`
+  files had a stale `# VERSION:` header (2.1.6/2.1.7 against the real 2.1.8) — `bump-version.sh`'s
+  `HEADER_GLOBS` never included any non-`.py`/`install.sh`/`uninstall.sh` file, so every release
+  bump silently skipped them. Caught up to 2.1.8 and added to `HEADER_GLOBS` so future bumps
+  cover them automatically.
+- `etc/skel/.config/steamos_diy/gamescope.example.yaml`'s `--rt` entry had an unterminated
+  quoted string — the file didn't parse as YAML at all under this project's own `ruamel.yaml`
+  loader (confirmed empirically), undermining its purpose as a reference a user could
+  copy-check against. Only surfaces if a user actually opens and saves it (the existing
+  `except YAMLError` dialog would have caught it, not a crash) — closed the quote.
+- `etc/default/steamos_diy.conf`'s `LOG_LEVEL` comment listed only `DEBUG`/`INFO`/`ERROR`,
+  omitting the real, heavily-used `WARN` level (`utils.py`'s `_LEVELS_C`) — the first file a
+  user opens to configure logging didn't mention a whole log level.
+- `usr/local/share/applications/Control_Center.desktop`'s `Exec=` re-hardcoded
+  `python3 /usr/local/lib/steamos_diy/control_center.py` instead of using the project's own
+  installed entrypoint symlink (`sdy-control-center`, `install.sh`) — `Game_Mode.desktop`
+  already used the equivalent CLI-symlink pattern correctly. No user-visible behavior change,
+  just one less place a future path change could be missed.
+- `var/lib/steamos_diy/next_session` was tracked in git as a packaging leftover — `install.sh`
+  always creates the real runtime file fresh at `/var/lib/steamos_diy/next_session` if absent
+  and never reads this tracked copy. Removed.
+- `README.md`'s Control Center GUI dependency row listed `kate`/`konsole` but not `xdg-utils`
+  (the "Browse Config Folder" button's real dependency, added in an earlier session).
+- `docs/Steamos Session Launch.md`'s `GAME_MODE_ENV` capability table was missing
+  `SRT_URLOPEN_PREFER_STEAM` (added to the code earlier today, documented in this same
+  CHANGELOG's Added section, but never added to this reference table).
+- `docs/Utilities Engine.md`'s "Framework Dependencies" table had drifted from the real
+  `utils` imports in 6 of 8 rows — some from today's refactors (`persist_next_session`,
+  `SYSTEMD_CALL_TIMEOUT`), most from changes going back to 2026-08-27
+  (`require_ssot_conf`, `KONSOLE_BIN`, `safe_emit`) that were never propagated here.
+  Regenerated the whole table against the real current imports rather than patching only
+  today's changes.
+- Found by the first-ever full read of every previously-unaudited config/asset file
+  (`etc/systemd/system/steamos_diy.service`, the pacman hook, both `.desktop` files, the
+  `Makefile`, the SSoT template, all 4 skel YAML files) and the first-ever full docs/README
+  accuracy sweep against real code — both triggered by the maintainer asking directly
+  whether the bash scripts had ever been checked, which surfaced that several other file
+  categories never had been either.
+- `install.sh --update` wiped `$LIB_DIR` (including the old, working `libcore.so`) *before*
+  building the new C-Core. A `gcc` or `ctypes` load failure at that point — a broken
+  toolchain, a full disk, a bad release — exited with the new `.py` files in place and no
+  `.so` at all: `utils.py` exits 127 at import, and with `getty@tty1` already masked from
+  the previous install the next boot had neither a session nor a terminal. The same trap the
+  earlier getty-ordering fix closed for fresh installs, left open for updates. The C-Core is
+  now built and load-verified into a temp file next to `$LIB_DIR` (not `/tmp`, which may be
+  `noexec`) before anything is touched, then installed after the copy. Found by the first
+  semantic read of the bash side of the project (the periodic KISS audit had only ever
+  covered the Python tree; `shellcheck` can't see ordering bugs).
+- Comment/doc wording: `install.sh`'s Plasma-precondition comment, `docs/Installer
+  Workflow.md`, and the Plasma-precondition changelog entry above all said the installer
+  "masks SDDM/plasmalogin and `getty@tty1`" — it *disables* the display managers and masks
+  only `getty@tty1`. Wording only, no behavior change.
+- `docs/Troubleshooting.md` was missing 2 of 64 distinct `jlog()`/`run_shim()` message tags —
+  `NEXT_SESSION_WRITE_FAILED` and `NOFILE_LIMIT_RAISE_FAILED` — found by a new local script
+  that cross-checks every static tag against the doc file. `NEXT_SESSION_WRITE_FAILED` is the
+  more significant of the two: the code's own comment calls it "the single most important
+  write in the launcher," since a failed write leaves `next_session` pointing at whatever it
+  already held instead of the safe Desktop fallback.
+- `control_center.py::_run_pkexec`'s busy-guard branch called `self.statusBar().showMessage(...)`
+  without accounting for PyQt6's stub typing `statusBar()` as `QStatusBar | None` — found by
+  the new mypy gate on introduction. `QMainWindow.statusBar()` always lazily constructs one in
+  practice and never returns `None`, so fixed with a narrow, justified
+  `# type: ignore[union-attr]` rather than a defensive null-check for a scenario that can't
+  actually happen.
+- `install.sh`'s `BASE_PKGS` was missing `kate`/`konsole` as explicit dependencies, even
+  though the Control Center's "Edit SSoT" button and "Open Konsole Terminal" button target
+  these two binaries by name — previously assumed present only because the officially
+  supported desktop (KDE Plasma) usually ships them, which isn't guaranteed on a minimal
+  Plasma install. Both buttons could silently fail on an otherwise-supported configuration.
+  Now installed explicitly, matching every other binary this project depends on directly.
+  `uninstall.sh` deliberately does not remove them, same as every other package this project
+  installs (`steam`, `gamescope`, Mesa drivers…) — see the FAQ's existing "left in place"
+  policy.
+- `install.sh` had no precondition check for `qdbus6`/`startplasma-wayland` (`qt6-tools`/
+  `plasma-workspace`) — the binaries `_dispatch_switch`'s default and `_build_command_for`'s
+  Desktop Mode fallback both depend on, and neither package is in `BASE_PKGS` (this project
+  augments an existing KDE Plasma install, it doesn't install Plasma itself). Running the
+  installer on a system without Plasma already present completed silently, then left Desktop
+  Mode permanently unlaunchable on first boot — with no way back, since the same install run
+  already disabled SDDM/plasmalogin and masked `getty@tty1`. Now checked upfront; aborts immediately
+  with a clear error naming the missing binary and the packages that provide it, instead of
+  discovering the gap only after the point of no return.
+- `control_center.py`'s Diagnostics log view had two entries in `log_styles`
+  (`"DEBUG:"`/`"ERROR:"`) that could never actually match: `_apply_log_style` looped the dict
+  and returned on the *first* hit, and every real line already contains its `CORE:`/`STEAM:`/
+  `SYSTEM:` identifier, so that always won first — confirmed live with the real function
+  before fixing it, not just reasoned about. `"ERROR:"` genuinely does appear as a substring
+  in real message text (`SCAN_ERROR:`, `OS_ERROR:`, …) but was still unreachable for the same
+  reason. The more common `_FAIL:`/`_FAILED:` family (18+ distinct tags — `RESTORE_WRITE_FAIL`,
+  `NEXT_SESSION_WRITE_FAILED`, …) was never covered at all. Fixed by making identifier colour
+  and message-content markers independent layers instead of mutually exclusive: `CORE:`/
+  `STEAM:`/`SYSTEM:` still colour the identifier, and a new pattern-based pass separately
+  highlights any `..._ERROR:`/`..._FAIL:`/`..._FAILED:`/`EARLY_EXIT_RECOVERY:` message (red),
+  `VALIDATED_*_STABLE` (green), and `SWITCH_REQUEST:` (neutral) — self-maintaining for future
+  tags following the same naming convention, not a hand-maintained name list. Purely cosmetic
+  (the Diagnostics tab already showed every line's full text regardless), found while looking
+  into a maintainer request to make specific log messages more visually distinct.
+- `install.sh`'s `BASE_PKGS` was missing `xdg-utils`, needed by `/usr/bin/xdg-open` for the
+  Control Center's "Browse Config Folder" button — same unverified-transitive-dependency shape
+  as the `kate`/`konsole` gap above, found by a new "external binary/dependency completeness"
+  item added to the periodic KISS audit checklist specifically to catch this class of gap.
+- `control_center.py`'s Diagnostics log-marker regex (`_LOG_ERROR_MARKER`) missed the entire
+  `BAD_*` family (7 tags — malformed user-editable input) and `RESTORE_REJECTED_*` family (7
+  security-relevant archive-rejection tags from the restore path), plus
+  `SIGTERM_TIMEOUT:`/`SIGKILL_TIMEOUT:` and 3 standalone literals (`RESTORE_FATAL:`,
+  `NO_TARGET:`, `BINARY_NOT_FOUND:`) — a broader, more security-relevant gap than the
+  `_FAIL:`/`_FAILED:` one already fixed, found by a new "message-tag coverage" audit item.
+  Extended the regex to cover all of them, without renaming any of the affected tags (they're
+  documented verbatim elsewhere for users to grep in journalctl).
+- 3 more log tags missed by the same `_LOG_ERROR_MARKER` regex: `BACKUP_LINK_SKIPPED:` (WARN),
+  `YAML_NOT_MAPPING:` (WARN), and `RESTORE_EMPTY:` (ERROR — a restore that appears to run but
+  restores nothing, the exact "looks fine, silently did nothing" case this styling exists to
+  surface). Found by a new local dev script that checks every WARN/ERROR `jlog()` call against
+  the real regex, not by re-reading the codebase by hand — which had already missed these twice.
+- `helpers/steamos-select-branch.py` left stdout empty on every call, including
+  `steamos-select-branch -c` — which a live support-log export showed Steam actually calls on
+  every normal game launch to populate its own (inapplicable-here) update-channel UI, not just
+  on a rarely-visited settings page as originally assumed. `-c`/`-l` now print a fixed `stable`
+  to stdout (this project has no real branches to report, so a single coherent value is enough
+  to answer both queries); an actual branch-switch request keeps logging only, unchanged.
+  Verified live in Game Mode after the fix.
+
 ## [2.1.8] — 2026-09-10 — Continuous Integration & Centralization Pass
 
 ### Added

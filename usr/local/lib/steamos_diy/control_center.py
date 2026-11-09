@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Control Center
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  PyQt6 dashboard: diagnostics, maintenance and YAML editing.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
@@ -79,6 +79,7 @@ from utils import (
     KONSOLE_BIN,
     PYTHON3_BIN,
     SSOT_CONF_PATH,
+    SYSTEMD_CALL_TIMEOUT,
     USER_CONFIG_REL,
     VERSION,
     clear_ssot_cache,
@@ -115,6 +116,31 @@ _YAML_INDENT_OFFSET: int = 2
 # Matches the LAST parenthesised number — "Half-Life 2 (2004) (220)" → 220.
 _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
+
+# Message-content highlighting, layered on top of the identifier colour
+# (CORE:/STEAM:/SYSTEM:) rather than replacing it — a line can be both
+# "from CORE" and "an error", so the two must not be mutually exclusive
+# the way the old single-dict-with-early-return _apply_log_style was.
+# Pattern-based, not an exhaustive name list: every jlog() error/failure
+# tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED:/_TIMEOUT:
+# or starts with BAD_/RESTORE_REJECTED_ by convention (verified
+# 2026-09-15 KISS audit — 7 RESTORE_REJECTED_* variants, 7 BAD_* variants,
+# SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT:), so this stays correct for future
+# tags that follow the same convention without needing a name added here
+# by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
+# BINARY_NOT_FOUND:/BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/RESTORE_EMPTY:
+# are the real exceptions to those conventions, added explicitly — the
+# last 3 found by scripts/audit-log-markers.py (added 2026-09-15
+# specifically to catch this class of gap mechanically going forward).
+_LOG_ERROR_MARKER = re.compile(
+    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
+    r"|\bBAD_[A-Z0-9_]*:"
+    r"|\bRESTORE_REJECTED_[A-Z_]*:"
+    r"|EARLY_EXIT_RECOVERY:|RESTORE_FATAL:|NO_TARGET:|BINARY_NOT_FOUND:"
+    r"|BACKUP_LINK_SKIPPED:|YAML_NOT_MAPPING:|RESTORE_EMPTY:"
+)
+_LOG_SUCCESS_MARKER = re.compile(r"VALIDATED_[A-Z]+_STABLE")
+_LOG_NEUTRAL_MARKER = re.compile(r"SWITCH_REQUEST:")
 
 
 def _extract_game_name_from_display(raw: str) -> str:
@@ -313,8 +339,6 @@ class SDYControlCenter(QMainWindow):
             "CORE:": ("🔵", "#3498db"),
             "STEAM:": ("🎮", "#2ecc71"),
             "SYSTEM:": ("⚙️", "#f39c12"),
-            "DEBUG:": ("🔍", "#95a5a6"),
-            "ERROR:": ("🚫", "#e74c3c"),
         }
         self.gs_levels = {
             "[Error]": ("❌", "#ff4444"),
@@ -359,10 +383,12 @@ class SDYControlCenter(QMainWindow):
         self.service_label = None
         self._service_timer = None
 
-        # Per-tab template view state
+        # Per-tab editor state: template view, plus the combo entry the
+        # editor's content was last loaded from ("loaded"), so a declined
+        # discard can put the combo back on it.
         self.view_states = {
-            "global": {"is_template": False, "cache": ""},
-            "games": {"is_template": False, "cache": ""},
+            "global": {"is_template": False, "cache": "", "loaded": ""},
+            "games": {"is_template": False, "cache": "", "loaded": ""},
         }
 
         self._setup_ui()
@@ -774,17 +800,26 @@ class SDYControlCenter(QMainWindow):
         )
         return self.conf_root / fname
 
+    def _read_or_toast(self, path: Path) -> str | None:
+        """Read a YAML file for an editor; on failure, toast and return
+        None so the caller can bail without touching the editor."""
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as err:
+            # Same QMainWindow.statusBar() Optional-stub caveat as the
+            # ignore in _run_pkexec: never actually None at runtime.
+            self.statusBar().showMessage(  # type: ignore[union-attr]
+                f"Could not load {path.name}: {err}", 3000
+            )
+            return None
+
     def _enter_template_mode(self, context, state, widgets):
         editor, save_btn, tmp_btn, hl, target_combo = widgets
         t_path = self._template_path_for(context)
         if not t_path.exists():
             return
-        try:
-            content = t_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as err:
-            self.statusBar().showMessage(
-                f"Could not load {t_path.name}: {err}", 3000
-            )
+        content = self._read_or_toast(t_path)
+        if content is None:
             return
         state["cache"] = editor.toPlainText()
         editor.setPlainText(content)
@@ -868,21 +903,54 @@ class SDYControlCenter(QMainWindow):
             sels.append(sel)
         editor.setExtraSelections(sels)
 
+    def _confirm_discard(self, editor, loaded):
+        """Ask before a file switch drops unsaved edits; True to proceed.
+
+        Discard/Cancel only, no Save (unlike closeEvent): by the time the
+        combo signal fires, currentText() already names the NEW file, so
+        the save_* methods would write these edits over it.
+        """
+        if not editor.document().isModified():
+            return True
+        reply = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            f"Discard unsaved changes to {loaded or 'the editor'}?",
+            QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        return reply == QMessageBox.StandardButton.Discard
+
+    def _select_game_text(self, text):
+        """Show *text* in the editable games combo, selecting it if listed.
+
+        setEditText() alone would leave the index on another entry.
+        """
+        idx = self.combo_games.findText(text)
+        if idx >= 0:
+            self.combo_games.setCurrentIndex(idx)
+        else:
+            self.combo_games.setEditText(text)
+
     def load_global_file(self):
         """Load the selected global YAML file into the editor."""
-        path = self.conf_root / self.combo_global_files.currentText()
+        state = self.view_states["global"]
+        name = self.combo_global_files.currentText()
+        if not self._confirm_discard(self.global_editor, state["loaded"]):
+            # Signals blocked: currentTextChanged would re-enter here.
+            self.combo_global_files.blockSignals(True)
+            self.combo_global_files.setCurrentText(state["loaded"])
+            self.combo_global_files.blockSignals(False)
+            return
+        path = self.conf_root / name
         if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as err:
-                self.statusBar().showMessage(
-                    f"Could not load {path.name}: {err}", 3000
-                )
+            content = self._read_or_toast(path)
+            if content is None:
                 return
             self.global_editor.setPlainText(content)
-            if self.global_hl:
-                self.global_hl.rehighlight()
+            self.global_hl.rehighlight()
             self.global_editor.document().setModified(False)
+            state["loaded"] = name
 
     def save_global_config(self):
         """Atomically save the global YAML editor content to disk."""
@@ -899,23 +967,24 @@ class SDYControlCenter(QMainWindow):
         """
         if not raw or "/" in raw:
             return
+        state = self.view_states["games"]
+        if not self._confirm_discard(self.game_editor, state["loaded"]):
+            # `activated` only fires on user interaction, so no re-entry.
+            self._select_game_text(state["loaded"])
+            return
         name = _extract_game_name_from_display(raw)
         path = self.games_conf_dir / f"{name}.yaml"
         if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as err:
-                self.statusBar().showMessage(
-                    f"Could not load {path.name}: {err}", 3000
-                )
+            content = self._read_or_toast(path)
+            if content is None:
                 return
             self.game_editor.setPlainText(content)
         else:
             scaffold = self._scaffold_game_profile(raw, name)
             self.game_editor.setPlainText(scaffold)
-        if self.game_hl:
-            self.game_hl.rehighlight()
+        self.game_hl.rehighlight()
         self.game_editor.document().setModified(False)
+        state["loaded"] = raw
 
     def _scaffold_game_profile(self, raw, name):
         """Build default YAML profile; includes SDY_ID header if AppID present.
@@ -1059,7 +1128,7 @@ class SDYControlCenter(QMainWindow):
                         text=True,
                         errors="replace",
                         check=True,
-                        timeout=10,
+                        timeout=SYSTEMD_CALL_TIMEOUT,
                     )
                     # pylint: enable=duplicate-code
                     lines = filter_game_journal_lines(res.stdout, home)
@@ -1083,7 +1152,11 @@ class SDYControlCenter(QMainWindow):
         # editable combo) — clear() resets the line-edit text along with
         # the item list, and a subsequent Save silently no-ops on the
         # now-empty currentText(). Restore whatever the user had typed
-        # instead of discarding it.
+        # instead of discarding it. An already-listed selection must be
+        # restored too: addItems() on the cleared combo auto-selects
+        # index 0, so the combo showed the FIRST game while the editor
+        # still held the selected one's profile — and Save (which targets
+        # currentText()) overwrote the first game's file with it.
         typed = self.combo_games.currentText()
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
@@ -1092,8 +1165,8 @@ class SDYControlCenter(QMainWindow):
             self.combo_games.addItems(items)
         else:
             self.combo_games.setPlaceholderText("Journal unavailable.")
-        if typed and typed not in items:
-            self.combo_games.setEditText(typed)
+        if typed:
+            self._select_game_text(typed)
 
     def _merge_on_disk_profiles(self, detected):
         gdir = self.games_conf_dir
@@ -1176,12 +1249,30 @@ class SDYControlCenter(QMainWindow):
         line = html.escape(line, quote=False)
         for tag, (ico, col) in self.log_styles.items():
             if tag in line:
-                return line.replace(
-                    tag, f"<b style='color:{col};'>{ico} {tag}</b>"
+                # Identifier colour and the message-content markers below
+                # are independent, not mutually exclusive — a line is
+                # both "from CORE" and (say) "an error", so this only
+                # breaks the identifier loop, it doesn't return early.
+                line = line.replace(
+                    tag, f"<b style='color:{col};'>{ico} {tag}</b>", 1
                 )
+                return self._highlight_log_markers(line)
         if "[gamescope]" in line:
             return self._style_gamescope_line(line)
         return line
+
+    @staticmethod
+    def _highlight_log_markers(line):
+        """Bold+colour error/success/switch markers within the message."""
+        line = _LOG_ERROR_MARKER.sub(
+            lambda m: f"<b style='color:#e74c3c;'>🚫 {m.group(0)}</b>", line
+        )
+        line = _LOG_SUCCESS_MARKER.sub(
+            lambda m: f"<b style='color:#2ecc71;'>✅ {m.group(0)}</b>", line
+        )
+        return _LOG_NEUTRAL_MARKER.sub(
+            lambda m: f"<b style='color:#7f8c8d;'>{m.group(0)}</b>", line
+        )
 
     def _style_gamescope_line(self, line):
         line = line.replace(
@@ -1369,7 +1460,11 @@ class SDYControlCenter(QMainWindow):
         script may genuinely still be writing files.
         """
         if self._pkexec_busy.get(lock_key):
-            self.statusBar().showMessage(
+            # QMainWindow.statusBar() lazily constructs one on first access
+            # and never actually returns None; PyQt6's stub types it as
+            # Optional purely because the underlying Qt method signature
+            # is conservative, not because this can happen here.
+            self.statusBar().showMessage(  # type: ignore[union-attr]
                 "Another privileged operation is already running…", 3000
             )
             return
