@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- Control Center: when the file picked in an editor's selector could not be loaded (not valid
+  UTF-8, unreadable), the selector moved to the new name while the editor kept the previous file's
+  text — and Save, which writes the editor to whatever the selector names, then put that text
+  into the wrong file (verified: one game's profile written over another's). The selector now
+  goes back to the file actually shown. A Global Options file that simply doesn't exist yet opens
+  empty instead of leaving the previous file's content on screen under its name.
 - Control Center: opening "View Template" made the editor forget it had unsaved edits. Back from
   the preview the text was still there, but neither closing the window nor switching file warned
   about it any more — and closing the window *during* the preview dropped the edits with no

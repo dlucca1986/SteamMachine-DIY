@@ -957,25 +957,40 @@ class SDYControlCenter(QMainWindow):
         else:
             self.combo_games.setEditText(text)
 
+    def _reselect_loaded_global_file(self):
+        """Put the Target File combo back on the file the editor holds."""
+        # Signals blocked: currentTextChanged would re-enter load_global_file.
+        self.combo_global_files.blockSignals(True)
+        self.combo_global_files.setCurrentText(
+            self.view_states["global"]["loaded"]
+        )
+        self.combo_global_files.blockSignals(False)
+
     def load_global_file(self):
-        """Load the selected global YAML file into the editor."""
+        """Load the selected global YAML file into the editor.
+
+        The combo and the editor must never disagree, since Save writes
+        the editor to whatever the combo names: a declined discard or an
+        unreadable file puts the combo back, and a file that doesn't
+        exist yet starts empty instead of keeping the previous file's
+        text on screen under the new name.
+        """
         state = self.view_states["global"]
         name = self.combo_global_files.currentText()
         if not self._confirm_discard(self.global_editor, state["loaded"]):
-            # Signals blocked: currentTextChanged would re-enter here.
-            self.combo_global_files.blockSignals(True)
-            self.combo_global_files.setCurrentText(state["loaded"])
-            self.combo_global_files.blockSignals(False)
+            self._reselect_loaded_global_file()
             return
         path = self.conf_root / name
+        content = ""
         if path.exists():
             content = self._read_or_toast(path)
             if content is None:
+                self._reselect_loaded_global_file()
                 return
-            self.global_editor.setPlainText(content)
-            self.global_hl.rehighlight()
-            self.global_editor.document().setModified(False)
-            state["loaded"] = name
+        self.global_editor.setPlainText(content)
+        self.global_hl.rehighlight()
+        self.global_editor.document().setModified(False)
+        state["loaded"] = name
 
     def save_global_config(self):
         """Atomically save the global YAML editor content to disk."""
@@ -1002,6 +1017,10 @@ class SDYControlCenter(QMainWindow):
         if path.exists():
             content = self._read_or_toast(path)
             if content is None:
+                # Same rule as load_global_file: the combo goes back to
+                # the game the editor still holds, or Save would write
+                # that game's profile over this unreadable one.
+                self._select_game_text(state["loaded"])
                 return
             self.game_editor.setPlainText(content)
         else:

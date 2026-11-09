@@ -118,6 +118,7 @@ class _FakeWindow:
     _scaffold_game_profile = _SCC._scaffold_game_profile
     toggle_template = _SCC.toggle_template
     load_global_file = _SCC.load_global_file
+    _reselect_loaded_global_file = _SCC._reselect_loaded_global_file
     load_game_file = _SCC.load_game_file
     _confirm_discard = _SCC._confirm_discard
     save_game_profile = _SCC.save_game_profile
@@ -343,3 +344,49 @@ def test_template_preview_keeps_a_clean_editor_clean(tmp_path):
     win.toggle_template("global")
 
     assert win.global_editor.document().isModified() is False
+
+
+# ---------------------------------------------------------------------------
+# A load that doesn't happen must not leave the combo on the new entry
+# with the previous file's text still in the editor: Save writes the
+# editor to whatever the combo names (2026-11-09 audit — verified on the
+# real window: one game's profile was written into another's file).
+# ---------------------------------------------------------------------------
+
+
+def test_global_load_failure_puts_the_combo_back(tmp_path):
+    (tmp_path / "gamescope.example.yaml").write_bytes(b"\xff\xfe bad")
+    win = _FakeWindow(tmp_path)
+    win.view_states["global"]["loaded"] = "config.yaml"
+    win.combo_global_files = _FakeCombo("gamescope.example.yaml")
+
+    win.load_global_file()
+
+    assert win.combo_global_files.currentText() == "config.yaml"
+    assert win.global_editor.toPlainText() == "live: global\n"
+    assert win.combo_global_files.signals_blocked is False
+
+
+def test_global_missing_file_starts_empty(tmp_path):
+    win = _FakeWindow(tmp_path)
+    win.view_states["global"]["loaded"] = "config.yaml"
+    win.combo_global_files = _FakeCombo("gamescope.example.yaml")
+
+    win.load_global_file()
+
+    assert win.global_editor.toPlainText() == ""
+    assert win.view_states["global"]["loaded"] == "gamescope.example.yaml"
+
+
+def test_game_load_failure_puts_the_combo_back(tmp_path):
+    games_dir = tmp_path / "games.d"
+    games_dir.mkdir()
+    (games_dir / "Broken.yaml").write_bytes(b"\xff\xfe bad")
+    win = _FakeWindow(tmp_path)
+    win.view_states["games"]["loaded"] = "MyGame"
+    win.combo_games = _FakeCombo("Broken")
+
+    win.load_game_file("Broken")
+
+    assert win.combo_games.currentText() == "MyGame"
+    assert win.game_editor.toPlainText() == "live: game\n"
