@@ -36,9 +36,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
 
+      # PyQt6 pinned below 6.12: 6.12.0 ships a QtGui.pyi with invalid
+      # syntax (`*args, /`, e.g. QPainter.drawLines) that aborts the mypy
+      # gate before it checks any of our code (found 2026-11-09; the
+      # runtime is unaffected, only the stubs). Drop the pin once a PyQt6
+      # release fixes the stub.
       - name: Install project + tooling dependencies
         run: |
-          pip install PyQt6 ruamel.yaml
+          pip install "PyQt6<6.12" ruamel.yaml
           pip install pylint flake8 ruff bandit radon vulture pytest mypy
 
       - name: pylint (production code)
