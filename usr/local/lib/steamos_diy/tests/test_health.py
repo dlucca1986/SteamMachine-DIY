@@ -82,6 +82,31 @@ def test_read_user_config_returns_unreadable_for_non_utf8(
     assert result is health._UNREADABLE
 
 
+def test_check_yaml_reports_unbuildable_scalar_instead_of_raising(tmp_path):
+    """Regression: ruamel raises a plain ValueError, not YAMLError, for an
+    unquoted scalar shaped like a date that isn't one — it escaped
+    _check_yaml and aborted the whole preflight with a bare "day 30 must
+    be in range..." and no file name (2026-11-09 audit, found by feeding
+    odd inputs to the real parser)."""
+    bad = tmp_path / "config.yaml"
+    bad.write_text("released: 2026-02-30\n")
+
+    result = health._check_yaml(str(bad))
+
+    assert result.ok is False
+    assert result.name == "YAML config.yaml"
+
+
+def test_read_user_config_returns_unreadable_for_unbuildable_scalar(
+    tmp_path, monkeypatch
+):
+    bad = tmp_path / "config.yaml"
+    bad.write_text("released: 2026-02-30\n")
+    monkeypatch.setattr(health, "get_ssot_var", lambda *a, **k: str(bad))
+
+    assert health._read_user_config() is health._UNREADABLE
+
+
 def test_check_binaries_rejects_a_directory(tmp_path, monkeypatch):
     """Regression: os.access(path, os.X_OK) alone is true for a
     traversable directory, not just an executable file -- a SSoT binary

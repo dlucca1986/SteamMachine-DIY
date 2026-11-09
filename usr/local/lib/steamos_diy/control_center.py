@@ -744,7 +744,11 @@ class SDYControlCenter(QMainWindow):
             stream = StringIO()
             yaml_parser.dump(data, stream)
             clean = stream.getvalue()
-        except YAMLError as err:
+        # ValueError too: ruamel raises it (not YAMLError) for a scalar it
+        # recognises by shape and then fails to build, e.g. an unquoted
+        # impossible date like 2026-02-30. Uncaught in this slot, PyQt6
+        # aborts the whole app (SIGABRT) with the unsaved edit in it.
+        except (YAMLError, ValueError) as err:
             self._highlight_yaml_error(editor, err)
             self.statusBar().showMessage("Syntax error — see highlight", 3000)
             return
@@ -884,7 +888,8 @@ class SDYControlCenter(QMainWindow):
                 return
             editor.document().setModified(False)
             QMessageBox.information(self, "Success", "Configuration saved!")
-        except YAMLError as exc:
+        # ValueError too — see beautify_yaml's except for why.
+        except (YAMLError, ValueError) as exc:
             self._highlight_yaml_error(editor, exc)
             QMessageBox.critical(self, "Syntax Error", str(exc))
         except OSError as exc:
@@ -1382,7 +1387,12 @@ class SDYControlCenter(QMainWindow):
                     f"Saved: {dest}",
                     False,
                 )
-            except OSError as err:
+            # Broad on purpose, same reasoning as validate_config's
+            # worker: the report runs the whole preflight, and an
+            # exception escaping this daemon thread would leave the
+            # button doing nothing with no dialog at all.
+            # pylint: disable-next=broad-except
+            except Exception as err:  # noqa: BLE001
                 safe_emit(
                     self.process_finished, "Save Error", str(err), True
                 )

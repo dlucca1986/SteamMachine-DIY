@@ -88,3 +88,18 @@ def test_atomic_save_reports_write_atomic_failure(monkeypatch, tmp_path):
     assert written
     assert calls and calls[0][0] == "critical"
     assert editor.document().modified is None
+
+
+def test_atomic_save_survives_unbuildable_scalar(monkeypatch, tmp_path):
+    """Regression: ruamel raises a plain ValueError, not YAMLError, for an
+    unquoted impossible date. Uncaught in this Qt slot, PyQt6 aborted the
+    whole Control Center (exit 134 on the real window) with the unsaved
+    edit in it; it must be reported like any other syntax error
+    (2026-11-09 audit)."""
+    calls, written, editor = _atomic_save_harness(
+        monkeypatch, tmp_path, "released: 2026-02-30\n"
+    )
+
+    assert not written
+    assert calls and calls[0][0] == "critical"
+    assert editor.document().modified is None

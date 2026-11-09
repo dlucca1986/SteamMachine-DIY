@@ -141,3 +141,30 @@ def test_control_center_runs_every_tab_and_a_scan(qapp, captured):
         win.close()
 
     assert captured == []
+
+
+# pylint: disable-next=redefined-outer-name
+def test_save_and_beautify_survive_an_unbuildable_scalar(qapp, captured):
+    """Regression, on the real window: an unquoted impossible date makes
+    ruamel raise ValueError, not YAMLError. Uncaught in these slots,
+    PyQt6 aborted the whole app (exit 134) with the unsaved edit in it
+    (2026-11-09 audit). Called directly here, so an escaping exception
+    fails the test instead of aborting pytest."""
+    import control_center  # pylint: disable=import-outside-toplevel
+
+    win = control_center.SDYControlCenter()
+    try:
+        _pump_until(qapp, lambda: _workers_idle(win))
+        on_disk = (win.conf_root / "config.yaml").read_text()
+        win.global_editor.setPlainText("released: 2026-02-30\n")
+
+        win.beautify_yaml(win.global_editor)
+        win.save_global_config()
+
+        assert (win.conf_root / "config.yaml").read_text() == on_disk
+        assert win.global_editor.toPlainText() == "released: 2026-02-30\n"
+    finally:
+        win._service_timer.stop()
+        win.close()
+
+    assert len(captured) == 1 and captured[0].startswith("dialog critical")

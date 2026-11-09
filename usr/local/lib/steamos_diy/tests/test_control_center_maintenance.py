@@ -114,3 +114,35 @@ def test_export_support_log_resets_guard_after_completion(
 
     assert win._export_busy is False
     assert Path(dest).read_text(encoding="utf-8") == "report"
+
+
+def test_export_support_log_reports_an_unexpected_failure(
+    monkeypatch, tmp_path
+):
+    """Regression: the worker only caught OSError, so anything else
+    raised while building the report (it runs the whole preflight) killed
+    the daemon thread — the button then did nothing, with no dialog
+    (2026-11-09 audit)."""
+    monkeypatch.setattr(
+        control_center.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: (str(tmp_path / "support.log"), ""),
+    )
+
+    def boom():
+        raise ValueError("day 30 must be in range 1..28")
+
+    monkeypatch.setattr(control_center, "_build_support_report", boom)
+    monkeypatch.setattr(
+        control_center.threading, "Thread", _sync_thread_factory()
+    )
+    emitted = []
+    win = SimpleNamespace(
+        _export_busy=False,
+        process_finished=SimpleNamespace(emit=lambda *a: emitted.append(a)),
+    )
+
+    control_center.SDYControlCenter.export_support_log(win)
+
+    assert emitted and emitted[0][2] is True
+    assert win._export_busy is False

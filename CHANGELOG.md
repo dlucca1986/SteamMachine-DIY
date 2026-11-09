@@ -8,6 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- Control Center: clicking Save or Beautify on a config containing an unquoted value shaped like a
+  date that isn't one (e.g. `released: 2026-02-30`) **closed the whole application** on the spot,
+  taking any unsaved edit with it. The YAML parser raises a plain `ValueError` for such a value
+  instead of its usual syntax error; nothing caught it, and Qt aborts on an unhandled error in a
+  button handler. It is now reported as a syntax error like any other. The same input made
+  "Validate Configuration" fail as a whole with a bare parser message and no file name, and made
+  "Export Support Report" do nothing at all — both fixed (`health.py` now reports the file as a
+  failed check; the export worker reports any failure instead of dying silently). Found by
+  feeding odd inputs to the real parser during the 2026-11-09 audit.
 - Control Center, Game Overrides tab: the game selector's "Scanning history..." and "Journal
   unavailable." messages were never visible — they were set as the combo box's own placeholder,
   which an editable Qt combo box never paints, so the user only ever saw an empty box. They now
