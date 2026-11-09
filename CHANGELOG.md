@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [2.1.9] — 2026-11-09 — Hardening & Audit Fixes
 
 ### Added
 - `SRT_URLOPEN_PREFER_STEAM=1` added to `GAME_MODE_ENV`: links clicked inside Game Mode

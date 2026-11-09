@@ -2,7 +2,7 @@
 """
 # =============================================================================
 # PROJECT:      SteamMachine-DIY
-# VERSION:      2.1.8
+# VERSION:      2.1.9
 # DESCRIPTION:  Control Center updater UI: check, download, Konsole handoff.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
