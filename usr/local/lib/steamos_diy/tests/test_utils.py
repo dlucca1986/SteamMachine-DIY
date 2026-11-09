@@ -22,6 +22,7 @@ import subprocess
 import tarfile
 from types import SimpleNamespace
 
+import pytest
 import utils
 
 
@@ -837,3 +838,37 @@ def test_verify_archive_rejects_truncated_and_foreign_files(tmp_path):
 
     assert utils.verify_archive(truncated) is False
     assert utils.verify_archive(foreign) is False
+
+
+# ---------------------------------------------------------------------------
+# load_yaml_safe — an existing file whose content gets dropped must say so
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("content", "tag"),
+    [
+        (b"flags: [unclosed\n", "YAML_PARSE_ERROR:"),
+        (b"released: 2026-02-30\n", "YAML_LOAD_ERROR:"),
+        (b"\xff\xfe not utf-8\n", "YAML_LOAD_ERROR:"),
+    ],
+)
+def test_load_yaml_safe_warns_when_it_drops_a_file(
+    tmp_path, monkeypatch, content, tag
+):
+    """Regression: these were logged at DEBUG, below the default
+    LOG_LEVEL=INFO — a syntax error in config.yaml silently produced a
+    default session with nothing in the journal, while the milder
+    YAML_NOT_MAPPING case warned (2026-11-09 audit)."""
+    logged = []
+    monkeypatch.setattr(
+        utils,
+        "jlog",
+        lambda _tag, msg, level="INFO": logged.append((msg, level)),
+    )
+    path = tmp_path / "config.yaml"
+    path.write_bytes(content)
+
+    assert utils.load_yaml_safe(path) == {}
+    assert len(logged) == 1
+    assert logged[0][0].startswith(tag) and logged[0][1] == "WARN"

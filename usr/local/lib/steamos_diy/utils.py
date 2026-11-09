@@ -306,11 +306,15 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = _yaml_reader.load(fh)
+    # WARN, not DEBUG: the file exists and its whole content is being
+    # dropped — at the default LOG_LEVEL=INFO a syntax error in
+    # config.yaml used to produce a plain default session with nothing
+    # in the journal, while the milder wrong-shape case below warned.
     except (OSError, ValueError) as err:
-        jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="DEBUG")
+        jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="WARN")
         return {}
     except YAMLError as err:
-        jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="DEBUG")
+        jlog("CORE", f"YAML_PARSE_ERROR: {path} - {err}", level="WARN")
         return {}
     if isinstance(data, dict):
         return data

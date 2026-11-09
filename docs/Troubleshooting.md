@@ -135,8 +135,8 @@ Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejec
 | `CORE` | `SSOT_READ_ERROR: <error>` | DEBUG | Couldn't read or decode `/etc/default/steamos_diy.conf` — every SSoT lookup degrades to its own built-in default for the rest of the process. |
 | `CORE` | `BAD_SSOT_NUM: <key> - using <default>` | WARN | A numeric SSoT value (a timeout, delay, or count) didn't parse as a valid finite number — the built-in default was used instead. |
 | `CORE` | `BAD_ENV_ENTRY: <name> - <error>` | WARN | An entry from the SSoT or from a YAML `env_vars:` block can't be an environment variable (empty name, a `=` inside the name, a NUL byte) — that one entry was skipped, everything else was applied. Check the named line. |
-| `CORE` | `YAML_LOAD_ERROR: <path> - <error>` | DEBUG | Couldn't read or decode a YAML config/profile file. |
-| `CORE` | `YAML_PARSE_ERROR: <path> - <error>` | DEBUG | The YAML file has a syntax error. |
+| `CORE` | `YAML_LOAD_ERROR: <path> - <error>` | WARN | Couldn't read or decode a YAML config/profile file (also: a value the parser recognises but can't build, such as an unquoted impossible date) — the whole file was ignored. |
+| `CORE` | `YAML_PARSE_ERROR: <path> - <error>` | WARN | The YAML file has a syntax error — the whole file was ignored. Run *Validate Configuration* in the Control Center for the offending line. |
 | `CORE` | `YAML_NOT_MAPPING: <path>` | WARN | The YAML file parsed successfully but its root isn't a `key: value` mapping (e.g. a bare list) — treated as empty. |
 | `CORE` | `SPAWN_ERROR: <path> - <error>` | WARN | A detached process (Control Center's Maintenance-tab buttons, `post_start_cmds`) failed to launch. |
 | `CORE` | `USER_LOOKUP_ERROR: <error>` | DEBUG | Couldn't resolve the real (non-root) invoking user while running privileged under `pkexec`. |

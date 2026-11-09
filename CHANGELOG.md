@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- A `config.yaml` or game profile that fails to parse is ignored as a whole — and that used to
+  leave no trace: the `YAML_PARSE_ERROR` / `YAML_LOAD_ERROR` messages were logged at DEBUG, below
+  the default `LOG_LEVEL=INFO`, so a syntax error just produced a session without your flags and
+  variables and nothing in the journal (while the milder "wrong shape" case did warn). Both are
+  now WARN, and show highlighted in the Diagnostics tab.
 - `sdy` refused to launch a game whose executable file name contains a byte that isn't valid
   UTF-8 (old or badly-extracted game files): writing its own `GAME_LAUNCH` log line failed on that
   name, and the failure was reported as `EXECUTION_FAILED` before the game was even started. Log
