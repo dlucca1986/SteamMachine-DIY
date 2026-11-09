@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- Control Center: opening "View Template" made the editor forget it had unsaved edits. Back from
+  the preview the text was still there, but neither closing the window nor switching file warned
+  about it any more — and closing the window *during* the preview dropped the edits with no
+  question at all. The preview now keeps the real content's unsaved state, and closing leaves the
+  preview first so the usual Save / Discard / Cancel prompt applies. Found by the 2026-11-09
+  audit, confirmed on the real window.
 - Backup/restore: the archive integrity check did not actually check the archive's checksum. It
   walked the files inside the `.tar.gz` but stopped before the gzip trailer, where the CRC lives —
   so damage that left the archive structurally readable passed as "verified". Measured on a

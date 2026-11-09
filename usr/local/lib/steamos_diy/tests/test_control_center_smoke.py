@@ -169,3 +169,36 @@ def test_save_and_beautify_survive_an_unbuildable_scalar(qapp, captured):
 
     assert len(captured) == 1 and captured[0].startswith("dialog critical")
 
+
+# pylint: disable-next=redefined-outer-name
+def test_closing_during_a_template_preview_still_warns(qapp, captured):
+    """Regression, on the real window: closing while a template preview
+    was open skipped the unsaved-changes prompt, because the edits lived
+    only in the preview's cache (2026-11-09 audit). The fixture's fake
+    dialog answers Cancel, so the window must stay out of the preview
+    with the edit and its dirty flag intact."""
+    import control_center  # pylint: disable=import-outside-toplevel
+
+    win = control_center.SDYControlCenter()
+    try:
+        _pump_until(qapp, lambda: _workers_idle(win))
+        (win.conf_root / "config.example.yaml").write_text("template: 1\n")
+        editor = win.global_editor
+        editor.setPlainText(editor.toPlainText() + "# unsaved\n")
+        editor.document().setModified(True)
+        win.toggle_template("global")
+        # Precondition: without it this test silently checks a plain
+        # dirty-editor close instead (it did, in its first version).
+        assert win.view_states["global"]["is_template"] is True
+
+        win.close()
+
+        assert win.view_states["global"]["is_template"] is False
+        assert editor.toPlainText().endswith("# unsaved\n")
+        assert editor.document().isModified() is True
+    finally:
+        win.global_editor.document().setModified(False)
+        win._service_timer.stop()
+        win.close()
+
+    assert len(captured) == 1 and captured[0].startswith("dialog question")
