@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Fixed
+- Backup/restore: the archive integrity check did not actually check the archive's checksum. It
+  walked the files inside the `.tar.gz` but stopped before the gzip trailer, where the CRC lives —
+  so damage that left the archive structurally readable passed as "verified". Measured on a
+  realistic archive: 357 of 400 single-bit corruptions passed, and a restore would have written
+  the damaged files (code included) and reported success. The check now reads the stream to its
+  end; the same 400 corruptions are all rejected, intact archives (including existing real
+  backups) still pass. Also catches a rare decompressor error that previously escaped as a raw
+  traceback. Found by the 2026-11-09 audit.
 - Control Center: clicking Save or Beautify on a config containing an unquoted value shaped like a
   date that isn't one (e.g. `released: 2026-02-30`) **closed the whole application** on the spot,
   taking any unsaved edit with it. The YAML parser raises a plain `ValueError` for such a value

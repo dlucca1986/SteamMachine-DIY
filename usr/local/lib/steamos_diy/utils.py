@@ -569,20 +569,34 @@ def get_backup_mapping(
 def verify_archive(
     path: str | Path, fail_tag: str = "ARCHIVE_VERIFY_FAIL"
 ) -> bool:
-    """Walk all tar members end-to-end to verify gzip integrity."""
-    # Deferred import: tarfile is only needed by backup.py/restore.py's
-    # verification and download_release() (~15ms load cost) — every other
+    """Verify a .tar.gz end-to-end: tar structure AND gzip checksum."""
+    # Deferred imports: only backup.py/restore.py's verification and
+    # download_release() need these (~15ms load cost) — every other
     # importer of this module, session_launch.py included, would
     # otherwise pay it on every session boot/switch for nothing.
     # pylint: disable=import-outside-toplevel
+    import gzip
     import tarfile
+    import zlib
 
     try:
-        with tarfile.open(str(path), "r:gz") as tar:
+        with gzip.open(path, "rb") as gz, tarfile.open(
+            fileobj=gz, mode="r:"
+        ) as tar:
             for _ in tar:
                 pass
+            # Walking the members is not enough: tarfile stops at the
+            # end-of-archive marker and never reaches the gzip trailer,
+            # so the stream's CRC32 was never checked — 357 of 400
+            # single-bit corruptions of a realistic archive passed, and
+            # would have been restored as silently different files
+            # (2026-11-09 audit). Reading to EOF makes gzip validate it.
+            while gz.read(65536):
+                pass
         return True
-    except (tarfile.TarError, OSError, EOFError) as err:
+    # zlib.error: raised (rarely) straight from the decompressor on a
+    # damaged stream; it is neither an OSError nor a TarError.
+    except (tarfile.TarError, OSError, EOFError, zlib.error) as err:
         jlog("SYSTEM", f"{fail_tag}: {err}", level="ERROR")
         return False
 

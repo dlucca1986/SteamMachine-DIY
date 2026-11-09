@@ -714,3 +714,53 @@ def test_write_atomic_returns_false_on_failure(monkeypatch, tmp_path):
     )
 
     assert utils.write_atomic(tmp_path / "f", "content") is False
+
+
+# ---------------------------------------------------------------------------
+# verify_archive — the integrity gate for backup (tmp -> verify -> replace)
+# and for restore's pre-check
+# ---------------------------------------------------------------------------
+
+
+def _write_backup_like_archive(path):
+    data = b"flags:\n  - -W 1280\n" * 200
+    with tarfile.open(path, "w:gz") as tar:
+        info = tarfile.TarInfo("user/config/config.yaml")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+
+def test_verify_archive_accepts_an_intact_archive(tmp_path):
+    archive = tmp_path / "ok.tar.gz"
+    _write_backup_like_archive(archive)
+
+    assert utils.verify_archive(archive) is True
+
+
+def test_verify_archive_rejects_a_bad_gzip_checksum(tmp_path):
+    """Regression: only the tar members were walked, and tarfile stops at
+    the end-of-archive marker without ever reaching the gzip trailer — so
+    the CRC32 was never checked, and content corruption that left the tar
+    structure readable passed as "verified" (357/400 single-bit flips of
+    a realistic archive, 2026-11-09 audit). Flipping the stored CRC is
+    the minimal case: every member still reads fine, only the checksum
+    disagrees."""
+    archive = tmp_path / "crc.tar.gz"
+    _write_backup_like_archive(archive)
+    raw = bytearray(archive.read_bytes())
+    raw[-8] ^= 0xFF  # first byte of the trailer's CRC32
+    archive.write_bytes(raw)
+
+    assert utils.verify_archive(archive) is False
+
+
+def test_verify_archive_rejects_truncated_and_foreign_files(tmp_path):
+    archive = tmp_path / "ok.tar.gz"
+    _write_backup_like_archive(archive)
+    truncated = tmp_path / "cut.tar.gz"
+    truncated.write_bytes(archive.read_bytes()[:-20])
+    foreign = tmp_path / "notes.tar.gz"
+    foreign.write_bytes(b"not an archive at all")
+
+    assert utils.verify_archive(truncated) is False
+    assert utils.verify_archive(foreign) is False

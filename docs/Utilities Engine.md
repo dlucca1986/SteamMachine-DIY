@@ -68,7 +68,7 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current effective UID. |
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Detached spawn via `subprocess.Popen(start_new_session=True)`; stdout/stderr redirected to `/dev/null`. Returns the child PID, or `0` on failure. |
-| `verify_archive(path, tag)` | Gzip-tar integrity check via `tarfile.open` + member iteration. Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
+| `verify_archive(path, tag)` | Gzip-tar integrity check: walks every tar member, then reads the gzip stream to its end so the CRC32 in its trailer is actually validated (member iteration alone stops before it and misses content corruption). Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
 | `run_shim(tag, message, exit_code)` | Logs the shim intercept via `jlog(tag, message)` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
 
 ---
