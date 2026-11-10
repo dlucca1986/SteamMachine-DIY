@@ -63,9 +63,9 @@ def _failed_fast(pid: int) -> bool:
 
     Still running, exited 0, or not reapable here: False (not a failure
     we can see). spawn_native() discards stdout/stderr, so without this a
-    helper that rejected its arguments looked exactly like a success —
-    after a compositor update renamed its quit action, 18 switch requests
-    in a row did nothing and logged nothing (2026-11-09).
+    helper that rejected its arguments (e.g. a compositor update renamed
+    its quit action) would look exactly like a success: the switch does
+    nothing and nothing is logged.
     """
     deadline = time.monotonic() + _HELPER_CHECK_SECONDS
     while True:

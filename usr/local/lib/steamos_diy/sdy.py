@@ -77,7 +77,7 @@ def _iter_yaml_files(directory: str):
         # `with`: _find_profile_by_id returns on the first match, leaving
         # this generator suspended mid-scan; closing it then runs the
         # context exit instead of leaving the iterator to be reclaimed
-        # by GC (a ResourceWarning under pytest, found 2026-11-09).
+        # by GC.
         with os.scandir(directory) as it:
             for entry in it:
                 if entry.is_file() and entry.name.endswith(".yaml"):

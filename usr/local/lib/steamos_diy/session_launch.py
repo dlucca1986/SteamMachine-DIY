@@ -399,8 +399,8 @@ def _make_term_handler(
     proc.wait(): that call holds Popen's internal waitpid lock, so a wait
     from inside the handler can never reap the child and always ran out
     both TERM_TIMEOUT windows — ~10s per stop/reboot, plus a false
-    SIGTERM_TIMEOUT/SIGKILL_TIMEOUT pair in the journal (KISS audit,
-    2026-09-27). sys.exit() unwinds out of that wait, releasing the lock,
+    SIGTERM_TIMEOUT/SIGKILL_TIMEOUT pair in the journal. sys.exit()
+    unwinds out of that wait, releasing the lock,
     and the `with Popen` block's own __exit__ then reaps the child;
     escalation to SIGKILL for a child ignoring SIGTERM is left to the
     unit's KillMode=mixed + TimeoutStopSec, which fires within the same

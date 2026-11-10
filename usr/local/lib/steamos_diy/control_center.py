@@ -108,8 +108,7 @@ _BUTTON_RESET_MS: int = 2000
 _LOG_FILTER_DEBOUNCE_MS: int = 200
 
 # Game Overrides combo hints. Set on the combo's line edit, not on the
-# combo: an editable QComboBox never paints its own placeholderText, so
-# these were invisible until 2026-11-09.
+# combo: an editable QComboBox never paints its own placeholderText.
 _GAME_COMBO_HINT: str = "Select or type a game name…"
 _GAME_COMBO_SCANNING: str = "Scanning history…"
 _GAME_COMBO_EMPTY: str = "No games found — type a name to add one"
@@ -130,15 +129,11 @@ _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 # the way the old single-dict-with-early-return _apply_log_style was.
 # Pattern-based, not an exhaustive name list: every jlog() error/failure
 # tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED:/_TIMEOUT:
-# or starts with BAD_/RESTORE_REJECTED_ by convention (verified
-# 2026-09-15 KISS audit — 7 RESTORE_REJECTED_* variants, 7 BAD_* variants,
-# SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT:), so this stays correct for future
-# tags that follow the same convention without needing a name added here
-# by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
+# or starts with BAD_/RESTORE_REJECTED_ by convention, so this stays
+# correct for future tags that follow the same convention without needing
+# a name added here by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
 # BINARY_NOT_FOUND:/BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/RESTORE_EMPTY:
-# are the real exceptions to those conventions, added explicitly — the
-# last 3 found by scripts/audit-log-markers.py (added 2026-09-15
-# specifically to catch this class of gap mechanically going forward).
+# are the exceptions to those conventions, added explicitly.
 _LOG_ERROR_MARKER = re.compile(
     r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
     r"|\bBAD_[A-Z0-9_]*:"
@@ -315,7 +310,7 @@ class SDYControlCenter(QMainWindow):
         # while one is still in flight — without this, a fast second
         # scan's result could be overwritten when a slower first scan
         # (still running from an earlier click) finishes after it and
-        # emits games_detected last (CLAUDE.md checklist item 17).
+        # emits games_detected last.
         self._scan_games_busy = False
 
         # Guards load_logs against a second fetch starting while one is
@@ -324,8 +319,7 @@ class SDYControlCenter(QMainWindow):
         # away and back while a journalctl fetch is still running could
         # otherwise start a second worker; whichever thread's logs_ready
         # lands last would silently overwrite the other's result (same
-        # class of guard as _scan_games_busy/_service_status_busy above,
-        # CLAUDE.md checklist item 17).
+        # class of guard as _scan_games_busy/_service_status_busy above).
         self._logs_busy = False
 
         # Guards export_support_log against a second export starting
@@ -542,8 +536,8 @@ class SDYControlCenter(QMainWindow):
         # _run_pkexec can visually disable the button(s) tied to a
         # lock_key while it's busy, then re-enable them once the guard
         # actually clears (see pkexec_lock_released's own comment) —
-        # mirrors updater.py's _set_busy pattern (CLAUDE.md checklist
-        # item 15) instead of leaving the only feedback a 3s status toast.
+        # mirrors updater.py's _set_busy pattern instead of leaving the
+        # only feedback a 3s status toast.
         for text, func, lock_key in tools:
             btn = QPushButton(text)
             btn.setStyleSheet(_BUTTON_STYLE)
@@ -1216,8 +1210,7 @@ class SDYControlCenter(QMainWindow):
         # Nothing to restore -> index -1, never addItems()' auto-picked
         # first entry: the editor holds nothing for that game (`activated`
         # doesn't fire programmatically), so a Save would write the editor
-        # over its file. Until 2026-11-09 an invisible combo placeholder
-        # suppressed the auto-pick by accident; this makes it explicit.
+        # over its file.
         typed = self.combo_games.currentText()
         self._merge_on_disk_profiles(detected)
         items = self._format_combo_items(detected)
@@ -1576,10 +1569,9 @@ class SDYControlCenter(QMainWindow):
                 # cmd's elements are always either fixed literals or a
                 # single whole GUI-provided value passed as its own list
                 # entry (e.g. run_restore's QFileDialog path) — never
-                # built by concatenating GUI input into a larger token
-                # (see checklist item 20 in CLAUDE.md). No shell is
-                # invoked, so that's safe. Generous timeout: backup/
-                # restore can legitimately take minutes, not seconds.
+                # built by concatenating GUI input into a larger token.
+                # No shell is invoked, so that's safe. Generous timeout:
+                # backup/restore can legitimately take minutes.
                 subprocess.run(  # nosec B603
                     ["/usr/bin/pkexec", *cmd], check=True, timeout=300
                 )

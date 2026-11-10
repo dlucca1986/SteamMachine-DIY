@@ -109,7 +109,7 @@ def _check_yaml(path: str) -> CheckResult:
     # raised by the text-mode read itself on a non-UTF-8 file, and
     # ruamel's own plain ValueError for a scalar it recognises by shape
     # and then fails to build (an unquoted impossible date such as
-    # 2026-02-30) — uncaught, that aborted the whole preflight with no
+    # 2026-02-30) — uncaught, it would abort the whole preflight with no
     # file name at all.
     except (OSError, YAMLError, ValueError) as err:
         mark = getattr(err, "problem_mark", None)

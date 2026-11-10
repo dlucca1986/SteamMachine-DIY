@@ -31,9 +31,9 @@ except (ImportError, SystemExit):
 # This project has no real branches to report — a single fixed value is
 # enough to answer Steam's -c (current branch)/-l (branch list) queries
 # coherently instead of leaving stdout empty, which is what Steam's own
-# (inapplicable-here) update-channel UI reads from. Confirmed live
-# 2026-09-16: Steam calls -c on every normal game launch, not just when
-# a settings page is opened, so this is exercised far more than it looks.
+# (inapplicable-here) update-channel UI reads from. Steam calls -c on
+# every normal game launch, not just when a settings page is opened, so
+# this is exercised far more than it looks.
 _FAKE_BRANCH = "stable"
 
 if __name__ == "__main__":

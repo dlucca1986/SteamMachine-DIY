@@ -87,8 +87,8 @@ UPDATES_DIR_NAME: str = "updates"
 
 # Session binary fallbacks, used when the matching SSoT bin_* key is
 # unset. Single source of truth for session_launch.py, session_select.py
-# and health.py's preflight — previously each re-declared its own copy,
-# risking drift if a distro ever relocates one of these.
+# and health.py's preflight, so they can't drift apart if a distro ever
+# relocates one of these.
 DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
 DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
@@ -105,12 +105,9 @@ PYTHON3_BIN: str = "/usr/bin/python3"
 KONSOLE_BIN: str = "/usr/bin/konsole"
 
 # Shared timeout for short-lived systemctl/journalctl calls (journal
-# reads, `daemon-reload`) — was independently hardcoded as the same 10 in
-# journal.py (x2), restore.py, and control_center.py with no shared source
-# of truth, found by a 2026-09-16 audit for repeated literals never routed
-# through a constant. Not SSoT-backed like the SSOT_* config values:
-# nobody has asked to tune this at runtime, it's centralized purely to
-# stop future edits from updating some call sites and not others.
+# reads, `daemon-reload`) in journal.py, restore.py and control_center.py.
+# Not SSoT-backed: nobody needs to tune it at runtime, it's centralized so
+# a future edit can't update some call sites and not others.
 # health.py's `systemctl show` deliberately keeps its own 5s: that value
 # is coupled to control_center.py's 4s poll interval (see the
 # _service_status_busy comment there), not to this one.
@@ -159,10 +156,9 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
 
     The message is encoded with backslashreplace, never strictly: a path
     Python decoded from non-UTF-8 bytes (a file name from argv or
-    scandir) carries lone surrogates, and a strict encode raised
-    UnicodeEncodeError out of the *caller* — sdy refused to launch a game
-    whose executable name held one such byte, purely over its own
-    GAME_LAUNCH log line.
+    scandir) carries lone surrogates, and a strict encode would raise
+    UnicodeEncodeError out of the *caller* — e.g. stop sdy from launching
+    a game over its own GAME_LAUNCH log line.
     """
     if getattr(_JLOG_REENTRY, "active", False):
         # Already inside jlog: skip threshold lookup and emit directly
@@ -307,9 +303,9 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
         with open(path, "r", encoding="utf-8") as fh:
             data = _yaml_reader.load(fh)
     # WARN, not DEBUG: the file exists and its whole content is being
-    # dropped — at the default LOG_LEVEL=INFO a syntax error in
-    # config.yaml used to produce a plain default session with nothing
-    # in the journal, while the milder wrong-shape case below warned.
+    # dropped — at the default LOG_LEVEL=INFO a DEBUG line would leave a
+    # broken config.yaml with no trace, while the milder wrong-shape case
+    # below already warns.
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="WARN")
         return {}
@@ -532,8 +528,8 @@ def get_backup_mapping(
     "only if it needs one" optimization backup does.
     """
     # user_config is SSoT-relocatable to a different *directory* (the
-    # basename always stays CONFIG_FILE_NAME - see CLAUDE.md's confirmed-
-    # intentional note on control_center.py's Global Options tab). Without
+    # basename always stays CONFIG_FILE_NAME, by design: renaming the file
+    # itself isn't a supported setup). Without
     # resolving it the same way control_center.py's _resolve_config_paths
     # does, a relocated config would silently back up the wrong (default)
     # directory instead of the live one.
@@ -611,10 +607,9 @@ def verify_archive(
                 pass
             # Walking the members is not enough: tarfile stops at the
             # end-of-archive marker and never reaches the gzip trailer,
-            # so the stream's CRC32 was never checked — 357 of 400
-            # single-bit corruptions of a realistic archive passed, and
-            # would have been restored as silently different files
-            # (2026-11-09 audit). Reading to EOF makes gzip validate it.
+            # so the stream's CRC32 would never be checked and corrupted
+            # content would pass as verified. Reading to EOF makes gzip
+            # validate it.
             while gz.read(65536):
                 pass
         return True
