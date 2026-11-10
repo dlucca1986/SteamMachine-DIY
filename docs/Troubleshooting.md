@@ -68,7 +68,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `CORE` | `BAD_LAUNCH_ARGV: <error>` | ERROR | The command line itself was malformed (e.g. an embedded null byte from a hand-edited config value) — the process was never even spawned. |
 | `CORE` | `SIG_<N>: Shutting down...` | INFO | `SIGTERM`/`SIGINT` received — clean shutdown in progress, not a crash. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
-| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | Couldn't restart the launcher service live to apply the switch immediately, but the target was still written to disk — it takes effect on the next boot/restart regardless. |
+| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; the desktop shutdown command — `bin_dbus`, or `desktop_shutdown_cmd` where configured — towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk, so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
 | `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted both from a post-crash Desktop-recovery write and from a switch request's own persist step. |
 
 ### Game launch (`sdy.py`)

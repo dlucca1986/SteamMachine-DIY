@@ -15,6 +15,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   running as you. Accepted limit of the design (no code change), same class as the updater's.
 
 ### Fixed
+- Switching session: when the command that ends the current session failed straight away (for
+  example after a desktop update changed the syntax of its quit command), the switch did nothing
+  and nothing was logged — on the maintainer's laptop that meant 18 clicks in a row with no
+  explanation. The switcher now watches that command for a second; if it exits with an error, the
+  existing `DISPATCH_FAILED` warning is logged. A command that is still running or exits cleanly
+  is unaffected, and no switch takes longer than before by more than that one second.
 - Restore: when a single file could not be put in place (for example because a folder now exists
   where the archive has a file), its temporary copy was left behind as a root-owned
   `*.sdy_restore_tmp` file — in your config folder or under `/etc/`. It is now removed. Also, any

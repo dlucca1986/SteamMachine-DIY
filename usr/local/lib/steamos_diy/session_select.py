@@ -11,7 +11,9 @@
 # =============================================================================
 """
 
+import os
 import sys
+import time
 
 from utils import (
     DEFAULT_DBUS_BIN,
@@ -32,6 +34,12 @@ from utils import (
 # immutability and O(1) membership lookup.
 _DESKTOP_KEYWORDS: frozenset[str] = frozenset({"plasma", "desktop", "kde"})
 
+# How long to watch the spawned helper for an immediate failure. A helper
+# that rejects its arguments or can't reach its target (a renamed
+# compositor action, no D-Bus session) exits within milliseconds; one
+# that is working either exits 0 or is still running when this expires.
+_HELPER_CHECK_SECONDS: float = 1.0
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -50,6 +58,28 @@ def _resolve_target(arg: str) -> str:
     return "desktop" if arg.strip().lower() in _DESKTOP_KEYWORDS else "steam"
 
 
+def _failed_fast(pid: int) -> bool:
+    """True if child *pid* exits non-zero within _HELPER_CHECK_SECONDS.
+
+    Still running, exited 0, or not reapable here: False (not a failure
+    we can see). spawn_native() discards stdout/stderr, so without this a
+    helper that rejected its arguments looked exactly like a success —
+    after a compositor update renamed its quit action, 18 switch requests
+    in a row did nothing and logged nothing (2026-11-09).
+    """
+    deadline = time.monotonic() + _HELPER_CHECK_SECONDS
+    while True:
+        try:
+            done, status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return False
+        if done:
+            return os.waitstatus_to_exitcode(status) != 0
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
 def _dispatch_switch(target: str) -> bool:
     """Spawn the native helper that triggers the session transition.
 
@@ -57,7 +87,8 @@ def _dispatch_switch(target: str) -> bool:
         desktop → ``steam -shutdown``          (Steam exits → Plasma)
         steam   → ``qdbus6 org.kde.Shutdown /Shutdown logout`` (→ Gamescope)
 
-    Returns True if the helper process was spawned (PID > 0).
+    Returns True if the helper was spawned and didn't fail straight away
+    (see _failed_fast).
     """
     if target == "desktop":
         steam_bin = get_ssot_var("bin_steam", DEFAULT_STEAM_BIN)
@@ -69,7 +100,7 @@ def _dispatch_switch(target: str) -> bool:
             [dbus_bin, "org.kde.Shutdown", "/Shutdown", "logout"],
         )
 
-    return pid > 0
+    return pid > 0 and not _failed_fast(pid)
 
 
 # ---------------------------------------------------------------------------

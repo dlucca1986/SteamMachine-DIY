@@ -5,6 +5,9 @@ State (next_session) must be written before the helper is spawned, and
 must stay written even if the spawn fails — a helper crash must not
 strand the system without a target for the next boot."""
 
+import subprocess
+import time
+
 import session_select
 import utils
 
@@ -141,3 +144,51 @@ def test_select_logs_when_write_atomic_fails(monkeypatch, tmp_path):
         "NEXT_SESSION_WRITE_FAILED" in msg and level == "ERROR"
         for _tag, msg, level in logs
     )
+
+
+# ---------------------------------------------------------------------------
+# _dispatch_switch — a helper that fails straight away must count as a
+# failed dispatch, not a successful one (real child processes, no fakes)
+# ---------------------------------------------------------------------------
+
+
+def _bin_dbus_is(monkeypatch, path):
+    monkeypatch.setattr(
+        session_select,
+        "get_ssot_var",
+        lambda key, default: path if key == "bin_dbus" else default,
+    )
+
+
+def test_dispatch_switch_fails_when_the_helper_exits_with_an_error(
+    monkeypatch,
+):
+    """Regression: spawn_native only reports whether the helper STARTED.
+    After a compositor update renamed its quit action, the helper exited
+    at once with an error, and select() still saw success — 18 switch
+    requests did nothing and logged nothing (2026-11-09, Umbriel)."""
+    _bin_dbus_is(monkeypatch, "/bin/false")
+
+    assert session_select._dispatch_switch("steam") is False
+
+
+def test_dispatch_switch_succeeds_when_the_helper_exits_cleanly(monkeypatch):
+    _bin_dbus_is(monkeypatch, "/bin/true")
+
+    assert session_select._dispatch_switch("steam") is True
+
+
+def test_dispatch_switch_does_not_wait_for_a_slow_helper(monkeypatch):
+    """`steam -shutdown` legitimately keeps running for seconds: still
+    running when the check window ends must count as success, and the
+    check must give up after _HELPER_CHECK_SECONDS, not wait it out."""
+    monkeypatch.setattr(session_select, "_HELPER_CHECK_SECONDS", 0.3)
+    with subprocess.Popen(["/bin/sleep", "5"]) as slow:
+        monkeypatch.setattr(
+            session_select, "spawn_native", lambda path, args: slow.pid
+        )
+        start = time.monotonic()
+
+        assert session_select._dispatch_switch("desktop") is True
+        assert time.monotonic() - start < 2.0
+        slow.kill()
