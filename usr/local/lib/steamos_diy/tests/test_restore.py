@@ -78,6 +78,56 @@ def test_write_member_refuses_symlinked_tmp_path(tmp_path):
     assert tmp.is_symlink()
 
 
+def test_write_member_logs_symlinked_tmp_as_a_rejection(tmp_path, monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        restore, "jlog", lambda _t, msg, level="INFO": logged.append(msg)
+    )
+    target = tmp_path / "config.yaml"
+    (tmp_path / "config.yaml.sdy_restore_tmp").symlink_to(tmp_path / "v")
+
+    with _tar_with_member("member", b"x") as tar:
+        restore._write_member(tar, tar.getmember("member"), str(target))
+
+    assert logged and logged[0].startswith("RESTORE_REJECTED_TMP_SYMLINK:")
+
+
+def test_write_member_reports_an_ordinary_open_failure_as_write_fail(
+    tmp_path, monkeypatch
+):
+    """Regression: any failure opening the tmp file (name too long, disk
+    full, permissions) was logged as RESTORE_REJECTED_TMP_SYMLINK — a
+    planted-symlink security message for what is an ordinary write error
+    (2026-11-10, found restoring a member with a 300-char name)."""
+    logged = []
+    monkeypatch.setattr(
+        restore, "jlog", lambda _t, msg, level="INFO": logged.append(msg)
+    )
+    target = tmp_path / ("a" * 300 + ".yaml")  # > NAME_MAX: ENAMETOOLONG
+
+    with _tar_with_member("member", b"x") as tar:
+        ok = restore._write_member(tar, tar.getmember("member"), str(target))
+
+    assert ok is False
+    assert logged and logged[0].startswith("RESTORE_WRITE_FAIL:")
+
+
+def test_write_member_removes_its_tmp_when_the_replace_fails(tmp_path):
+    """Regression: when os.replace failed (here the target is a directory,
+    as when an archive holds a file where the system now has a folder),
+    the already-written *.sdy_restore_tmp was left behind — root-owned,
+    in the user's config dir or under /etc/ (2026-11-10)."""
+    target = tmp_path / "config.yaml"
+    (target / "inner").mkdir(parents=True)
+
+    with _tar_with_member("member", b"x") as tar:
+        ok = restore._write_member(tar, tar.getmember("member"), str(target))
+
+    assert ok is False
+    assert not (tmp_path / "config.yaml.sdy_restore_tmp").exists()
+    assert target.is_dir()
+
+
 def test_write_member_directory_entry(tmp_path):
     target = tmp_path / "somedir"
     info = tarfile.TarInfo(name="d")

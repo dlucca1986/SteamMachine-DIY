@@ -114,7 +114,7 @@ Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejec
 | `SYSTEM` | `RESTORE_REJECTED_LINK: <member>` | WARN | Archive contained a raw tar hardlink/symlink entry — rejected (only the plain-data links manifest is trusted for recreating symlinks). |
 | `SYSTEM` | `RESTORE_REJECTED_SPECIAL: <member>` | WARN | Archive contained a device node or FIFO — rejected (only regular files and directories are ever extracted). |
 | `SYSTEM` | `RESTORE_REJECTED_EXISTING_SYMLINK: <target>` | WARN | A symlink already exists at the write target — refused rather than followed, to block a redirect attack. |
-| `SYSTEM` | `RESTORE_WRITE_FAIL: <target> - <error>` | WARN | A write I/O error (`makedirs`/copy/`replace`) hit while restoring this one member — skipped, restore continues. |
+| `SYSTEM` | `RESTORE_WRITE_FAIL: <path> - <error>` | WARN | A write error (creating the folder or the temporary file, copying, or the final `replace`) hit while restoring this one member — skipped, restore continues, and any temporary file it had created is removed. |
 | `SYSTEM` | `RESTORE_REJECTED_TMP_SYMLINK: <tmp path> - <error>` | WARN | The temporary write path itself was a symlink — refused rather than written through. |
 | `SYSTEM` | `RESTORE_CHMOD_FAIL: <target> - <error>` | WARN | The file was written but its permissions couldn't be restored. |
 | `SYSTEM` | `RESTORE_EXTRACT: <target>` | DEBUG | One member was extracted and placed successfully. |

@@ -15,6 +15,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   running as you. Accepted limit of the design (no code change), same class as the updater's.
 
 ### Fixed
+- Restore: when a single file could not be put in place (for example because a folder now exists
+  where the archive has a file), its temporary copy was left behind as a root-owned
+  `*.sdy_restore_tmp` file — in your config folder or under `/etc/`. It is now removed. Also, any
+  failure to create that temporary file (a name too long, a full disk) was logged as
+  `RESTORE_REJECTED_TMP_SYMLINK`, a security warning about a planted link; that tag is now used
+  only when there really is a link, everything else is `RESTORE_WRITE_FAIL`. Found by restoring
+  deliberately odd archives, 2026-11-10.
 - `install.sh`: on a user account that had never logged into a desktop (no `~/.config` yet), the
   installer created `~/.config` itself — as root, and only its own `steamos_diy` subfolder was
   handed back to the user. The desktop then could not write its settings there. A missing

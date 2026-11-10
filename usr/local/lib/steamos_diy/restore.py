@@ -11,6 +11,7 @@
 # =============================================================================
 """
 
+import errno
 import os
 import shlex
 import shutil
@@ -241,11 +242,15 @@ def _write_member(
             tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
         )
     except OSError as err:
-        jlog(
-            "SYSTEM",
-            f"RESTORE_REJECTED_TMP_SYMLINK: {tmp} - {err}",
-            level="WARN",
+        # ELOOP is what O_NOFOLLOW raises on a symlink. Anything else (a
+        # name too long, a full disk, a permission error) is an ordinary
+        # write failure — reporting it as a planted symlink was misleading.
+        tag = (
+            "RESTORE_REJECTED_TMP_SYMLINK"
+            if err.errno == errno.ELOOP
+            else "RESTORE_WRITE_FAIL"
         )
+        jlog("SYSTEM", f"{tag}: {tmp} - {err}", level="WARN")
         return False
     try:
         with src, os.fdopen(fd, "wb") as dest:
@@ -255,6 +260,13 @@ def _write_member(
         jlog(
             "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
         )
+        # We created tmp above, so it's ours to remove: a failed replace
+        # (e.g. target is now a directory) otherwise left a root-owned
+        # *.sdy_restore_tmp behind, in the user's config dir or /etc/.
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         return False
     return True
 
