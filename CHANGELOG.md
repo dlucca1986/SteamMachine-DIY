@@ -17,9 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - Switching session: when the command that ends the current session failed straight away (for
   example after a desktop update changed the syntax of its quit command), the switch did nothing
-  and nothing was logged — on the maintainer's laptop that meant 18 clicks in a row with no
-  explanation. The switcher now watches that command for a second; if it exits with an error, the
-  existing `DISPATCH_FAILED` warning is logged. A command that is still running or exits cleanly
+  and nothing was logged, so repeated attempts failed with no explanation. The switcher now watches
+  that command for a second; if it exits with an error, the existing `DISPATCH_FAILED` warning is
+  logged. A command that is still running or exits cleanly
   is unaffected, and no switch takes longer than before by more than that one second.
 - Restore: when a single file could not be put in place (for example because a folder now exists
   where the archive has a file), its temporary copy was left behind as a root-owned
@@ -221,9 +221,8 @@ Both surfaced while researching other gamescope-session forks/projects for porta
 - Found by the first-ever full read of every previously-unaudited config/asset file
   (`etc/systemd/system/steamos_diy.service`, the pacman hook, both `.desktop` files, the
   `Makefile`, the SSoT template, all 4 skel YAML files) and the first-ever full docs/README
-  accuracy sweep against real code — both triggered by the maintainer asking directly
-  whether the bash scripts had ever been checked, which surfaced that several other file
-  categories never had been either.
+  accuracy sweep against real code — started after finding that the bash scripts had never
+  been checked semantically, and neither had several other file categories.
 - `install.sh --update` wiped `$LIB_DIR` (including the old, working `libcore.so`) *before*
   building the new C-Core. A `gcc` or `ctypes` load failure at that point — a broken
   toolchain, a full disk, a bad release — exited with the new `.py` files in place and no
@@ -281,8 +280,8 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   highlights any `..._ERROR:`/`..._FAIL:`/`..._FAILED:`/`EARLY_EXIT_RECOVERY:` message (red),
   `VALIDATED_*_STABLE` (green), and `SWITCH_REQUEST:` (neutral) — self-maintaining for future
   tags following the same naming convention, not a hand-maintained name list. Purely cosmetic
-  (the Diagnostics tab already showed every line's full text regardless), found while looking
-  into a maintainer request to make specific log messages more visually distinct.
+  (the Diagnostics tab already showed every line's full text regardless), found while making
+  specific log messages more visually distinct.
 - `install.sh`'s `BASE_PKGS` was missing `xdg-utils`, needed by `/usr/bin/xdg-open` for the
   Control Center's "Browse Config Folder" button — same unverified-transitive-dependency shape
   as the `kate`/`konsole` gap above, found by a new "external binary/dependency completeness"
