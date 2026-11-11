@@ -28,6 +28,9 @@ from PyQt6.QtWidgets import QPlainTextEdit, QWidget
 
 # pylint: enable=no-name-in-module
 
+# The camelCase methods below (sizeHint, paintEvent, resizeEvent,
+# keyPressEvent, highlightBlock) are Qt overrides: names fixed by Qt's API.
+
 
 class LineNumberArea(QWidget):
     """Sidebar widget that renders line numbers for YAMLEditor."""
@@ -36,14 +39,11 @@ class LineNumberArea(QWidget):
         super().__init__(editor)
         self.editor = editor
 
-    # Qt overrides below: camelCase names and behavior are mandated by
-    # the base class API, not our naming choice — a docstring restating
-    # "Qt calls this" for each one-liner would add noise, not clarity.
+    # One-line Qt overrides: a docstring would only restate the name.
     # pylint: disable=missing-function-docstring
     def sizeHint(self):  # pylint: disable=invalid-name
         return QSize(self.editor.line_number_area_width(), 0)
 
-    # Qt override; camelCase name is mandated by the base class API.
     def paintEvent(self, event):  # pylint: disable=invalid-name
         self.editor.line_number_area_paint_event(event)
 
@@ -81,7 +81,6 @@ class YAMLEditor(QPlainTextEdit):
         if rect.contains(self.viewport().rect()):
             self.update_line_number_area_width(0)
 
-    # Qt override; camelCase name is mandated by the base class API.
     def resizeEvent(self, event):  # pylint: disable=invalid-name
         """Qt override: refit the sidebar geometry on editor resize."""
         super().resizeEvent(event)
@@ -120,7 +119,6 @@ class YAMLEditor(QPlainTextEdit):
                 self.blockBoundingRect(block).height()
             )
 
-    # Qt override; camelCase name is mandated by the base class API.
     def keyPressEvent(self, event):  # pylint: disable=invalid-name
         """Auto-indent on Enter — preserve leading whitespace."""
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -157,7 +155,6 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
                 fmt.setFontWeight(QFont.Weight.Bold)
             self.rules.append((QRegularExpression(pat), fmt))
 
-    # Qt override; camelCase name is mandated by the base class API.
     def highlightBlock(self, text):  # pylint: disable=invalid-name
         """Called by Qt per visible block."""
         for expression, fmt in self.rules:

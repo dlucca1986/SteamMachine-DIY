@@ -43,7 +43,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 STATUS_MAP: dict[str, str] = {

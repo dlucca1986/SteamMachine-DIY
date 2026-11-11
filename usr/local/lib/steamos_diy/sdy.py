@@ -26,7 +26,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 # Generic executable stems that should be replaced by parent directory name
