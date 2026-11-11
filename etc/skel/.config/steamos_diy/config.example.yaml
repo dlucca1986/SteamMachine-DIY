@@ -46,8 +46,18 @@ flags:
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
   - "--mangoapp"              # Native MangoHud overlay (configurable from Steam QAM)
 
-  # --- WRONG SYNTAX (EXAMPLE) ---
-  # - "-H" "720"             # ERROR: two quoted strings in one item is invalid YAML
+  # --- WRONG SYNTAX (EXAMPLES) ---
+  # - "-H" "720"             # Invalid YAML (two quoted strings in one item):
+  #                          #   the WHOLE file is ignored — no flags, env_vars
+  #                          #   or post_start_cmds (YAML_PARSE_ERROR in the log)
+  # <TAB>- "-H 720"          # Same: YAML forbids tabs for indentation
+  # - "--hide-cursor-dealy 3000"  # Misspelled flag: gamescope refuses to start
+  #                          #   and the session falls back to Desktop
+  # flags: "-W 1280 -H 720"  # A string, not a list: all flags are ignored
+  #
+  # Also fine, if you prefer: "-H720", "--hide-cursor-delay=3000", -H 720
+  # without quotes, or "-H" and "720" as two separate items.
+  # Control Center → Maintenance → "Validate Configuration" reports all four.
 
 # --- POST-START COMMANDS ---
 # Run once, POST_START_DELAY seconds (steamos_diy.conf, default 2.0) after
