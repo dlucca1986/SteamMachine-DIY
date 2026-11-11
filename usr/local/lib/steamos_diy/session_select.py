@@ -30,8 +30,7 @@ from utils import (
 # Module-level constants — resolved once, never re-read from disk.
 # ---------------------------------------------------------------------------
 
-# Keywords that map argv[1] to the desktop target. Frozenset to enforce
-# immutability and O(1) membership lookup.
+# Keywords that map argv[1] to the desktop target.
 _DESKTOP_KEYWORDS: frozenset[str] = frozenset({"plasma", "desktop", "kde"})
 
 # How long to watch the spawned helper for an immediate failure. A helper
@@ -49,9 +48,9 @@ _HELPER_CHECK_SECONDS: float = 1.0
 def _resolve_target(arg: str) -> str:
     """Normalise a raw argv string to "desktop" or "steam".
 
-    Strips whitespace and lowercases before matching, tolerating values
-    from systemd units, shell aliases, or xargs. Defaults to "steam" on
-    empty or unknown input (fail-safe to Game Mode).
+    Case- and whitespace-insensitive. Empty or unknown input means "steam":
+    switching to Game Mode is by far the common trigger, and the desktop
+    keywords are matched explicitly.
     """
     if not arg:
         return "steam"
@@ -84,8 +83,8 @@ def _dispatch_switch(target: str) -> bool:
     """Spawn the native helper that triggers the session transition.
 
     Hand-off matrix:
-        desktop → ``steam -shutdown``          (Steam exits → Plasma)
-        steam   → ``qdbus6 org.kde.Shutdown /Shutdown logout`` (→ Gamescope)
+        desktop → ``steam -shutdown``          (Steam exits → desktop)
+        steam   → ``qdbus6 org.kde.Shutdown /Shutdown logout`` (→ Game Mode)
 
     Returns True if the helper was spawned and didn't fail straight away
     (see _failed_fast).

@@ -89,11 +89,8 @@ def _iter_yaml_files(directory: str):
 def _find_profile_by_id(directory: str, appid: str) -> str | None:
     """Scan YAML headers for STEAM_APPID/SDY_ID match without full parsing.
 
-    Reads only _HEADER_READ_BYTES per file — IDs live at the top by convention,
-    full parsing would be pure waste. Callers must already have a truthy
-    appid — the sole call site (_get_profile_path) only invokes this
-    inside `if steam_appid:`, so a `not appid` guard here would be dead
-    code, not a real safety net.
+    Reads only _HEADER_READ_BYTES per file — IDs live at the top by
+    convention. *appid* must be non-empty (the caller checks).
     """
     if not os.path.isdir(directory):
         return None
@@ -110,11 +107,9 @@ def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
 
     When the stem is generic (start, launcher, run…), substitutes the parent
     directory name — /opt/MyGame/start.sh resolves to "MyGame", not "start".
-    Rightmost, not first: a wrapper (mangohud, gamemoderun) commonly comes
-    first in argv, with the actual game binary later — see the "rightmost"
-    regression test. isfile (not just exists) skips a trailing directory
-    argument (e.g. --workshop-dir /path/to/workshop) that would otherwise
-    be mistaken for the game binary itself.
+    Rightmost, not first: a wrapper (mangohud, gamemoderun) usually comes
+    first, the game binary later. isfile (not just exists) skips a trailing
+    directory argument such as --workshop-dir /path/to/workshop.
     """
     target_path = next(
         (
@@ -173,9 +168,9 @@ def _safe_split(field: str, value: str) -> list[str]:
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     """Compose wrapper + raw_args + extra_args for execvpe.
 
-    Profile values override env vars — mirrors SSoT layering semantics.
-    None means "key absent" (fall back to env); "" means "explicitly empty"
-    (disable the wrapper/extra for this profile, do not fall back).
+    Profile values override the environment (global config / SSoT).
+    None means "key absent" (fall back to the environment); "" means
+    "explicitly empty" (no wrapper/extra args for this profile).
     """
     wrapper_val = profile_data.get("GAME_WRAPPER")
     wrapper = (
