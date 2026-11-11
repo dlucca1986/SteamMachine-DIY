@@ -14,10 +14,10 @@ Traditional display managers conflict with Gamescope's requirement for exclusive
 * No background display manager processes consuming resources.
 
 ### 2. Is NVIDIA supported?
-Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers are supported. The installer automatically deploys the appropriate packages. For the best experience (HDR, advanced frame-pacing), AMD (Mesa/RADV) remains the recommended hardware.
+The installer deploys the packages for both the open driver (**NVK**, `vulkan-nouveau`) and the proprietary one (`nvidia-open`). Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
 
 > [!IMPORTANT]
-> Proprietary drivers require DRM Kernel Mode Setting to work with Gamescope (`nvidia-drm.modeset=1` on your bootloader). See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
+> Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting: `cat /sys/module/nvidia_drm/parameters/modeset` must print `Y`. See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:

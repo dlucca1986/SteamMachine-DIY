@@ -11,8 +11,9 @@ System requirements, main features, and the packages involved.
 * **Graphics Stack**: Open-source drivers recommended (Mesa). Proprietary NVIDIA also supported.
     * **AMD**: RADV — Recommended
     * **Intel**: ANV
-    * **NVIDIA (NVK/Nouveau)**: Mesa open-source Vulkan ICD
-    * **NVIDIA (Proprietary)**: `nvidia-utils` deployed automatically if the `nvidia` package is installed
+    * **NVIDIA (NVK)**: open Vulkan driver `vulkan-nouveau`, deployed when no proprietary driver is installed
+    * **NVIDIA (Proprietary)**: with `nvidia-open`/`nvidia-open-dkms` installed (detected through their `nvidia-utils` dependency), `lib32-nvidia-utils` is added
+    * Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
 * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
 * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 

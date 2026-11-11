@@ -21,10 +21,13 @@ or the full `plasma` group) first if this check fails.
 The installer identifies the GPU via `lspci` (scanning both `VGA compatible controller` and `3D controller` entries, covering NVIDIA multi-GPU setups where the discrete card appears as a 3D controller) to deploy the Vulkan stack (32/64-bit) required for Proton compatibility:
 
 * **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `intel-media-driver`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`. For VAAPI, 64-bit processes pick the maintained `intel-media-driver` (iHD) automatically; the legacy `libva-intel-driver` (i965) covers pre-Gen8 GPUs and 32-bit processes.
-* **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `mesa`, `lib32-mesa` (VAAPI is built into `mesa` since 1:24.2.7).
-* **NVIDIA (Proprietary):** If the `nvidia` package is already installed, installs `nvidia-utils`, `lib32-nvidia-utils`.
-* **NVIDIA (NVK/Nouveau):** Otherwise, installs `mesa`, `lib32-mesa` for the open-source Vulkan ICD.
+* **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `mesa`, `lib32-mesa` (VAAPI comes with `mesa`).
+* **NVIDIA (Proprietary):** If `nvidia-utils` is installed — every Arch proprietary driver package (`nvidia-open`, `nvidia-open-dkms`) depends on it — installs `nvidia-utils`, `lib32-nvidia-utils`.
+* **NVIDIA (NVK):** Otherwise, installs the open Vulkan driver `vulkan-nouveau`, `lib32-vulkan-nouveau`, plus `mesa`, `lib32-mesa`.
+* **Hybrid laptops:** each vendor is checked separately, so an Intel or AMD GPU next to an NVIDIA one gets both sets.
 * **Unrecognized GPU:** If no known vendor is detected, driver-specific packages are skipped and a warning is printed. The base stack is still installed.
+
+The NVIDIA selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope has not been run on an NVIDIA card by the project.
 
 ### 2. Dependency & Privilege Management
 Configures system access and installs the software stack:

@@ -94,21 +94,27 @@ check_gpu_and_drivers() {
     GPU_INFO=$(lspci | grep -iE "vga|3d controller" || true)
     DRIVER_PKGS=""
 
+    # Each vendor is checked separately: a hybrid laptop has two GPUs.
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
-        if pacman -Qq nvidia &>/dev/null; then
-            info "Nvidia GPU detected. Proprietary driver active — preparing userspace utilities..."
-            DRIVER_PKGS="nvidia-utils lib32-nvidia-utils"
+        # Arch's proprietary drivers (nvidia-open, nvidia-open-dkms) all
+        # depend on nvidia-utils; without it the GPU runs on nouveau/NVK.
+        if pacman -Qq nvidia-utils &>/dev/null; then
+            info "Nvidia GPU detected, proprietary driver installed — adding its 32-bit libraries..."
+            DRIVER_PKGS+=" nvidia-utils lib32-nvidia-utils"
         else
-            info "Nvidia GPU detected. NVK/Nouveau active — preparing Mesa Vulkan stack..."
-            DRIVER_PKGS="mesa lib32-mesa"
+            info "Nvidia GPU detected, no proprietary driver — preparing the NVK Vulkan driver..."
+            DRIVER_PKGS+=" vulkan-nouveau lib32-vulkan-nouveau mesa lib32-mesa"
         fi
-    elif echo "$GPU_INFO" | grep -iq "amd"; then
+    fi
+    if echo "$GPU_INFO" | grep -iq "amd"; then
         info "AMD GPU detected. Preparing RADV and Mesa layers..."
-        DRIVER_PKGS="vulkan-radeon lib32-vulkan-radeon vulkan-mesa-layers lib32-vulkan-mesa-layers mesa lib32-mesa"
-    elif echo "$GPU_INFO" | grep -iq "intel"; then
+        DRIVER_PKGS+=" vulkan-radeon lib32-vulkan-radeon vulkan-mesa-layers lib32-vulkan-mesa-layers mesa lib32-mesa"
+    fi
+    if echo "$GPU_INFO" | grep -iq "intel"; then
         info "Intel GPU detected. Preparing ANV and Mesa layers..."
-        DRIVER_PKGS="vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers intel-media-driver libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
-    else
+        DRIVER_PKGS+=" vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers intel-media-driver libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
+    fi
+    if [ -z "$DRIVER_PKGS" ]; then
         warn "GPU not recognized. Skipping driver-specific packages."
     fi
 }

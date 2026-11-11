@@ -18,6 +18,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ones shortened. No behavior change.
 
 ### Fixed
+- Installer, NVIDIA: the proprietary driver was detected by the `nvidia` package, which Arch
+  has replaced with `nvidia-open`, so current proprietary setups took the open-driver path and
+  missed `lib32-nvidia-utils`. That open-driver path also installed no Vulkan driver at all
+  (Mesa's NVK driver is the separate `vulkan-nouveau` package). The installer now checks for
+  `nvidia-utils` (every Arch proprietary driver depends on it), installs `vulkan-nouveau` +
+  `lib32-vulkan-nouveau` for NVK, and gives hybrid laptops the packages for both GPUs.
+  Tested in a clean Arch container: detection for every case, dependency resolution, and a
+  real install of both NVIDIA paths; not yet run on an NVIDIA card.
 - C-Core: when an atomic write was refused because a symlink or FIFO sat at its temporary path,
   or the data was only partly written, the failure left no trace in the journal — so the Control
   Center's "Write failed — see system logs" message pointed at logs that didn't exist. Both cases

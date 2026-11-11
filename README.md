@@ -34,15 +34,16 @@
 * **AMD**: RADV (Mesa).
 * **Intel**: ANV (Mesa).
 * **NVIDIA**:
-    * **Open Source Drivers (NVK/Nouveau)**: Supported via Mesa: without the `nvidia` package installed, the installer deploys `mesa` + `lib32-mesa`.
-    * **Proprietary Drivers**: **Supported.** When the `nvidia` package is installed, the installer deploys `nvidia-utils` + `lib32-nvidia-utils`.
+    * **Proprietary driver** (`nvidia-open`, `nvidia-open-dkms`): when `nvidia-utils` is installed (all of them depend on it), the installer adds `lib32-nvidia-utils`.
+    * **Open driver (NVK)**: otherwise it deploys the NVK Vulkan driver, `vulkan-nouveau` + `lib32-vulkan-nouveau`, with Mesa.
+    * **Hybrid laptops** (Intel/AMD + NVIDIA) get the packages for both GPUs.
+
+Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
 
 > [!IMPORTANT]
 > **NVIDIA Proprietary Drivers & Gamescope**:
 > 
-> To use Gamescope with proprietary drivers, you **must** enable DRM Kernel Mode Setting (KMS).
->
-> **Recommendation**: Follow the official **[Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)** to apply the `nvidia-drm.modeset=1` parameter to your specific bootloader.
+> Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting. Check it with `cat /sys/module/nvidia_drm/parameters/modeset` (it must print `Y`); if not, see the **[Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)**.
 > 
 
 ### 📦 Core Dependencies
@@ -54,7 +55,7 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
 | **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc` |
 | **Control Center GUI** | `kate`, `konsole`, `xdg-utils` — used directly by name (SSoT editing, terminal launch, "Browse Config Folder"), independent of your desktop environment |
-| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `nvidia-utils` or `mesa` depending on active driver (+ 32-bit counterparts) |
+| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `lib32-nvidia-utils` with the proprietary driver, otherwise `vulkan-nouveau` (+ 32-bit) and Mesa; hybrid systems get both GPUs' packages |
 
 ## 🤝 Acknowledgments
 Special thanks to the Linux gaming community:
