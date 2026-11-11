@@ -22,7 +22,7 @@ Yes, both open-source (**NVK/Nouveau** via Mesa) and proprietary NVIDIA drivers 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:
 * Press `Ctrl + Alt + F2` to switch to **TTY2**.
-* Login and run: `steamos-session-select desktop`
+* Login and run: `steamos-session-select desktop` (not yet tested on an actually frozen session).
 
 ---
 

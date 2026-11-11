@@ -44,7 +44,7 @@ flags:
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
-  - "--mangoapp"              # Native MangoHud overlay
+  - "--mangoapp"              # Native MangoHud overlay (level set from Steam QAM)
 
   # --- WRONG SYNTAX (EXAMPLES) ---
   # - "-H" "720"             # Invalid YAML (two quoted strings in one item):
