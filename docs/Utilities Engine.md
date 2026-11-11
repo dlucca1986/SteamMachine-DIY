@@ -21,12 +21,12 @@ Files persisted via `write_atomic()` follow a four-step protocol executed entire
 1. Write data to `<path>.tmp`.
 2. Call `fdatasync()` to flush write buffers to physical storage.
 3. Call `rename()` to atomically replace the target file.
-4. Best-effort `fsync()` the containing directory, so the rename's directory-entry update is itself durable across a power loss before its own journal entry flushes — `rename()` alone only guarantees the *content* swap is atomic, not that the directory update survives a crash immediately after.
+4. Best-effort `fsync()` the containing directory, so the rename itself survives a power loss right after it.
 
-The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves. Note: the new file always gets mode `0644`, regardless of what the file it replaces had — inherent to tmp+rename (a new inode, not an in-place edit), harmless for every current caller since none write anything permission-sensitive.
+The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves. The new file always gets mode `0644` (tmp+rename creates a new inode), fine for both.
 
 ### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
-`get_ssot_var(key)` serves values from the module-level `_SSOT_CACHE` dict, which the **first call** fills by parsing the whole of `/etc/default/steamos_diy.conf` in a single disk read (pure-Python `key=value` parser with quote-stripping via `_strip_quotes`; first occurrence wins on duplicate keys). Every later call — cache hit *or* miss — is a dict lookup with no disk I/O, so a key absent from the file never triggers a re-read. All resolved values are exported into `os.environ` at load time so child processes inherit them.
+`get_ssot_var(key)` serves values from the `_SSOT_CACHE` dict, filled on the **first call** by parsing `/etc/default/steamos_diy.conf` once (`key=value` lines, surrounding quotes stripped, first occurrence wins). Later calls never re-read the file, even for a missing key. All values are also exported into `os.environ`, so child processes inherit them.
 
 `get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising an unguarded `ValueError` that would otherwise abort the session boot loop.
 
@@ -103,7 +103,7 @@ Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check 
 | `journal.py` | `JOURNALCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `jlog` |
 | Compatibility shims | `run_shim` (which internally calls `jlog`) |
 
-Session-binary fallbacks (`DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`) and `CORE_LIB_PATH` are the single source of truth for the SSoT `bin_*` defaults and the `libcore.so` path — every consumer imports them from here rather than re-declaring its own copy. Likewise, `GAMES_CONF_SUBDIR` (and `default_games_conf_dir()`, which builds on it) is the shared fallback for the `games_conf_dir` SSoT key, used by both `sdy.py` and `control_center.py` so they can't silently disagree on where per-game profiles live if that key is ever unset. `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` are a narrower case: unlike the SSoT-backed group above, no deployment ever needs a different `systemctl`/`journalctl` path on a systemd distro, so these exist purely to stop `health.py`/`restore.py`/`journal.py`/`control_center.py` from each re-declaring the same literal.
+The `DEFAULT_*_BIN` fallbacks for the SSoT `bin_*` keys, `CORE_LIB_PATH`, and `GAMES_CONF_SUBDIR` (with `default_games_conf_dir()`, the `games_conf_dir` fallback shared by `sdy.py` and `control_center.py`) are defined only here; every module imports them. `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` are not SSoT settings, just one shared literal for the modules that call those tools.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

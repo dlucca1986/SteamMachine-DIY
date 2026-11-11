@@ -44,7 +44,7 @@ flags:
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
-  - "--mangoapp"              # Native MangoHud overlay (configurable from Steam QAM)
+  - "--mangoapp"              # Native MangoHud overlay
 
   # --- WRONG SYNTAX (EXAMPLES) ---
   # - "-H" "720"             # Invalid YAML (two quoted strings in one item):
@@ -65,5 +65,5 @@ flags:
 # Split like a shell command line, but no shell runs them: no pipes,
 # redirects or $VARIABLES.
 post_start_cmds:
-  # Keep the --mangoapp overlay from disturbing VRR.
+  # Adaptive sync ignores overlay planes (such as --mangoapp's).
   - "gamescopectl adaptive_sync_ignore_overlay 1"

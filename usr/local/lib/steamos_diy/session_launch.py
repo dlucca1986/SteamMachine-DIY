@@ -53,8 +53,10 @@ STATUS_MAP: dict[str, str] = {
 
 # Applied before the user's env_vars (which keep the last word): gamescope
 # capabilities advertised to Steam so Game Mode shows the matching
-# controls, plus hardware-independent session tweaks. Display-dependent
-# ones (VRR, HDR) stay out — they belong in the user's config.
+# controls, plus hardware-independent session tweaks. Values and purposes
+# as in Valve's gamescope-session; checked here: the WSI layer, the SRT
+# journal logger and the Plasma Qt theme plugin. Display-dependent ones
+# (VRR, HDR) stay out — they belong in the user's config.
 GAME_MODE_ENV: dict[str, str] = {
     # Scaling filters (FSR/NIS) — vendor-agnostic shaders
     "STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT": "1",

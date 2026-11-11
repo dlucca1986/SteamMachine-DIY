@@ -210,9 +210,9 @@ On a gamescope session running a stretched or non-native aspect ratio (4:3, 16:1
 **Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` — it's a real gamescope flag (always use relative mouse mode instead of flipping based on cursor visibility), usable today with no code change. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
 
 ### "Another privileged operation is already running…" won't go away
-Backup and Restore each guard against a double-click, and if a `pkexec` call for either ever times out (after 5 minutes), its lock is deliberately left in place rather than cleared — the privileged process it started (a `chown -R`, `backup.py`, `restore.py`) may still be running, and there's no way to confirm it's actually finished. Backup and Restore share one lock (they touch the same files), so a timeout on either one blocks both. Journal-vacuum has its own separate lock and behaves differently: a timeout there almost always just means authentication at the polkit prompt took too long, not that the vacuum itself is stuck, so its lock always clears itself automatically — you don't need to restart to retry it.
+Backup and Restore share one lock (they touch the same files). If either times out (after 5 minutes), the lock is deliberately kept: the privileged process it started (`backup.py`, `restore.py`, a `chown -R`) may still be running, and there's no way to confirm it finished. Journal-vacuum has its own lock, which clears on a timeout (usually just a slow password prompt).
 
-**Fix:** restart the Control Center. This clears a stuck Backup/Restore guard; it does not itself confirm whether the original privileged process finished — check the Diagnostics logs or `journalctl` if you need to know for certain before retrying. Journal-vacuum never needs this — just try it again.
+**Fix:** restart the Control Center. That clears the lock but doesn't tell you whether the old process finished — check the Diagnostics logs (`BACKUP_SUCCESS` / `RESTORE_SUCCESS`) before retrying.
 
 ---
 

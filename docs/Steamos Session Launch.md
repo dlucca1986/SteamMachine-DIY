@@ -46,16 +46,15 @@ gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
 
 * **`-e`** (`--steam`): Enables gamescope's Steam integration (overlay and Steam-driven features).
 * **`-f`**: Forces fullscreen output.
-* **`-gamepadui`**: Launches Steam in Big Picture / Gamepad UI mode — the controller-friendly interface optimised for TV/couch use.
-* **`-steamos3`**: Tells Steam it runs on SteamOS 3, enabling the SteamOS-only parts of Game Mode.
-* **`-steamdeck`**: Unlocks the full Quick Access side menu and its live controls (scaling, frame limit, etc.). Additive to `-gamepadui`, not a replacement.
+* **`-gamepadui`**: Launches Steam in the Gamepad UI (Big Picture).
+* **`-steamos3`**, **`-steamdeck`**: Steam's flags for a SteamOS / Steam Deck session (Valve doesn't document them).
 
 ---
 
 ## 🧩 Session Capabilities (`GAME_MODE_ENV`)
 Before the user's `env_vars`, the launcher applies a fixed map of **session variables**: most make Steam's Game Mode expose the matching Quick Access controls on **any GPU**, the rest are session tweaks. The user never needs to set these:
 
-| Capability env | Steam control unlocked |
+| Variable | Purpose |
 | :--- | :--- |
 | `STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT`, `STEAM_GAMESCOPE_NIS_SUPPORTED` | Scaling Filter (FSR / NIS) |
 | `STEAM_GAMESCOPE_HAS_TEARING_SUPPORT`, `STEAM_GAMESCOPE_TEARING_SUPPORTED` | Disable Vertical Sync (tearing) |
@@ -68,6 +67,8 @@ Before the user's `env_vars`, the launcher applies a fixed map of **session vari
 | `SRT_URLOPEN_PREFER_STEAM=1` | Links clicked in Game Mode open in Steam's own overlay browser instead of `steam-runtime-tools`' `xdg-open` reaching for a desktop browser (session tweak, no Steam control) |
 | `QT_QPA_PLATFORM_THEME=kde` | Correct icons/readable text for Qt apps inside gamescope (session tweak, no Steam control) |
 | `XCURSOR_SCALE=256` | Cursor scale inside the embedded session (session tweak, no Steam control) |
+
+The values come from Valve's gamescope-session. Checked on this project's machines: `ENABLE_GAMESCOPE_WSI` (the layer's `[Gamescope WSI]` lines appear in the journal), `SRT_LOG_TO_JOURNAL` (Steam's logs reach the journal via `srt-logger`), `QT_QPA_PLATFORM_THEME=kde` (needs Plasma's `KDEPlasmaPlatformTheme6.so`, present); the others are used as Valve's session uses them.
 
 These are **panel-independent** — the control is always safe to expose; only its *benefit* depends on hardware. **Display-dependent** capabilities — VRR (`STEAM_GAMESCOPE_VRR_SUPPORTED`) and HDR (`STEAM_GAMESCOPE_HDR_SUPPORTED`) — are deliberately left out: declare them in your own `env_vars` **only when your monitor supports them**, otherwise Steam shows controls that do nothing. Since user `env_vars` are applied after `GAME_MODE_ENV`, they can override any of these defaults.
 
@@ -94,7 +95,7 @@ The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit 
 
 | Event | Handler | Exit code | systemd effect |
 | :--- | :--- | :--- | :--- |
-| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` (built by `_make_term_handler`) — forwards `SIGTERM` to the session and exits; the child is reaped on the way out. It deliberately does **not** wait/escalate itself: it runs on the main thread, which is blocked in `proc.wait()`, so a wait from inside the handler could never reap the child. Escalation for a session ignoring `SIGTERM` is left to the unit's `TimeoutStopSec` | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
+| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — forwards `SIGTERM` to the session and exits. It doesn't wait or escalate itself (the main thread it interrupts is blocked in `proc.wait()`); a session ignoring `SIGTERM` is killed by the unit's `TimeoutStopSec` | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
 | Session ended naturally (switch or crash recovery) | `run()` — exits after `NOTIFY_DELAY` pause | `75` (`EX_TEMPFAIL`) | Restart triggered — launcher re-reads `next_session` and spawns the new target |
 
 `NOTIFY_DELAY` (SSoT, default `0.4s`) is a brief sleep inserted between the TTY transition message and `sys.exit(75)`, giving the user time to read the message before the service restarts.

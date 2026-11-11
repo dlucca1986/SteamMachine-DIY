@@ -803,9 +803,9 @@ def test_verify_archive_rejects_a_bad_gzip_checksum(tmp_path):
     """Regression: only the tar members were walked, and tarfile stops at
     the end-of-archive marker without ever reaching the gzip trailer — so
     the CRC32 was never checked, and content corruption that left the tar
-    structure readable passed as "verified" (357/400 single-bit flips of
-    a realistic archive). Flipping the stored CRC is the minimal case:
-    every member still reads fine, only the checksum disagrees."""
+    structure readable passed as "verified". Flipping the stored CRC is
+    the minimal case: every member still reads fine, only the checksum
+    disagrees."""
     archive = tmp_path / "crc.tar.gz"
     _write_backup_like_archive(archive)
     raw = bytearray(archive.read_bytes())

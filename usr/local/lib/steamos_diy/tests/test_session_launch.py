@@ -77,8 +77,8 @@ def test_build_gamescope_args_survives_a_bad_env_var_name(set_ssot):
 
 
 def test_game_mode_env_matches_real_steamos_agnostic_vars():
-    """Pins the vars ported from Valve's gamescope-session that are
-    hardware-agnostic and verified to work here. QT_IM_MODULE/
+    """Pins the hardware-agnostic vars ported from Valve's
+    gamescope-session. QT_IM_MODULE/
     GTK_IM_MODULE/XCURSOR_THEME are deliberately absent: their "steam"
     plugin/theme exists only inside the SteamOS image (see the comment
     above GAME_MODE_ENV)."""

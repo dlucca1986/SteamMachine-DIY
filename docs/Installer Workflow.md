@@ -39,7 +39,7 @@ Defines the Single **Source of Truth** (SSoT) strategy:
 * **System Master:** Generates `/etc/default/steamos_diy.conf`, using `sed` to inject the real **Home** path (`{{HOME}}`). The **Username** (`{{USER}}`) and **UID** (`{{UID}}`) placeholders are patched into the systemd service file in stage 5.
 * **User Config Deployment:** Copies YAML templates from `etc/skel/.config/steamos_diy/` to `~/.config/steamos_diy/`. On a **fresh install** (no existing YAMLs), all templates are copied directly. On **reinstall**, the script detects existing configs and interactively asks `"Do you want to overwrite existing YAML configs? (y/N):"` — answering yes overwrites all files (`cp -f`); answering no copies only new files without touching existing ones (`cp -n`).
 * **Binary Hierarchy:** Installs all core logic in `/usr/local/lib/steamos_diy/` with execution permissions.
-* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` via `gcc -O2 -march=native -fPIC -Wall -Wextra -shared` (same flags as the project `Makefile` for dev/prod parity). It is built into a temporary file next to `/usr/local/lib/steamos_diy` (not `/tmp`, which may be mounted `noexec`) and verified with `ctypes.CDLL()` **before** the existing install directory is touched — if either step fails, installation is aborted with a clear error message and, on `--update`, the previous working `libcore.so` is still in place. The temporary file is removed on every exit path.
+* **C-Core Build:** Compiles `steamos_diy_core.c` into `libcore.so` with `gcc -O2 -march=native -fPIC -Wall -Wextra -shared` (the `Makefile`'s flags), into a temporary file next to `/usr/local/lib/steamos_diy` (not `/tmp`, which may be `noexec`), and checks it loads with `ctypes.CDLL()` **before** touching the existing install. If either step fails the installer stops with an error, and on `--update` the previous install is left as it was.
 * **State Management:** Initializes the session tracker at `/var/lib/steamos_diy/next_session`.
 * **Desktop Entries:** Installs `Control_Center.desktop` and `Game_Mode.desktop` to `/usr/local/share/applications/`, making both accessible from the KDE application launcher.
 
@@ -65,7 +65,7 @@ Replaces traditional Display Managers with a custom systemd service:
 >
 > The installer applies `setcap` privileges to the Gamescope binary.
 
-* **Gamescope Privileges:** Applies `cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep` to `/usr/bin/gamescope` for HDR support and system priority.
+* **Gamescope Privileges:** Applies `cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep` to `/usr/bin/gamescope` (`cap_sys_nice` enables its realtime scheduling and higher-priority threads).
 * **Persistence:** Installs an **ALPM Hook** (`/usr/share/libalpm/hooks/gamescope-privs.hook`) to re-apply capabilities after every Gamescope update.
 * **DM Deactivation:** Automatically disables `sddm` and `plasmalogin` (the two KDE display managers) to prevent session conflicts.
 

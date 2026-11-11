@@ -14,7 +14,7 @@ This file defines the system-wide environment and the default behavior of the **
 The system manages two types of configuration inputs:
 
 * **Execution Prefixes (`GAME_WRAPPER`)**: Defined as a string, this value is prepended to the game command (e.g., `gamemoderun` or `mangohud`). It is used by `sdy.py` to wrap the process execution.
-* **Environment Variables**: Key-value pairs injected into the session environment before launch. Universal session capabilities (FSR/NIS scaling, tearing, the dynamic FPS limiter, latency tweaks) are advertised automatically by the launcher via `GAME_MODE_ENV` — you do **not** set them here. Use `env_vars` for **display-dependent** capabilities that match your hardware (e.g. `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"` on a VRR panel, `STEAM_GAMESCOPE_HDR_SUPPORTED: "1"` on an HDR panel) and for your own per-session variables. See [Steamos Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch) for the full capability list. **Note**: MangoHud integration in Gamescope mode requires the `--mangoapp` flag — setting `MANGOHUD=1` as an env var has no effect inside the compositor. `MANGOHUD_CONFIG` and similar variables are valid in per-game profiles where `mangohud` is used as a `GAME_WRAPPER`.
+* **Environment Variables**: Key-value pairs injected into the session environment before launch. Universal session capabilities (FSR/NIS scaling, tearing, the dynamic FPS limiter, latency tweaks) are advertised automatically by the launcher via `GAME_MODE_ENV` — you do **not** set them here. Use `env_vars` for **display-dependent** capabilities that match your hardware (e.g. `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"` on a VRR panel, `STEAM_GAMESCOPE_HDR_SUPPORTED: "1"` on an HDR panel) and for your own per-session variables. See [Steamos Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch) for the full capability list. **Note**: for the overlay in Game Mode use the `--mangoapp` flag. `MANGOHUD_CONFIG` and similar variables apply in per-game profiles that use `mangohud` as `GAME_WRAPPER`.
 
 ---
 
@@ -28,7 +28,7 @@ This is a **YAML List** that defines how Gamescope should render the session.
 * **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay embedded directly into the Gamescope compositor).
 
 > [!NOTE]
-> When `--mangoapp` is active, the overlay reads its configuration from `~/.config/MangoHud/presets.conf` — **not** `MangoHud.conf`, which only applies when `mangohud` is used as a per-game `GAME_WRAPPER`. Create `presets.conf` manually to customise the overlay; if you use both modes, keep the two files in sync.
+> `--mangoapp` uses MangoHud's own files: `~/.config/MangoHud/MangoHud.conf` (which has a "mangoapp" section) and `presets.conf` (see `/usr/share/doc/mangohud/` for both examples).
 
 #### ⚠️ Syntax
 Each list item is split like a shell command line and the pieces are passed to gamescope in order. Writing a flag and its value in one item (`- "-F fsr"`) is the clearest form, but `- -F fsr` (no quotes), `- "-Ffsr"`, `- "--sharpness=5"` and `"-F"`/`"fsr"` as two separate items work too.
@@ -47,7 +47,7 @@ This is a **YAML List** of commands run once after Gamescope has started, in a b
 Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay ensures the Gamescope socket is ready before the commands are executed. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
 
 **Typical use case — VRR stability fix with `--mangoapp`:**
-When `--mangoapp` is active, the overlay surface can interfere with VRR/adaptive sync decisions. The following command tells Gamescope to ignore the overlay when evaluating VRR:
+gamescope's `adaptive_sync_ignore_overlay` setting is, in its own words, "whether or not to ignore overlay planes for pushing commits with adaptive sync" — useful with the `--mangoapp` overlay:
 ```yaml
 post_start_cmds:
   - "gamescopectl adaptive_sync_ignore_overlay 1"

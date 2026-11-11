@@ -67,7 +67,7 @@ For the full lifecycle including crash recovery, see [SteamOS Session Launch](ht
 ---
 
 ## 🏎️ 4. Performance Optimization: Removing Plymouth
-To minimize boot latency, removing Plymouth is recommended.
+Optional: Plymouth isn't needed here — TTY1 goes straight to the session.
 
 ### **Step 1: Initramfs Configuration**
 
