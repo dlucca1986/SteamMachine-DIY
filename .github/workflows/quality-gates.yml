@@ -1,9 +1,8 @@
 name: Quality gates
 
-# Mirrors CLAUDE.md's local review checklist verbatim — one job step per
-# gate, so a red X in the Actions UI points straight at which tool failed.
-# No project code depends on this workflow; it only runs the commands a
-# human already runs manually before every change.
+# The project's quality gates, one step per gate, so a red X in the
+# Actions UI points straight at the tool that failed. Same commands as the
+# local pre-commit run; no project code depends on this workflow.
 
 on:
   push:
@@ -11,10 +10,9 @@ on:
   pull_request:
     branches: [testing, stable]
 
-# Every step below is read-only (checkout, install tooling, run linters/tests)
-# — no release, no PR comment, no push. Explicit least-privilege GITHUB_TOKEN
-# scope instead of inheriting the repo/org default (which can be read-write),
-# per CodeQL's actions/missing-workflow-permissions finding (2026-09-20).
+# Every step is read-only, so the GITHUB_TOKEN gets read-only scope instead
+# of the repo default, which can be read-write (CodeQL
+# actions/missing-workflow-permissions).
 permissions:
   contents: read
 
@@ -28,9 +26,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      # PyQt6's wheel bundles Qt6 itself but still dynamically links a
-      # handful of system libraries even for a headless (no display)
-      # import — a well-known pitfall on CI runners.
+      # PyQt6's wheel bundles Qt6 but still links a few system libraries,
+      # even for a headless import.
       - name: Install Qt runtime libraries
         run: |
           sudo apt-get update
@@ -89,9 +86,8 @@ jobs:
       - name: vulture (whitelist covers documented Qt/tarfile/ruamel false positives)
         run: vulture usr/local/lib/steamos_diy/ vulture_whitelist.py
 
-      # tests/ is stripped on stable per branch policy (see CLAUDE.md's
-      # "Branch merge policy") -- 0 items collected there is expected,
-      # not a failure.
+      # tests/ is dev-only and absent on stable: 0 items collected there
+      # is expected, not a failure.
       - name: pytest
         run: |
           if [ ! -d usr/local/lib/steamos_diy/tests ]; then
