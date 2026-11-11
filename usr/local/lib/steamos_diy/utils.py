@@ -17,8 +17,9 @@ import pwd
 import re
 import shlex
 
-# B404: importing subprocess isn't the risk — every call site below
-# passes a fixed argv list, never shell=True or user-controlled input.
+# B404: every subprocess call below passes an argv list and never uses
+# shell=True, so no value (even one from the user's config) is parsed by
+# a shell.
 import subprocess  # nosec B404
 import sys
 import threading
@@ -57,8 +58,8 @@ except OSError as err:
 # Project-wide path constants — single source of truth for all modules.
 # ---------------------------------------------------------------------------
 
-# Runtime project version — kept in sync with the file headers by the
-# release bump (a plain-text substitution across the whole tree).
+# Runtime project version — must match the "# VERSION:" file headers;
+# both are updated together at release time.
 VERSION: str = "2.1.9"
 
 SSOT_CONF_PATH: str = os.getenv("SSOT_CONF", "/etc/default/steamos_diy.conf")
@@ -94,11 +95,10 @@ DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
-# systemd tool paths — unlike the DEFAULT_*_BIN group above, these are not
-# SSoT-backed: every systemd distro ships them at this fixed path, so
-# there's no legitimate per-deployment override. Centralized here purely
-# to stop health.py/restore.py/journal.py/control_center.py from each
-# re-declaring their own literal.
+# Fixed tool paths, not SSoT-backed (unlike the DEFAULT_*_BIN group above):
+# systemctl/journalctl/python3 live here on every target distro, and
+# konsole is installed by install.sh. Centralized so callers don't each
+# re-declare their own literal.
 SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
 JOURNALCTL_BIN: str = "/usr/bin/journalctl"
 PYTHON3_BIN: str = "/usr/bin/python3"
@@ -148,7 +148,8 @@ _JLOG_REENTRY = threading.local()
 
 
 def jlog(tag: str, message: str, level: str = "INFO") -> None:
-    """Route a log entry to the kernel journal, gated by SSoT LOG_LEVEL.
+    """Send a log entry to the systemd journal (via syslog), gated by the
+    SSoT LOG_LEVEL.
 
     Filters in Python before any C call to skip suppressed levels cheaply.
     _JLOG_REENTRY prevents infinite recursion when get_ssot_var itself
@@ -217,8 +218,8 @@ def _strip_quotes(value: str) -> str:
 def _load_ssot_cache() -> None:
     """Parse the whole SSoT file into the cache in a single disk read.
 
-    First occurrence wins on duplicate keys (same as the old per-key
-    scan). The loaded flag is set before parsing so a read failure is
+    First occurrence wins on duplicate keys. The loaded flag is set before
+    parsing so a read failure is
     cached too instead of being retried on every later lookup. Resolved
     values are exported to os.environ so spawned subprocesses inherit
     them without re-reading the config.
@@ -234,10 +235,9 @@ def _load_ssot_cache() -> None:
                 _SSOT_CACHE.setdefault(key.strip(), _strip_quotes(raw))
     except (OSError, UnicodeDecodeError) as err:
         jlog("CORE", f"SSOT_READ_ERROR: {err}", level="DEBUG")
-    # Not os.environ.update(): one entry the OS refuses as an environment
-    # variable (a line starting with "=", a NUL byte) raised straight out
-    # of every get_ssot_var() caller — session_launch.py included, which
-    # then crash-looped at boot over a single stray character.
+    # Not os.environ.update(): one entry the OS refuses (a line starting
+    # with "=", a NUL byte) would raise out of every get_ssot_var() caller,
+    # session_launch.py's boot path included. apply_env_map skips it.
     apply_env_map(_SSOT_CACHE)
 
 
@@ -353,13 +353,10 @@ def shlex_split_or_fallback(value: str) -> tuple[list[str], ValueError | None]:
 
 
 def write_atomic(path: str | Path, val: str) -> bool:
-    """Write *val* to *path* via C-Core (tmp+rename+fdatasync, SSD-durable).
+    """Write *val* to *path* via C-Core: tmp file, fdatasync, rename.
 
-    Returns True on success, False on any failure (symlink/FIFO refused at
-    tmp_path, a short write, or a failed rename) — already logged via
-    syslog on the C side, but callers that need to react (not just have a
-    trace to grep for later) can now check the result instead of assuming
-    the write landed.
+    Returns False on any failure (symlink or FIFO at the tmp path, a short
+    write, a failed rename); the C side has already logged the reason.
     """
     return bool(
         _LIB.c_write_atomic(os.fsencode(path), str(val).encode("utf-8"))
@@ -370,11 +367,9 @@ def persist_next_session(path: str | Path, target: str) -> bool:
     """write_atomic() for the next-boot session target, logging the
     shared NEXT_SESSION_WRITE_FAILED tag on failure.
 
-    One place for that tag: it's documented in Troubleshooting.md and
-    pattern-matched by the Diagnostics tab, and the same write-or-log
-    shape was independently repeated at 3 sites across session_launch.py
-    and session_select.py before this existed. Why a failed write matters
-    differs per site, so those comments stay at the call sites.
+    One place for that tag (documented in Troubleshooting.md and matched
+    by the Diagnostics tab). Why a failed write matters differs per call
+    site, so that explanation stays at each call site.
     """
     if write_atomic(path, target):
         return True
@@ -410,8 +405,9 @@ def apply_env_map(data_dict: dict[str, Any] | None) -> None:
 def spawn_native(path: str, args: list[str]) -> int:
     """Fork/exec *path* detached; returns PID or 0 on failure.
 
-    Uses ``start_new_session=True`` (setsid) so the child survives the
-    caller and does not inherit the controlling terminal.
+    ``start_new_session=True`` (setsid) detaches the child from the
+    caller's terminal and process group, so signals aimed at those (a
+    closing terminal, a Ctrl+C) don't reach it.
     """
     try:
         # pylint: disable=consider-using-with
@@ -431,17 +427,11 @@ def spawn_native(path: str, args: list[str]) -> int:
 
 
 def safe_emit(signal, *args) -> None:
-    """Emit *signal*, swallowing RuntimeError from a torn-down window.
+    """Emit *signal* from a worker thread, ignoring a torn-down window.
 
-    Every emit() call from a daemon worker thread in control_center.py and
-    updater.py goes through here: closing the window while a worker is
-    still in flight (some, like Backup/Restore, run for up to the 300s
-    pkexec budget) deletes the underlying Qt object, and emitting on a
-    deleted signal raises RuntimeError. Uncaught, that would vanish
-    silently — stderr is /dev/null when the app is launched detached —
-    but there is genuinely nothing left to update at that point, so
-    swallowing it here is correct, not just convenient. Takes a duck-typed
-    signal (only .emit() is called), so this needs no Qt import itself.
+    Closing the window while a worker is still running deletes the Qt
+    object, and emit() then raises RuntimeError; there is nothing left to
+    update, so it's swallowed. Duck-typed (only .emit()), so no Qt import.
     """
     try:
         signal.emit(*args)
@@ -541,16 +531,9 @@ def get_backup_mapping(
         )
     )
     if not conf_dir:
-        # A hand-edited user_config with no directory component (e.g. a
-        # bare "config.yaml") makes os.path.dirname() return "".
-        # os.path.realpath("") resolves to the process's CURRENT WORKING
-        # DIRECTORY, not a config path — restore.py's _allowed_prefixes
-        # would otherwise add that unmodified to its allow-list of
-        # privileged (root, under pkexec) write destinations. Degrade to
-        # the same default used when user_config is unset entirely,
-        # matching get_ssot_num's own degrade-safely contract, instead of
-        # silently widening the restore write surface to an unpredictable
-        # cwd.
+        # A bare "config.yaml" (no directory) gives dirname() == "", which
+        # realpath() turns into the current working directory — restore.py
+        # would then allow root writes there. Fall back to the default.
         conf_dir = default_conf_dir
     mapping = {
         "system/next_session": get_ssot_var("next_session", NEXT_SESSION_PATH),
@@ -669,14 +652,9 @@ class ExtractedRelease(NamedTuple):
 def _https_open(url: str, *, extra_headers: dict[str, str] | None = None):
     """Open *url* over HTTPS with the shared SteamMachine-DIY User-Agent.
 
-    Centralizes the Request/urlopen/timeout plumbing common to every
-    GitHub-release network call below (check_latest_release,
-    _fetch_expected_sha256, _download_verified_tarball); each caller
-    keeps its own error handling since what counts as recoverable, and
-    what to log, differs per caller (JSON parsing vs. raw digest text
-    vs. streamed binary). Every call site passes a URL already confirmed
-    https:// (either _RELEASES_API itself or a caller-side guard), so the
-    scheme is never attacker-controlled.
+    Shared by the three GitHub-release network calls below; each keeps its
+    own error handling. Every caller passes a URL already confirmed to be
+    https:// (_RELEASES_API itself, or checked via _require_https).
     """
     # Deferred import: urllib pulls in ~40ms of http machinery, paid only
     # by the Control Center's update-check path, never session-boot.
@@ -891,24 +869,14 @@ def download_release(
 ) -> ExtractedRelease | None:
     """Download, checksum-verify, and unpack *info*'s source tarball.
 
-    Layout: <dest_root>/v<version>/<github-export-dir>/… — returns an
-    ExtractedRelease (the inner export directory holding install.sh, plus
-    install.sh's own SHA-256), or None on any failure. Requires
-    info.checksum_url (the release's SHA256SUMS asset, published
-    alongside every release from 2.1.8 on) and rejects the download
-    outright if it's missing or doesn't match — install.sh inside the
-    tarball runs with elevated privileges, so nothing gets extracted
-    unverified. Older downloads are pruned only after the new tarball is
-    checksum-verified, fully extracted, AND confirmed to contain
-    install.sh — so a corrupted/mismatched download, a failed extraction,
-    or a malformed release tarball never costs the last known-good cached
-    release; the updates folder still never accumulates stale releases in
-    the success case. The "data" extraction filter rejects absolute
-    paths, traversal and special members. The returned install.sh hash is
-    for the caller to re-check via verify_file_sha256() immediately
-    before a pkexec execution (see updater.py) — the tarball checksum
-    alone only covers the moment of extraction, not whatever else might
-    touch the (user-writable) destination directory afterward.
+    Layout: <dest_root>/v<version>/<github-export-dir>/. Returns an
+    ExtractedRelease (that directory + install.sh's SHA-256) or None.
+    Fail-closed: no SHA256SUMS asset, or a mismatch, means nothing is
+    extracted — install.sh later runs as root. Older downloads are pruned
+    only once the new one is verified, extracted and has install.sh. The
+    "data" filter rejects absolute paths, traversal and special files.
+    The returned hash lets updater.py re-check install.sh right before
+    pkexec, since the directory stays user-writable after extraction.
     """
     # Deferred import — see verify_archive()'s own comment on why tarfile
     # isn't a top-level import in this module.

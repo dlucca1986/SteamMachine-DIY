@@ -15,8 +15,9 @@
 import os
 import re
 
-# B404: importing subprocess isn't the risk — every call site below
-# passes a fixed argv list, never shell=True or user-controlled input.
+# B404: every subprocess call below passes an argv list and never uses
+# shell=True, so no value (even one from the user's config) is parsed by
+# a shell.
 import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
