@@ -11,10 +11,9 @@
 # --- GLOBAL ENVIRONMENT VARIABLES ---
 # These apply to ALL games unless overridden by a specific game profile.
 #
-# NOTE: universal session capabilities (FSR/NIS scaling, tearing, dynamic
-# FPS limiter, latency tweaks) are provided automatically by the launcher.
-# You do NOT need to set them here. Only declare DISPLAY-dependent features
-# that match YOUR hardware, or Steam shows controls that do nothing.
+# NOTE: the launcher already enables the universal capabilities (FSR/NIS
+# scaling, tearing, dynamic FPS limiter). Declare here only display features
+# YOUR panel has, or Steam shows controls that do nothing.
 env_vars:
   # --- Per-display capabilities (opt-in — only if your panel supports it) ---
   # STEAM_GAMESCOPE_VRR_SUPPORTED: "1"   # VRR / FreeSync / G-Sync panels
@@ -29,14 +28,13 @@ env_vars:
   GAME_EXTRA_ARGS: ""
 
 # --- GLOBAL GAMESCOPE FLAGS ---
-# These flags define the Steam Game Mode session behavior.
-# IMPORTANT: This is a YAML LIST. Each item must start with a dash "-".
+# Passed to gamescope in Game Mode. This is a YAML LIST: each item starts
+# with a dash "-". Keeping a flag and its value in one item is clearest.
 flags:
-  # --- RIGHT SYNTAX ---
-  - "-W 1280"                # Parameter + Value: MUST be in the same quotes
-  - "-H 720"                 # Parameter + Value: MUST be in the same quotes
-  - "-r 60"                  # Refresh rate: Correct "-r 60"
-  - "-F fsr"                 # Upscaling: Correct "-F fsr"
+  - "-W 1280"                # Output width
+  - "-H 720"                 # Output height
+  - "-r 60"                  # Refresh rate
+  - "-F fsr"                 # Upscaling filter
   - "--sharpness 5"          # Sharpness (Value between 0-20)
   - "--rt"                   # Enable Realtime scheduling
   - "--immediate-flips"      # Minimize latency (Low latency/Tearing)
@@ -48,17 +46,14 @@ flags:
   - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
   - "--mangoapp"              # Native MangoHud overlay (configurable from Steam QAM)
 
-  # --- WRONG SYNTAX (EXAMPLES) ---
-  # - -H 720                 # ERROR: Missing quotes
-  # - "-H" "720"             # ERROR: Space between quotes breaks the flag
-  # - "-H720"                # ERROR: Missing space between flag and value
+  # --- WRONG SYNTAX (EXAMPLE) ---
+  # - "-H" "720"             # ERROR: two quoted strings in one item is invalid YAML
 
 # --- POST-START COMMANDS ---
-# Shell commands executed once after gamescope has started, in a background
-# thread. Useful for runtime configuration that requires the gamescope socket
-# to be available (e.g. gamescopectl). Each command is fired with spawn_native
-# after POST_START_DELAY seconds (configured in steamos_diy.conf, default: 2.0s).
+# Run once, POST_START_DELAY seconds (steamos_diy.conf, default 2.0) after
+# gamescope starts — for commands that need its socket (e.g. gamescopectl).
+# Split like a shell command line, but no shell runs them: no pipes,
+# redirects or $VARIABLES.
 post_start_cmds:
-  # Fix erratic VRR behaviour when --mangoapp overlay is active.
-  # Without this, the overlay surface interferes with adaptive sync decisions.
+  # Keep the --mangoapp overlay from disturbing VRR.
   - "gamescopectl adaptive_sync_ignore_overlay 1"

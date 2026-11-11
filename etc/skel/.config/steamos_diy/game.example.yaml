@@ -10,8 +10,8 @@
 # =============================================================================
 
 # --- [ 🆔 IDENTIFICATION ] ---
-# Identifiers for sdy.py matching. 
-# Control Center injects these during "Scan History".
+# Used by sdy to match this profile to the game. Control Center writes them
+# when it creates a profile for a game found by "Scan History".
 SDY_ID: 1091500
 STEAM_APPID: "1091500"
 
@@ -26,14 +26,11 @@ STEAM_APPID: "1091500"
 # ---------------------------------------
 
 # --- [ ⚙️ EXECUTION OVERRIDES ] ---
-# These keys override global settings in config.yaml.
-# If commented (#), the global value is used.
 GAME_WRAPPER: "mangohud gamemoderun"
 GAME_EXTRA_ARGS: ""
 
 # --- [ 🌿 ENVIRONMENT VARIABLES ] ---
-# Specific game variables grouped here.
-# Maintain exactly 2 spaces of indentation!
+# Indent every key under env_vars the same way (2 spaces here).
 env_vars:
   PROTON_USE_WINED3D: "1"
   DXVK_HUD: "fps"
@@ -41,5 +38,5 @@ env_vars:
 
 # --- [ ❌ WRONG SYNTAX EXAMPLES ] ---
 # DXVK_HUD:"fps"      # ERROR: Missing space after colon
-#  DXVK_HUD: "fps"    # ERROR: Only 1 space (must be 2)
-# PROTON_USE_WINED3D: 1 # WARNING: Always use quotes "1" for safety with strings
+#  DXVK_HUD: "fps"    # ERROR: indented differently from the other keys
+# DXVK_ASYNC: true    # WARNING: unquoted true becomes "True"; write "1"

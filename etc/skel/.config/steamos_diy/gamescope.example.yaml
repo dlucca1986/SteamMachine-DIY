@@ -1,6 +1,7 @@
 # =============================================================================
-# PROJECT:      SteamMachine-DIY - Gamescope Reference Guide (Updated 2026)
-# DESCRIPTION:  Full Gamescope CLI Options translated to YAML
+# PROJECT:      SteamMachine-DIY - Gamescope Reference Guide (gamescope 3.17)
+# DESCRIPTION:  gamescope --help options as YAML. Reference only: the
+#               launcher never reads this file.
 # USAGE:        gamescope [options...] -- [command...]
 # =============================================================================
 
@@ -40,6 +41,7 @@ general:
   -e, --steam: "enable Steam integration (overlay and features)"
   --xwayland-count: "create N xwayland servers"
   --prefer-vk-device: "prefer Vulkan device for compositing (ex: 1002:7300)"
+  --force-composition-rotation: "always rotate the output in the compositor instead of at scanout (autodetected otherwise)"
   --force-orientation: "rotate the internal display (left, right, normal, upsidedown)"
   --force-windows-fullscreen: "force windows inside gamescope to be the size of the nested display"
   --cursor-scale-height: "sets a base output height to linearly scale the cursor against"

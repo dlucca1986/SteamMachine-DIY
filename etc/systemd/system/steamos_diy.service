@@ -12,13 +12,12 @@
 Description=SteamMachine-DIY - Session Launcher
 After=systemd-user-sessions.service dbus.service systemd-logind.service
 
-# session_launch.py exits 75 on every session switch (intentional restart),
-# and a crashed Steam already falls back to Desktop via _handle_recovery —
-# so legitimate restarts are frequent and self-limiting. The only runaway
-# case is both targets crashing instantly (e.g. broken Plasma/Wayland):
-# this guard lets systemd give up instead of hammering TTY1 at ~1 Hz.
-# Tuned generous enough to never trip on normal Steam<->Desktop toggling.
-# Recovery after give-up is via another TTY / SSH (TTY1 getty is masked).
+# session_launch.py exits 75 on every session switch (a wanted restart),
+# and a session that dies right at start falls back to Desktop. The
+# runaway case is Desktop itself dying at start (e.g. broken Plasma):
+# this limit lets systemd give up instead of restarting every second,
+# with room to spare for normal switching. Recover from another TTY or
+# SSH (getty on TTY1 is masked).
 StartLimitIntervalSec=120
 StartLimitBurst=10
 
