@@ -30,7 +30,7 @@ except (ImportError, SystemExit):
     sys.exit(7)
 
 if __name__ == "__main__":
-    # RAUC-style convention: 7 means "no update available".
+    # SteamOS updater convention: exit 7 means "no update available".
     run_shim(
         "SYSTEM",
         "[Update] OTA request intercepted. Status: UP TO DATE (Exit 7)",
