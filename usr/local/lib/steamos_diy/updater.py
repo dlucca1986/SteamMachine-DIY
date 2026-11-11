@@ -85,10 +85,9 @@ class UpdateManager(QObject):
         def worker() -> None:
             try:
                 result = download_release(info, self._dest_root)
-            # A daemon thread's uncaught exception has nowhere to go
-            # (stderr is /dev/null when the app is launched detached) and
-            # would skip the emit() below entirely, leaving the button
-            # stuck on "Downloading..." forever with no error shown.
+            # An uncaught exception would end the thread before the
+            # emit() below, leaving the button stuck on "Downloading…"
+            # with no error shown.
             # pylint: disable-next=broad-except
             except Exception:  # noqa: BLE001
                 result = None
@@ -157,13 +156,10 @@ class UpdateManager(QObject):
         polkit auth popup) — a long silent root operation would be both
         bad UX and undiagnosable when it fails.
         """
-        # Deliberately NOT re-idled here: the button must stay disabled
-        # from download through the privileged install actually starting,
-        # or a second click while Konsole/pkexec is still running (a
-        # detached process this handler never awaits) can launch a second
-        # concurrent `install.sh --update` against the same files. Every
-        # return path below either re-idles explicitly (failure — let the
-        # user retry) or leaves it busy (success — a reboot is imminent).
+        # Not re-idled up front: a click while the detached Konsole/pkexec
+        # is still running would start a second concurrent
+        # `install.sh --update`. Failure paths re-idle (so the user can
+        # retry); success leaves it busy, since a reboot follows.
         if result is None:
             self._set_idle()
             QMessageBox.warning(
@@ -179,17 +175,13 @@ class UpdateManager(QObject):
             "The installer will now run in a terminal window.\n"
             "The system reboots automatically when it completes.",
         )
-        # Re-verify right before privileged use, not just at download
-        # time: the QMessageBox above can block on the user for an
-        # unbounded time, during which src_dir (under the user's own
-        # home, writable by that same user) could be tampered with by
-        # anything else already running as that user. This narrows the
-        # TOCTOU window, it does not close it: pkexec's password prompt
-        # still sits between this check and bash reading install.sh, and
-        # the other extracted files install.sh then copies as root are
-        # not re-checked at all. Closing it fully would need the verify
-        # to run root-side — not worth it against a same-user attacker,
-        # who could just as well spoof the password prompt itself.
+        # Re-verify after the dialog above, which can stay open for any
+        # length of time while src_dir (in the user's home) is writable by
+        # any same-user process. This narrows the TOCTOU window but does
+        # not close it: pkexec's password prompt still comes before bash
+        # reads install.sh, and the other files it copies as root are not
+        # re-checked. A full fix needs a root-side verify — not worth it
+        # against a same-user attacker, who could fake the prompt anyway.
         install_sh = src_dir / "install.sh"
         try:
             verified = verify_file_sha256(install_sh, expected_sha256)
