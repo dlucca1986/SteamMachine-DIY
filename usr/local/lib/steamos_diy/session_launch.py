@@ -51,12 +51,10 @@ STATUS_MAP: dict[str, str] = {
     "desktop": "Starting Desktop Mode...",
 }
 
-# Applied before the user's env_vars (which keep the last word). All
-# compositor- or Mesa-level and panel-independent: gamescope capabilities
-# advertised to Steam so Game Mode exposes the matching controls, plus
-# universal latency/session tweaks. Display-dependent capabilities (VRR,
-# HDR) deliberately stay out — they belong in the user's config, where the
-# hardware is actually known.
+# Applied before the user's env_vars (which keep the last word): gamescope
+# capabilities advertised to Steam so Game Mode shows the matching
+# controls, plus hardware-independent session tweaks. Display-dependent
+# ones (VRR, HDR) stay out — they belong in the user's config.
 GAME_MODE_ENV: dict[str, str] = {
     # Scaling filters (FSR/NIS) — vendor-agnostic shaders
     "STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT": "1",
@@ -64,7 +62,7 @@ GAME_MODE_ENV: dict[str, str] = {
     # Tearing controls — compositor capability, user opts in per game
     "STEAM_GAMESCOPE_HAS_TEARING_SUPPORT": "1",
     "STEAM_GAMESCOPE_TEARING_SUPPORTED": "1",
-    # In-Steam dynamic FPS limiter (Mesa fifo-based integration)
+    # Steam's in-game FPS limiter
     "STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER": "1",
     # Latency + embedded-session correctness
     "vk_xwayland_wait_ready": "false",
@@ -72,45 +70,30 @@ GAME_MODE_ENV: dict[str, str] = {
     # Per-game Xwayland isolation — a session capability, not tied to any
     # specific hardware or user preference.
     "STEAM_MULTIPLE_XWAYLANDS": "1",
-    # Steam's bundled steam-runtime-tools "srt-logger" writes to the
-    # journal (with its own identifier/prefixes) instead of wherever
-    # stderr would otherwise go — confirmed present in a real Steam
-    # install's own runtime, independent of the underlying distro.
+    # steam-runtime-tools' logger writes to the journal (ships with Steam
+    # itself, not the distro).
     "SRT_LOG_TO_JOURNAL": "1",
-    # Links clicked inside Game Mode (store page, community) open in
-    # Steam's own overlay browser instead of steam-runtime-tools'
-    # xdg-open reaching for a desktop browser that may not exist (or
-    # look wrong) inside a gamescope session.
+    # Links clicked in Game Mode open in Steam's overlay browser, not a
+    # desktop browser that may be missing inside a gamescope session.
     "SRT_URLOPEN_PREFER_STEAM": "1",
     # Proton / vkd3d session defaults (from Valve's gamescope-session)
     "ENABLE_GAMESCOPE_WSI": "1",
     "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
     "WINEDLLOVERRIDES": "dxgi=n",
-    # Desktop-session styling for Qt apps inside gamescope — avoids missing
-    # icons/unreadable text. Verified functional here: this system already
-    # ships KDEPlasmaPlatformTheme6.so, unlike the two vars below.
+    # Plasma styling for Qt apps inside gamescope (missing icons otherwise).
+    # Needs KDEPlasmaPlatformTheme6.so, which a Plasma install provides.
     "QT_QPA_PLATFORM_THEME": "kde",
-    # Cursor scale inside the embedded gamescope X11 session — applies to
-    # whatever cursor theme is already active, no bundled theme needed.
+    # Cursor size in the embedded X11 session, for the active cursor theme.
     "XCURSOR_SCALE": "256",
 }
 
-# Deliberately NOT ported from Valve's gamescope-session, despite being in
-# the same source block as the vars above: QT_IM_MODULE=steam,
-# GTK_IM_MODULE=Steam, and XCURSOR_THEME=steam all point at a "steam"
-# plugin/theme (Qt platforminputcontext, GTK immodule, XCursor theme) that
-# ships only inside the real SteamOS image — confirmed absent from this
-# project's own target systems (checked platforminputcontexts/, GTK
-# immodules/, and every icon theme dir) and not bundled by the Steam
-# client itself. Setting them would be inert on every real install this
-# project targets, not "genuinely improving" anything — the kind of
-# cargo-culted config this project explicitly reviews against. Revisit
-# only if a way to legitimately obtain these assets (not just copying
-# Valve's own copyrighted cursor theme) is ever found.
+# Deliberately NOT ported from Valve's gamescope-session: QT_IM_MODULE=steam,
+# GTK_IM_MODULE=Steam and XCURSOR_THEME=steam point at a "steam" input
+# module/cursor theme that ships only in the SteamOS image (absent here and
+# not bundled with the Steam client), so they would have no effect.
 
-# Real SteamOS's gamescope-session raises this before spawning Steam —
-# Proton/games with heavy shader-cache or asset I/O can exhaust the
-# systemd-default 1024 soft limit. Matched here for parity, not tuned.
+# Same value SteamOS's gamescope-session sets: games with heavy shader-cache
+# or asset I/O can exhaust systemd's default soft limit of 1024 files.
 GAME_MODE_NOFILE_TARGET: int = 524288
 
 
@@ -123,12 +106,9 @@ def _raise_nofile_limit(target: int = GAME_MODE_NOFILE_TARGET) -> None:
     """Raise this process's open-file soft limit toward *target*, inherited
     by the gamescope/Steam child spawned right after.
 
-    Only ever raises, never lowers: if a user or distro has already set a
-    higher soft limit (via limits.conf, a systemd unit override, etc.),
-    this is a no-op. Never exceeds the existing hard limit (raising that
-    needs privileges this process doesn't have) and never aborts the
-    session if the call fails for any reason — a low soft limit degrades
-    game behavior under heavy I/O, it doesn't break the launch itself.
+    Only raises, never lowers; stays within the hard limit (raising that
+    needs privileges); a failure is logged, never fatal — a low limit
+    degrades heavy I/O, it doesn't stop the launch.
     """
     try:
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -179,29 +159,17 @@ def _schedule_post_start_cmds(
 ) -> None:
     """Sleep *delay* seconds, then fire each cmd via spawn_native.
 
-    Uses shlex_split_or_fallback like every other hand-edited shell-like
-    field in this codebase (flags, GAME_WRAPPER, GAME_EXTRA_ARGS) — an
-    unbalanced quote degrades to a naive str.split() and still runs,
-    rather than silently skipping the command entirely.
+    An unbalanced quote degrades to str.split() (shlex_split_or_fallback),
+    so a malformed command still runs instead of being skipped.
 
-    crashed is set by _run_session the moment _monitor_process detects an
-    early exit — checked once after the sleep so commands meant to run
-    "after the game starts" don't fire for a session that had already
-    failed and switched to desktop by the time this thread woke up.
+    *crashed* is set by _run_session when the session dies early, and is
+    checked once after the sleep, so the commands don't fire for a session
+    that has already fallen back to desktop.
 
-    Known residual gap (accepted tradeoff, not fixed): this only catches
-    a crash within [0, delay]. _monitor_process keeps watching for a
-    crash up to VALIDATION_TIMEOUT, which under the shipped SSoT defaults
-    (POST_START_DELAY=2.0, VALIDATION_TIMEOUT=5.0) is longer than delay —
-    a crash landing in (delay, VALIDATION_TIMEOUT] still fires the
-    commands before the recovery-to-desktop path engages. Closing this
-    fully would mean waiting up to VALIDATION_TIMEOUT before ever firing
-    post_start_cmds, even for a perfectly healthy session — trading a
-    universal, on-every-launch UX delay for protection against a narrow,
-    low-harm edge case (stray post-start command state on a session
-    that's about to be recovered anyway, not data loss or a security
-    issue). Deliberately left as is, same reasoning as this file's other
-    accepted-tradeoff gaps.
+    Accepted gap: a crash between *delay* and VALIDATION_TIMEOUT (2s-5s
+    with the shipped defaults) still fires the commands. Waiting the full
+    validation window would delay every healthy launch to avoid a harmless
+    edge case.
     """
     try:
         time.sleep(max(delay, 0))
@@ -224,8 +192,8 @@ def _schedule_post_start_cmds(
             if parts:
                 spawn_native(parts[0], parts)
                 jlog("STEAM", f"POST_START_CMD: {cmd_str}")
-    # A daemon thread's uncaught exception has nowhere to go — stderr is
-    # /dev/null when the app is launched detached.
+    # Logged via jlog rather than left to the default traceback, so the
+    # failure carries the project's tag and shows in the Diagnostics tab.
     except Exception as err:  # pylint: disable=broad-except  # noqa: BLE001
         jlog("STEAM", f"POST_START_CMDS_FAILED: {err}", level="ERROR")
 
@@ -267,11 +235,8 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
         proc.wait(timeout=term_timeout)
     except subprocess.TimeoutExpired:
         # Still alive after SIGKILL: stuck in uninterruptible I/O
-        # (D-state), nothing more to do at this level — the kernel, not
-        # us, controls when that clears. systemd's own KillMode=mixed +
-        # TimeoutStopSec backstop reaps the cgroup regardless, so
-        # returning here (instead of blocking forever) lets the caller's
-        # shutdown/recovery flow proceed rather than wedging with it.
+        # (D-state). Return instead of blocking; systemd's KillMode=mixed
+        # + TimeoutStopSec still reaps the cgroup.
         jlog(
             "CORE",
             "SIGKILL_TIMEOUT: process still alive (D-state?)",
@@ -280,7 +245,8 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
 
 
 def _build_command_for(target: str, cfg: dict) -> list[str]:
-    """Resolve argv: "steam" → gamescope+Steam, else → Plasma."""
+    """Resolve argv: "steam" → gamescope+Steam, else → the desktop
+    session (bin_plasma)."""
     if target == "steam":
         return _build_gamescope_args(cfg)
     return [get_ssot_var("bin_plasma", DEFAULT_PLASMA_BIN)]
@@ -289,11 +255,10 @@ def _build_command_for(target: str, cfg: dict) -> list[str]:
 def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     """Recover to desktop after an early exit: persist target, notify, kill.
 
-    Deliberate fail-safe: any process exit within the validation window
-    (a real crash, or a switch request that raced it — see
-    _monitor_process) forces "desktop", never "steam", so a broken config
-    always lands where the user can fix it via the Control Center rather
-    than looping back into a session that might not even be launchable.
+    Deliberate fail-safe: any exit within the validation window (a crash,
+    or a switch request that raced the launch) forces "desktop", never
+    "steam", so a broken config lands where the user can fix it instead
+    of looping back into a session that may not even start.
 
     Returns:
         Always ``"desktop"`` — drives caller's next-target logic.
@@ -344,9 +309,8 @@ def _run_session(
     initial_target = target
     ret_code = 0
     try:
-        # cmd is built from SSoT-configured binary paths plus fixed
-        # session literals (_build_command_for) — never shell=True or
-        # externally-controlled input.
+        # cmd is an argv list (SSoT binary paths, fixed session literals
+        # and the user's gamescope flags), never run through a shell.
         with subprocess.Popen(  # nosec B603
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
@@ -375,11 +339,8 @@ def _run_session(
         ret_code = 1
         target = initial_target
     except ValueError as err:
-        # subprocess.Popen raises ValueError, not OSError, for a
-        # malformed argv element (e.g. an embedded null byte from a
-        # hand-edited flags/env_vars entry) -- same class of bug as
-        # sdy.py::_exec_game's equivalent os.execvpe gap, fixed the
-        # same way.
+        # Popen raises ValueError, not OSError, for a malformed argv
+        # element (e.g. a NUL byte in a hand-edited flag).
         jlog("CORE", f"BAD_LAUNCH_ARGV: {err}", level="ERROR")
         notify("FATAL: Cannot launch session!")
         ret_code = 1
@@ -395,17 +356,12 @@ def _make_term_handler(
     """Build the SIGTERM/SIGINT handler bound to run()'s proc_holder cell.
 
     The handler only signals the child and exits — it must NOT wait on it
-    (i.e. no _terminate_gracefully here). It runs on the main thread,
-    which in the stable phase is blocked inside _run_session's untimed
-    proc.wait(): that call holds Popen's internal waitpid lock, so a wait
-    from inside the handler can never reap the child and always ran out
-    both TERM_TIMEOUT windows — ~10s per stop/reboot, plus a false
-    SIGTERM_TIMEOUT/SIGKILL_TIMEOUT pair in the journal. sys.exit()
-    unwinds out of that wait, releasing the lock,
-    and the `with Popen` block's own __exit__ then reaps the child;
-    escalation to SIGKILL for a child ignoring SIGTERM is left to the
-    unit's KillMode=mixed + TimeoutStopSec, which fires within the same
-    10s the old in-handler escalation needed anyway.
+    (no _terminate_gracefully here). It runs on the main thread, which in
+    the stable phase is blocked in _run_session's untimed proc.wait()
+    holding Popen's waitpid lock, so a wait from the handler could never
+    reap the child. sys.exit() unwinds out of that wait and the
+    `with Popen` block reaps the child; a child ignoring SIGTERM is left
+    to the unit's KillMode=mixed + TimeoutStopSec.
 
     Exit code 0 — explicit stop, do NOT trigger a systemd restart.
     """
@@ -454,15 +410,11 @@ def run() -> None:
     notify(_post_session_message(target, ret_code))
     time.sleep(get_ssot_num("NOTIFY_DELAY", 0.4))
 
-    # The child finished naturally — either a session switch (user clicked
-    # "Switch to Desktop" / "Switch to Steam") or a crash that already
-    # routed `next_session` to "desktop" via _handle_recovery. Either way
-    # the new target is now persisted on disk and the only thing missing
-    # is the launcher reloading it. Exit non-zero so the service unit's
-    # `Restart=on-failure` policy reboots us; the next run reads the new
-    # `next_session` value and launches the right target. Without this,
-    # `systemctl stop` (clean SIGTERM → exit 0) stays clean while session
-    # switches still trigger the restart cycle.
+    # The child ended on its own: a session switch, or a crash already
+    # routed to "desktop" by _handle_recovery. The new target is on disk;
+    # exit non-zero so `Restart=on-failure` restarts the service, which
+    # then launches it. A `systemctl stop` exits 0 instead (see
+    # _make_term_handler), so it doesn't trigger a restart.
     sys.exit(75)  # EX_TEMPFAIL — semantically "transient, retry"
 
 
