@@ -3,7 +3,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Restore Tool
 # VERSION:      2.1.9
-# DESCRIPTION:  Full system restoration and dynamic symlink reconstruction.
+# DESCRIPTION:  Restores a backup archive's files and shim symlinks.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/restore.py
@@ -39,7 +39,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 # Allow-list of filesystem prefixes the restore is permitted to write to.
@@ -75,11 +75,10 @@ def _allowed_prefixes(
 
 
 def _is_path_safe(target: str, allowed: tuple[str, ...]) -> bool:
-    """Guard against symlink-redirect attacks via realpath allow-list check.
+    """Check *target*'s real path (symlinks resolved) against *allowed*.
 
-    os.path.realpath follows symlinks already on disk at the parent level,
-    so a malicious archive cannot plant a link that re-aims a later write
-    outside the allow-list.
+    Resolving first means a symlink already on disk in one of target's
+    parent directories can't re-aim the write outside the allow-list.
     """
     real = os.path.realpath(target)
     # Append "/" so "/etcfoo" cannot match "/etc"
@@ -110,10 +109,8 @@ def _resolve_target(
 ) -> str | None:
     """Map an archive member to a validated filesystem path.
 
-    Uses os.path.realpath (not abspath) before the allow-list check.
-    abspath collapses ".." without following existing symlinks, so
-    "system/next_session/../../etc/passwd" would slip through; realpath
-    catches it.
+    Members with a ".." component are rejected outright; the mapped path
+    is then checked with _is_path_safe (real path vs. allow-list).
 
     Args:
         member_name: Archive-relative path of the tar member.
@@ -123,11 +120,9 @@ def _resolve_target(
     Returns:
         Validated absolute path, or None if unmapped or outside allow-list.
     """
-    # Reject any member whose path contains traversal components before
-    # resolution. A crafted archive can exploit realpath's lexical
-    # collapsing of "file/.." to escape the allow-list (e.g.
-    # "system/steamos_diy.conf/../../shadow" resolves to "/etc/shadow"
-    # which legitimately starts with "/etc/").
+    # Needed on top of the realpath check: realpath collapses "file/.."
+    # lexically, so "system/steamos_diy.conf/../../shadow" would resolve
+    # to /etc/shadow, which is inside the "/etc/" allow-list entry.
     if any(part == ".." for part in Path(member_name).parts):
         jlog(
             "SYSTEM",
@@ -185,8 +180,8 @@ def _is_member_safe(member: tarfile.TarInfo) -> bool:
 def _ensure_safe_target(target: str) -> bool:
     """Refuse to overwrite a pre-existing symlink at target.
 
-    A symlink planted by a previous malicious archive could redirect
-    the write to an arbitrary path; bail out rather than follow it.
+    Writing through it would land wherever it points, as root; refuse
+    instead.
     """
     if os.path.islink(target):
         jlog(
@@ -201,21 +196,15 @@ def _ensure_safe_target(target: str) -> bool:
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
 ) -> bool:
-    """Write member to target via tmp+rename. False on any failure (a
-    symlink planted at target's tmp write path, or an OSError from
-    makedirs/copy/replace).
+    """Write member to target via tmp+rename; False on any failure.
 
-    Atomic (target either holds the old content or the fully-written new
-    one, never missing/truncated on a crash mid-write), and — like
-    backup.py's archive write — os.replace also sidesteps ETXTBSY: it
-    swaps the directory entry to a new inode instead of truncating the
-    file in place, so replacing a currently-running binary still works.
+    Atomic: target holds either the old or the complete new content, even
+    after a crash mid-write. Replacing the inode instead of truncating the
+    file in place also avoids ETXTBSY on a running binary.
 
-    Per-member isolation is this function's own contract (see
-    run_restore's docstring): an OSError here (e.g. a crafted archive
-    entry whose parent path collides with an existing file from another
-    mapping key) must degrade to a rejected member, not escape to
-    _execute_restore's archive-level except and abort the whole restore.
+    Every OSError is caught and reported as a failed member, so one bad
+    entry (e.g. a parent path that already exists as a file) can't abort
+    the whole restore.
     """
     try:
         if member.isdir():
@@ -261,9 +250,8 @@ def _write_member(
         jlog(
             "SYSTEM", f"RESTORE_WRITE_FAIL: {target} - {err}", level="WARN"
         )
-        # We created tmp above, so it's ours to remove: a failed replace
-        # (e.g. target is now a directory) otherwise left a root-owned
-        # *.sdy_restore_tmp behind, in the user's config dir or /etc/.
+        # We created tmp, so remove it: otherwise a failed replace (e.g.
+        # target is a directory) leaves a root-owned *.sdy_restore_tmp.
         try:
             os.unlink(tmp)
         except OSError:
@@ -280,22 +268,18 @@ def _extract_member(
     home_real: str,
     user: str,
 ) -> bool:
-    """Extract member to target; False on any per-member failure (a
-    pre-existing symlink at target/its tmp write path, a write I/O
-    error, or a chmod race).
+    """Extract member to target; False on any per-member failure.
 
-    Per run_restore's own contract, a single member's failure must stay
-    per-member (logged, skipped, restore continues) rather than escalate
-    to the archive-level except in _execute_restore, which aborts the
-    entire restore.
+    Failures (a symlink at target or its tmp path, a write error, a chmod
+    error) are logged and skipped; they never abort the whole restore.
     """
     if not _ensure_safe_target(target):
         return False
     if not _write_member(tar, member, target):
         return False
     try:
-        # Mask to permission bits only: a crafted archive must not be
-        # able to plant setuid/setgid files through a root-run restore.
+        # Permission bits only: never restore setuid/setgid/sticky bits
+        # as root.
         os.chmod(target, member.mode & 0o777)
     except OSError as err:
         jlog(
@@ -350,11 +334,9 @@ def _extract_payload(
 ) -> tuple[int, tarfile.TarInfo | None]:
     """Extract safe members; defer the links entry to _restore_links.
 
-    Returns (restored_count, links_member): the links TarInfo (manifest,
-    or legacy restore_links.sh) if present, so the caller can hand it
-    straight to _restore_links without a second tar lookup, else None;
-    restored_count lets the caller distinguish a real restore from an
-    archive where every member was rejected (wrong tool, foreign layout).
+    Returns (restored_count, links_member). links_member is the manifest
+    (or legacy restore_links.sh) TarInfo, or None. restored_count == 0
+    means every member was rejected (wrong or foreign archive).
     """
     links_member: tarfile.TarInfo | None = None
     restored = 0
@@ -517,11 +499,9 @@ def _execute_restore(
                 _restore_links(tar, links_member, allowed)
                 jlog("SYSTEM", "RESTORE_LINKS_DONE", level="DEBUG")
         if restored == 0:
-            # Every member was rejected — a wrong/foreign archive (or one
-            # from an incompatible layout) can pass verify_archive's
-            # gzip/tar integrity check yet match nothing in the mapping.
-            # Reporting that as success would leave the user thinking a
-            # restore actually happened when nothing on disk changed.
+            # A foreign archive passes verify_archive's integrity check
+            # yet matches nothing: don't report success when nothing
+            # changed on disk.
             jlog(
                 "SYSTEM",
                 "RESTORE_EMPTY: no member matched the backup mapping",
