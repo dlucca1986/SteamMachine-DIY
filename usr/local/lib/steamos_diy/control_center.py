@@ -91,7 +91,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 # UI / network constants
@@ -125,16 +125,11 @@ _APPID_FROM_DISPLAY = re.compile(r"\((\d+)\)\s*$")
 _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 
 # Message-content highlighting, layered on top of the identifier colour
-# (CORE:/STEAM:/SYSTEM:) rather than replacing it — a line can be both
-# "from CORE" and "an error", so the two must not be mutually exclusive
-# the way the old single-dict-with-early-return _apply_log_style was.
-# Pattern-based, not an exhaustive name list: every jlog() error/failure
-# tag in this codebase already ends in _ERROR:/_FAIL:/_FAILED:/_TIMEOUT:
-# or starts with BAD_/RESTORE_REJECTED_ by convention, so this stays
-# correct for future tags that follow the same convention without needing
-# a name added here by hand. EARLY_EXIT_RECOVERY:/RESTORE_FATAL:/NO_TARGET:/
-# BINARY_NOT_FOUND:/BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/RESTORE_EMPTY:
-# are the exceptions to those conventions, added explicitly.
+# (CORE:/STEAM:/SYSTEM:): a line can be both "from CORE" and "an error".
+# Pattern-based: error/failure tags end in _ERROR:/_FAIL:/_FAILED:/
+# _TIMEOUT: or start with BAD_/RESTORE_REJECTED_ by convention, so new
+# tags following it need no change here. The literal names on the last
+# two lines are the tags that don't follow it.
 _LOG_ERROR_MARKER = re.compile(
     r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
     r"|\bBAD_[A-Z0-9_]*:"
@@ -149,12 +144,9 @@ _LOG_NEUTRAL_MARKER = re.compile(r"SWITCH_REQUEST:")
 def _extract_game_name_from_display(raw: str) -> str:
     """Strip a trailing "(AppID)" suffix from a combo display string.
 
-    _format_combo_items() only ever appends the suffix at the very end
-    (same anchor as _APPID_FROM_DISPLAY), so stripping via that anchor
-    instead of splitting on the first "(" avoids truncating a game name
-    that legitimately contains "(" of its own, e.g. "Portal (Test Build)"
-    plus an appid suffix would otherwise collide with a game named
-    "Portal".
+    Anchored at the end (like _APPID_FROM_DISPLAY), not split on the
+    first "(": a name such as "Portal (Test Build)" keeps its own
+    parentheses.
     """
     return _APPID_FROM_DISPLAY.sub("", raw).strip()
 
@@ -225,18 +217,12 @@ def _build_support_report() -> str:
 def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
     """Resolve (conf_root, games_conf_dir) from the SSoT.
 
-    Falls back to default_root/"config.yaml" resp.
-    default_root/GAMES_CONF_SUBDIR when the SSoT doesn't set
-    user_config/games_conf_dir — but when it does, this must follow it:
-    sdy.py and health.py already resolve both dynamically, and a
-    hardcoded default here would let the GUI silently edit a file the
-    session launcher no longer reads. Kept as a pure function of
-    *default_root* (no direct Path.home() call) so it's testable without
-    touching the real home directory; the one call site always passes
-    Path.home() / USER_CONFIG_REL, and the games_conf_dir fallback shares
-    utils.GAMES_CONF_SUBDIR with utils.default_games_conf_dir() (used by
-    sdy.py) so the two can't silently drift onto different subdirectory
-    names.
+    Follows the SSoT's user_config/games_conf_dir like sdy.py and
+    health.py do, so the GUI never edits a file the session no longer
+    reads; falls back to default_root/"config.yaml" and
+    default_root/GAMES_CONF_SUBDIR (the same subdir sdy.py uses) when
+    they are unset. Takes *default_root* instead of calling Path.home()
+    so tests don't touch the real home.
     """
     conf_root = Path(
         get_ssot_var("user_config", str(default_root / CONFIG_FILE_NAME))
@@ -252,10 +238,8 @@ def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
 def _core_script_argv(name: str, *args: str) -> list[str]:
     """argv to run a CORE_LIB_DIR script under PYTHON3_BIN.
 
-    Collapses the [PYTHON3_BIN, CORE_LIB_DIR/name, *args] shape that used
-    to be independently retyped at each of this file's 3 call sites
-    (session_select.py, backup.py, restore.py) — same reasoning as
-    utils.SYSTEMCTL_BIN/JOURNALCTL_BIN's own centralization comment.
+    Shared by the session_select.py, backup.py and restore.py call
+    sites.
     """
     return [PYTHON3_BIN, os.path.join(CORE_LIB_DIR, name), *args]
 
@@ -533,12 +517,9 @@ class SDYControlCenter(QMainWindow):
                 None,
             ),
         ]
-        # Populates self._lock_key_buttons (declared in __init__) so
-        # _run_pkexec can visually disable the button(s) tied to a
-        # lock_key while it's busy, then re-enable them once the guard
-        # actually clears (see pkexec_lock_released's own comment) —
-        # mirrors updater.py's _set_busy pattern instead of leaving the
-        # only feedback a 3s status toast.
+        # Lets _run_pkexec disable the button(s) tied to a lock_key
+        # while busy and re-enable them when the guard clears (see
+        # pkexec_lock_released).
         for text, func, lock_key in tools:
             btn = QPushButton(text)
             btn.setStyleSheet(_BUTTON_STYLE)
@@ -565,10 +546,9 @@ class SDYControlCenter(QMainWindow):
     def _launch_or_warn(self, bin_path: str, argv: list[str]) -> None:
         """spawn_native() wrapper for unguarded Maintenance-tab buttons.
 
-        spawn_native() returns 0 on exec failure (missing binary, broken
-        PATH) — previously discarded here, so those buttons silently did
-        nothing. Reports it instead, matching updater.py's own pid==0
-        handling for the same call.
+        spawn_native() returns 0 when the exec fails (e.g. missing binary);
+        shows a warning then instead of a button that silently does
+        nothing.
         """
         if spawn_native(bin_path, argv) == 0:
             QMessageBox.critical(
@@ -578,12 +558,9 @@ class SDYControlCenter(QMainWindow):
     def edit_ssot_privileged(self):
         """Open SSoT in Kate, falling back to KWrite.
 
-        Routed through _launch_or_warn/spawn_native like the other
-        Maintenance-tab buttons, instead of its own bare subprocess.Popen:
-        spawn_native's start_new_session=True detaches the editor from
-        Control Center's own process group (a raw Popen here previously
-        didn't), so a signal delivered to Control Center's session can't
-        also reach Kate/KWrite.
+        Through _launch_or_warn/spawn_native like the other Maintenance-tab
+        buttons: the editor runs in its own session, so a signal sent to
+        Control Center's process group doesn't reach it.
         """
         kate = "/usr/bin/kate"
         editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
@@ -607,12 +584,9 @@ class SDYControlCenter(QMainWindow):
         def worker() -> None:
             try:
                 safe_emit(self.preflight_ready, run_preflight())
-            # A daemon thread's uncaught exception has nowhere to go —
-            # stderr is /dev/null when the app is launched detached (see
-            # the journal.py aware/naive-datetime bug) — so this is the
-            # last line of defense against a silently-dead worker, not a
-            # substitute for catching the specific cause upstream
-            # (health.py already does).
+            # Last line of defense: an uncaught exception would end the
+            # thread with no dialog at all. Specific errors are already
+            # caught in health.py.
             # pylint: disable-next=broad-except
             except Exception as err:  # noqa: BLE001
                 safe_emit(
@@ -835,11 +809,9 @@ class SDYControlCenter(QMainWindow):
         if content is None:
             return
         state["cache"] = editor.toPlainText()
-        # The preview must not read as dirty, but the real content's own
-        # unsaved-edits flag has to survive the round trip: it used to be
-        # cleared on the way in and never restored, so after a preview
-        # neither closeEvent nor a file switch warned about edits that
-        # were still sitting in the editor.
+        # The preview must not read as dirty, but the real content's
+        # unsaved-edits flag is kept and restored on exit, so
+        # closeEvent and file switches still warn about it.
         state["dirty"] = editor.document().isModified()
         editor.setPlainText(content)
         tmp_btn.setText("⬅️ Back to Editor")
@@ -873,11 +845,8 @@ class SDYControlCenter(QMainWindow):
         try:
             parsed = yaml_parser.load(content)
             if parsed is not None and not isinstance(parsed, dict):
-                # Matches load_yaml_safe()'s own contract (utils.py): a
-                # non-mapping root degrades to {} at load time, silently
-                # dropping the whole profile -- reject it here instead
-                # of reporting a save that will actually vanish on the
-                # next load.
+                # load_yaml_safe() (utils.py) turns a non-mapping root
+                # into {}, so the saved content would be ignored.
                 raise YAMLError(
                     "Root must be a mapping (key: value pairs), not a "
                     f"{type(parsed).__name__}."
@@ -885,10 +854,8 @@ class SDYControlCenter(QMainWindow):
             p_obj = Path(path)
             p_obj.parent.mkdir(parents=True, exist_ok=True)
             if not write_atomic(p_obj, content):
-                # Refused/failed at the C-Core level (symlink or FIFO at
-                # the tmp path, a short write, a failed rename) — already
-                # logged via syslog there, but the editor must stay dirty
-                # so closeEvent's unsaved-changes guard still catches it.
+                # Refused or failed in the C-Core (already logged there).
+                # The editor stays dirty, so closeEvent still warns.
                 QMessageBox.critical(
                     self, "Save Error", "Write failed — see system logs."
                 )
@@ -1043,9 +1010,9 @@ class SDYControlCenter(QMainWindow):
         """Atomically save the current game profile YAML to disk."""
         raw = self.combo_games.currentText().strip()
         if not raw:
-            # Used to return silently: the edit stayed unsaved with no
-            # word, and closeEvent's Save then kept the window open just
-            # as silently (the editor still reads as dirty).
+            # Say why nothing was saved: otherwise the edit stays unsaved
+            # with no message, and closeEvent's Save keeps the window open
+            # just as silently.
             self.statusBar().showMessage(
                 "Select or type a game name before saving", 3000
             )
@@ -1123,8 +1090,8 @@ class SDYControlCenter(QMainWindow):
             for save in dirty:
                 save()
             if self._dirty_editors():
-                # A save left the document modified: _atomic_save() hit
-                # a YAMLError/OSError (error dialog already shown), or
+                # A save left the document modified: _atomic_save()
+                # failed (error dialog already shown) or
                 # save_game_profile() had no game name (status-bar
                 # message). Don't discard the edit by closing anyway.
                 event.ignore()
@@ -1163,14 +1130,10 @@ class SDYControlCenter(QMainWindow):
                             JOURNALCTL_BIN,
                             "--since",
                             "24 hours ago",
-                            # Unlike journal.py's tag-filtered log viewer,
-                            # this can't narrow by -t: the chdir/gameID/
-                            # AppID lines filter_game_journal_lines looks
-                            # for come from Steam/gamescope's own captured
-                            # output, not this project's jlog() tags. -n
-                            # bounds it instead — generous enough to still
-                            # catch real launches over 24h, but not the
-                            # whole unbounded system journal on every click.
+                            # No -t filter: the chdir/gameID/AppID lines
+                            # come from Steam's own output, not this
+                            # project's jlog() tags. -n bounds the read
+                            # instead (enough for 24h of real launches).
                             "-n",
                             "5000",
                             "--no-hostname",
@@ -1202,11 +1165,10 @@ class SDYControlCenter(QMainWindow):
                 games.d profiles are merged in either way, so
                 _GAME_COMBO_EMPTY shows only when both yield nothing.
         """
-        # clear() resets the line-edit text along with the item list, so
-        # whatever the combo showed before the scan — a listed selection,
-        # or a name still being typed — is restored afterwards; otherwise
-        # Save, which targets currentText(), silently no-oped on the empty
-        # text while the editor still held that game's profile.
+        # clear() also empties the line edit, so whatever the combo showed
+        # before the scan (a listed selection or a name being typed) is
+        # restored afterwards; otherwise Save, which targets currentText(),
+        # would do nothing while the editor still holds that profile.
         #
         # Nothing to restore -> index -1, never addItems()' auto-picked
         # first entry: the editor holds nothing for that game (`activated`
@@ -1438,17 +1400,11 @@ class SDYControlCenter(QMainWindow):
         if is_error:
             QMessageBox.warning(self, title, message)
             return
-        # A successful restore can overwrite the SSoT's user_config/
-        # games_conf_dir keys, and get_ssot_var() caches the file after
-        # its first read - without a refresh, saves in the Global
-        # Options/Game Overrides tabs would keep targeting the stale
-        # pre-restore path until the app restarts. process_finished also
-        # fires for backup/vacuum/export success, where the SSoT never
-        # changes, so this is a harmless re-read there (small file, not
-        # a hot path). validate_config uses a separate preflight_ready
-        # signal on success and never reaches this method at all — its
-        # only path here is a worker exception, which is_error routes
-        # through the early return above instead.
+        # A restore can change the SSoT's user_config/games_conf_dir, and
+        # get_ssot_var() caches the file: re-read it, or saves would keep
+        # targeting the pre-restore paths until restart. For the other
+        # successful operations this is a harmless re-read of a small
+        # file.
         clear_ssot_cache()
         self.conf_root, self.games_conf_dir = _resolve_config_paths(
             Path.home() / USER_CONFIG_REL
@@ -1460,8 +1416,8 @@ class SDYControlCenter(QMainWindow):
         """Re-read from disk each editor that holds nothing unsaved.
 
         A restore replaces the config files themselves, not just the
-        SSoT: without this the editors kept showing the pre-restore text,
-        and the next Save wrote it straight back over the restored file.
+        SSoT: without this the editors would keep the pre-restore text,
+        and the next Save would write it back over the restored file.
         An editor with unsaved edits is left alone (reloading would drop
         them without asking), and so is a template preview. Runs for
         every successful operation, like the SSoT re-read above — for a
@@ -1578,20 +1534,14 @@ class SDYControlCenter(QMainWindow):
                 )
                 safe_emit(self.process_finished, ok_title, ok_msg, False)
             except subprocess.TimeoutExpired:
-                # pkexec's own PID is killed by subprocess.run(), but not
-                # any privileged grandchild it spawned (backup.py,
-                # restore.py, a chown -R) — it may still be writing to
-                # the same files. We have no way to confirm it's actually
-                # gone, so sticky_on_timeout callers (Backup/Restore) leave
-                # _pkexec_busy[lock_key] deliberately True rather than risk
-                # a second privileged run overlapping it; only a Control
-                # Center restart clears it. Non-sticky callers (journal
-                # vacuum: idempotent, no file-overlap risk from a second
-                # concurrent run) reset normally — a timeout there is far
-                # more likely to be a slow/abandoned polkit password
-                # prompt than a genuinely wedged operation, and locking
-                # journal cleanup out until restart over that would be
-                # pure user-hostile downside for zero safety benefit.
+                # subprocess.run() kills pkexec itself, not the root
+                # child it started (backup.py, restore.py, a chown -R),
+                # which may still be writing files. With no way to
+                # confirm it's gone, sticky_on_timeout callers
+                # (Backup/Restore) keep the guard set until Control
+                # Center restarts. Journal vacuum is idempotent and
+                # shares no files, so it resets normally: its timeout
+                # is most likely an abandoned password prompt.
                 timed_out = sticky_on_timeout
                 message = (
                     "Operation timed out after 5 minutes. The privileged "
