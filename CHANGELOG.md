@@ -13,6 +13,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   restore puts them back as root — so an archive is as sensitive as a root password, and the
   checks stop damaged or foreign archives, not one deliberately modified by a program already
   running as you. Accepted limit of the design (no code change), same class as the updater's.
+- Code comments and docstrings across the codebase reviewed against what the code actually does:
+  inaccurate ones corrected, overlong ones shortened. No behavior change.
 
 ### Fixed
 - C-Core: when an atomic write was refused because a symlink or FIFO sat at its temporary path,
