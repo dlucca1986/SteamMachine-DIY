@@ -3,8 +3,8 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Journal/Log Backend
 # VERSION:      2.1.9
-# DESCRIPTION:  Pure functions for journalctl and gamescope log parsing.
-#               No Qt dependency — fully testable in isolation.
+# DESCRIPTION:  journalctl invocation and journal/gamescope log parsing.
+#               No Qt dependency — testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/journal.py
@@ -137,22 +137,15 @@ def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
 def parse_game_logs(res: str) -> dict[str, str]:
     """Extract {name: appid_or_name} pairs from filtered journal text.
 
-    Tracks the last-seen NAME per source pid rather than one shared
-    "current" name, so interleaved lines from two concurrently-running
-    processes (e.g. two games launched close together) can't misattribute
-    one game's AppID to another's name. A line with no [pid]: suffix at
-    all is not tracked for correlation either way (a shared "" fallback
-    key would reintroduce the exact cross-attribution this function
-    exists to prevent, just for pid-less lines instead of present ones)
-    — its NAME still lands in det as a self-reference, but a pid-less ID
-    line is simply not attributed to any name.
+    Tracks the last-seen NAME per source pid, so interleaved lines from
+    two processes (two games launched close together) can't attribute one
+    game's AppID to the other's name. A line without a [pid]: suffix is
+    never correlated: its NAME is still recorded (mapped to itself), but a
+    pid-less ID line is attributed to no name.
 
-    No minimum-length filter on the ID value: extract_game_metadata only
-    ever matches it after a literal "gameID"/"AppID = " token, and a
-    handful of Valve's own early AppIDs are genuinely 1-2 digits (10 =
-    Counter-Strike, 20 = Team Fortress Classic, 70 = Half-Life, still
-    playable today) — a length floor would silently drop real detections
-    for exactly those games, not filter noise.
+    No minimum length on the ID: it is only matched after a literal
+    "gameID"/"AppID = " token, and some real AppIDs have 1-2 digits
+    (10 = Counter-Strike, 70 = Half-Life).
     """
     det: dict[str, str] = {}
     cur_by_pid: dict[str, str] = {}
@@ -182,7 +175,7 @@ def parse_export_format(
 
     Args:
         stdout: Raw export-format journalctl output.
-        launches: Mutated in place — LAUNCH_ARGS appended for dedup.
+        launches: Mutated in place — LAUNCH_ARGS added for dedup.
 
     Returns:
         (datetime, formatted_line) list in arrival order.
@@ -207,7 +200,7 @@ def _consume_export_line(
     Args:
         line: Single export-format line.
         cur: Accumulator dict for the current record (mutated in place).
-        launches: Mutated — LAUNCH_ARGS strings appended as side effect.
+        launches: Mutated — LAUNCH_ARGS strings added as a side effect.
 
     Returns:
         (datetime, formatted_line) on MESSAGE= terminator, else None.
@@ -255,8 +248,8 @@ def fetch_tagged_entries(
     flips journalctl's export format to binary-safe encoding, which is
     not guaranteed valid UTF-8.
     """
-    # get_journal_cmd() builds a fixed argv from constants + a tag
-    # constrained to a known set — never a shell string, never raw input.
+    # argv list, no shell: the tag reaches journalctl as a single "-t"
+    # value (always one of the Diagnostics tab's four fixed choices).
     res = subprocess.run(  # nosec B603
         get_journal_cmd(tag),
         capture_output=True,
@@ -299,10 +292,11 @@ def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
 def _run_journalctl_iso() -> str:
     """Pull last hour of gamescope-bearing identifiers.
 
-    `steam` carries gamescope output once gamescope has exec'd the Steam
-    child; `python3` carries the early gamescope errors (e.g. unrecognized
-    CLI flag) emitted before the exec hop, since session_launch.py is
-    still the parent. Narrowing here keeps Dolphin/plasmashell noise out.
+    `python3` is the service's stdout/stderr stream, which gamescope
+    inherits from session_launch.py, so gamescope's own output is logged
+    under it. `steam` is Steam's own logger, which carries the
+    "[Gamescope WSI]" lines of the Vulkan apps Steam starts. Narrowing to
+    these two keeps Dolphin/plasmashell noise out.
     """
     try:
         # Fixed argv, no shell — the identifiers below are hardcoded.
@@ -327,11 +321,9 @@ def _run_journalctl_iso() -> str:
         )
         return res.stdout or ""
     except (OSError, subprocess.SubprocessError) as err:
-        # Unlike fetch_tagged_entries's sibling call (which raises and
-        # lets the caller surface it), this one degrades to "" by design
-        # — but silently, that made a genuine journalctl failure
-        # indistinguishable from "no gamescope activity in the last
-        # hour". WARN leaves a trace without breaking the degrade.
+        # Degrades to "" (gamescope lines are an extra), but logged so a
+        # real journalctl failure isn't mistaken for "no gamescope
+        # activity in the last hour".
         jlog("SYSTEM", f"GAMESCOPE_LOG_FETCH_FAIL: {err}", level="WARN")
         return ""
 
