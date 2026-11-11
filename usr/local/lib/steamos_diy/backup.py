@@ -3,7 +3,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Backup Tool
 # VERSION:      2.1.9
-# DESCRIPTION:  Surgical backup with deep symlink recovery for SteamOS shims.
+# DESCRIPTION:  Backup of config/core files and the SteamOS shim symlinks.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/backup.py
@@ -34,7 +34,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once at import, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 # Folders scanned for symlinks pointing into the core library
@@ -51,7 +51,7 @@ _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
 )
 
 # Path components excluded from the archive — matched by component, not
-# substring, so "my_backups.yaml" is safe while a dir named "backups" is not.
+# substring, so "my_backups.yaml" is kept while a dir named "backups" isn't.
 # UPDATES_DIR_NAME keeps downloaded release tarballs out of the archives.
 _EXCLUDE_COMPONENTS: frozenset[str] = frozenset(
     {
@@ -179,9 +179,10 @@ def _add_payload(tar: tarfile.TarFile, home: str) -> None:
 
 
 def _ensure_backup_dir(home: str, user: str) -> Path:
-    """Chown only on first creation — not on every run.
+    """Create the archive directory, chowning it only when newly created.
 
-    Avoids recursive chown over potentially gigabytes of historical archives.
+    fix_ownership() is recursive on a directory: running it every time
+    would walk every past archive for nothing.
     """
     backup_dir = Path(home) / _USER_BACKUPS_REL
     pre_existing = backup_dir.is_dir()
@@ -221,13 +222,9 @@ def _prune_old_archives(backup_dir: Path) -> None:
     try:
         keep = int(get_ssot_num("BACKUP_KEEP", _BACKUP_KEEP_DEFAULT))
     except (ValueError, OverflowError) as err:
-        # get_ssot_num() already degrades a non-numeric value, but "nan"/
-        # "inf" parse as valid floats (float() accepts them) — int() is
-        # what actually rejects them (nan raises ValueError, inf raises
-        # OverflowError), so the degrade-to-default has to happen here
-        # instead. This runs AFTER run_backup() already logged
-        # BACKUP_SUCCESS — letting this escape would report a false
-        # "Backup Error" for an archive that's actually fine.
+        # get_ssot_num() degrades non-numeric values, but float() accepts
+        # "nan"/"inf", which only int() rejects. This runs after
+        # BACKUP_SUCCESS: escaping here would report a good backup as failed.
         jlog(
             "SYSTEM", f"BAD_BACKUP_KEEP: {err} - using default", level="WARN"
         )
@@ -255,7 +252,7 @@ def _prune_old_archives(backup_dir: Path) -> None:
 
 
 def run_backup() -> None:
-    """Execute a complete surgical backup.
+    """Create a backup archive of every get_backup_mapping() source.
 
     Writes to a *.tmp path, verifies end-to-end, then atomically renames
     to *.tar.gz. The previous archive is never touched on failure.
@@ -269,10 +266,7 @@ def run_backup() -> None:
     try:
         backup_dir = _ensure_backup_dir(home_str, user)
     except OSError as err:
-        # mkdir() itself can fail (permission denied, full disk, a path
-        # component that already exists as a file) - unlike every step
-        # below, this runs before BACKUP_START is even logged, so it
-        # needs its own guard rather than falling through unhandled.
+        # mkdir() can fail (full disk, a path component that is a file).
         jlog("SYSTEM", f"BACKUP_FAILED: {err}", level="ERROR")
         sys.exit(1)
     final_path, tmp_path = _archive_paths(backup_dir)
@@ -280,10 +274,9 @@ def run_backup() -> None:
     jlog("SYSTEM", f"BACKUP_START: {final_path.name}", level="INFO")
 
     try:
-        # tarfile.open() would use the builtin open(), which follows a
-        # symlink planted at tmp_path by another process running as this
-        # same user — O_EXCL|O_NOFOLLOW refuses to write through one
-        # instead of letting root's write land wherever it points.
+        # Not tarfile.open(path): the builtin open() follows a symlink
+        # planted at tmp_path by same-user code, and this runs as root.
+        # O_EXCL|O_NOFOLLOW refuses it instead.
         fd = os.open(
             str(tmp_path),
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
