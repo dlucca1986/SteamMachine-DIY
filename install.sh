@@ -30,13 +30,10 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # --- Desktop Environment Precondition ---
-# This project augments an existing KDE Plasma 6 (Wayland) install with a
-# Zero-DM gamescope-first boot path -- it does not install Plasma itself (a
-# full desktop environment is out of scope for what this installer should
-# silently pull in, unlike the small standalone kate/konsole below). Failing
-# loudly here beats silently completing: this installer goes on to disable
-# SDDM/plasmalogin and mask getty@tty1, so a missing Desktop Mode binary would
-# leave the user with no obvious way back to a working desktop on first boot.
+# Plasma 6 (Wayland) must already be installed: it's too big to pull in
+# silently. Fail now, because the steps below disable the display manager
+# and mask getty@tty1 — without Plasma the first boot would have no
+# working desktop to fall back to.
 for bin in qdbus6 startplasma-wayland; do
     if ! command -v "$bin" &>/dev/null; then
         error "Missing '$bin' -- SteamMachine-DIY requires an existing KDE Plasma 6 (Wayland) install (packages: qt6-tools, plasma-workspace). Install Plasma first, then re-run this installer."
@@ -125,22 +122,19 @@ install_dependencies() {
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     fi
 
-    # Core system and gaming dependencies. kate/konsole/xdg-utils are explicit
-    # dependencies (not assumed present from a KDE desktop install) — the
-    # Control Center's "Edit SSoT", "Open Konsole Terminal", and "Browse
-    # Config Folder" (xdg-open) buttons, and the self-update installer
-    # handoff, all target these exact binaries directly, independent of
-    # whichever DE is actually running.
+    # kate/konsole/xdg-utils are listed explicitly, not assumed from Plasma:
+    # Control Center buttons and the updater's terminal handoff call them
+    # directly.
     BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc kate konsole xdg-utils"
 
     info "Synchronizing package databases and installing core dependencies..."
     # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
-    # are fixed-literal space-separated package lists, each must reach pacman as
-    # its own argv entry, not a single quoted string.
+    # are fixed lists built in this script; each package must be its own
+    # argument to pacman.
     pacman -Syu --needed --noconfirm $BASE_PKGS $DRIVER_PKGS
 
     info "Configuring system groups for user: $REAL_USER"
-    # TTY group is essential for Python notify() to write to /dev/tty1
+    # tty: the C-Core writes status messages straight to /dev/tty1
     for grp in tty video render input audio wheel storage autologin systemd-journal gamemode; do
         groupadd -f "$grp"
         usermod -aG "$grp" "$REAL_USER"
@@ -158,34 +152,27 @@ deploy_files() {
         RENDERED_SSOT=$(mktemp)
         cp -f etc/default/steamos_diy.conf "$RENDERED_SSOT"
         sed -i "s|{{HOME}}|$USER_HOME|g" "$RENDERED_SSOT"
-        # install -m 644, not cp: mktemp creates 0600 and cp propagates
-        # it, leaving the SSoT unreadable by the user session (CC edit
-        # and preflight both broke on 2.1.5 because of exactly this).
+        # install -m 644, not cp: mktemp creates 0600 and cp would keep
+        # it, making the SSoT unreadable by the user session.
         if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
-            # Heal installs deployed by the 2.1.5 installer (SSoT 0600).
+            # Fixes an SSoT left 0600 by the 2.1.5 installer.
             chmod 644 "$SSOT_CONF"
-            # Never clobber the live SSoT on update: user edits survive.
-            # Stage the new template as .new (pacnew-style), but only when
-            # it changed since the last deploy (pristine copy in STATE_DIR)
-            # so users are not trained to ignore a .new on every update.
+            # Never overwrite the live SSoT on update. The new template is
+            # staged as .new (like pacnew), only when it changed since the
+            # last deploy (copy kept in STATE_DIR).
             if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
                 install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
                 warn "SSoT template changed: review ${SSOT_CONF}.new"
             fi
         elif [ -f "$SSOT_CONF" ]; then
-            # A plain (non --update) run on top of an already-installed
-            # system: same "don't silently clobber user edits" risk as
-            # the YAML configs below, so it gets the same confirm prompt
-            # instead of overwriting unconditionally.
+            # Plain run over an existing install: ask, like for the YAMLs.
             warn "Existing SSoT config found at $SSOT_CONF"
             read -r -p "Overwrite it with the template? Your customizations will be lost. (y/N): " overwrite_ssot
             if [[ "$overwrite_ssot" =~ ^[Yy]$ ]]; then
                 info "Overwriting SSoT as requested..."
                 install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
             else
-                # Same heal as the --update branch above: a preserved
-                # SSoT can still be a 2.1.5-era 0600 file, and declining
-                # the overwrite must not leave it unreadable.
+                # Same 2.1.5 permission fix as the --update branch.
                 chmod 644 "$SSOT_CONF"
                 info "Preserving existing SSoT config."
             fi
@@ -244,19 +231,16 @@ deploy_files() {
 
     # Deploy Python Core Libraries, Helpers & C-Core.
     #
-    # Build and verify the C-Core BEFORE touching $LIB_DIR: on --update the
-    # old, working libcore.so used to be wiped first, so a gcc/ctypes
-    # failure exited with fresh .py files and no .so at all — utils.py then
-    # exits 127 at import, and with getty@tty1 already masked from the
-    # prior install the next boot had neither a session nor a terminal.
-    # Same trap the getty-ordering fix below closed for fresh installs.
+    # Build and verify the C-Core BEFORE touching $LIB_DIR: if the build
+    # fails on --update, the old working install stays in place. Wiping
+    # first would leave .py files without libcore.so (utils.py exits at
+    # import) and, with getty@tty1 masked, a boot with neither a session
+    # nor a terminal.
     info "Building C-Core from source (steamos_diy_core.c)..."
-    # Next to $LIB_DIR, not in /tmp: a noexec /tmp (common on hardened
-    # setups) would make the ctypes load check below fail on a perfectly
-    # good build, and same-filesystem keeps the final install a plain copy.
+    # Next to $LIB_DIR, not in /tmp: on a noexec /tmp the ctypes load
+    # check below would fail on a good build.
     TMP_SO="$(mktemp -p "$(dirname "$LIB_DIR")" --suffix=.so)"
-    # Any exit from here on (including a set -e abort in the copy steps
-    # below) must not leave a stray tmp.*.so behind in /usr/local/lib.
+    # No stray tmp.*.so in /usr/local/lib on any exit, set -e aborts included.
     trap 'rm -f "$TMP_SO"' EXIT
     # CFLAGS must match Makefile so dev (make) and prod (install.sh) builds agree.
     gcc -O2 -march=native -fPIC -Wall -Wextra -shared -o "$TMP_SO" steamos_diy_core.c \
@@ -275,12 +259,9 @@ deploy_files() {
 
     info "Installing Python modules and helpers..."
     cp -rf usr/local/lib/steamos_diy/* "$LIB_DIR/"
-    # Dev-only: the pytest suite has no business on a deployed install
-    # (pytest isn't a runtime dependency, and nothing on the target
-    # machine ever imports it).
+    # The test suite is dev-only.
     rm -rf "$LIB_DIR/tests"
-    # install -m 644, not mv: mktemp creates 0600 (same reason as the SSoT
-    # render above).
+    # install -m 644, not mv: mktemp creates 0600 (as for the SSoT above).
     install -m 644 "$TMP_SO" "$LIB_DIR/libcore.so"
     rm -f "$TMP_SO"
 
@@ -362,14 +343,9 @@ setup_systemd_lockdown() {
     systemctl set-default graphical.target
 
     # Mask Getty on TTY1 (so it can't interfere with Gamescope) only AFTER
-    # the replacement session launcher is confirmed enabled -- masking
-    # first (the previous order) meant a missing service file or a failed
-    # `systemctl enable` above (either aborts the script under
-    # set -eo pipefail) left TTY1 masked with no working replacement,
-    # requiring a manual `systemctl unmask` from another VT/SSH to
-    # recover. uninstall.sh's own cleanup_services() already applies this
-    # same "confirm the safe state first" discipline in the other
-    # direction (unmask/enable Getty before touching anything else).
+    # the session launcher is enabled: if anything above fails, set -e
+    # stops the script with TTY1 still usable. uninstall.sh does the
+    # reverse: it restores Getty before removing anything.
     info "Locking down TTY1 (Getty) now that the session launcher is active..."
     systemctl mask getty@tty1.service
 }
@@ -378,7 +354,7 @@ setup_systemd_lockdown() {
 disable_display_managers() {
     stage "6/6 · Cleanup"
     info "Disabling conflicting Display Managers..."
-    # Including 'plasmalogin' for Plasma 6 support and other common DMs
+    # SDDM and Plasma 6's plasmalogin
     for dm in sddm plasmalogin; do
         systemctl disable "$dm" 2>/dev/null || true
     done

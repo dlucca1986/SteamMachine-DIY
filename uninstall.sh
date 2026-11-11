@@ -70,10 +70,10 @@ cleanup_services() {
     stage "1/3 · Service & TTY Restoration"
     info "Preparing system restoration..."
 
-    # Disable DIY to prevent respawning
+    # Not started at next boot; the running session is stopped at the end.
     systemctl disable steamos_diy.service 2>/dev/null || true
 
-    # CRITICAL: Force TTY1 Getty to be ready and active
+    # Getty back on TTY1 before anything is removed: a login is always there.
     info "Unmasking and forcing Getty on TTY1 (Emergency Access)..."
     systemctl unmask getty@tty1.service 2>/dev/null || true
     systemctl enable getty@tty1.service 2>/dev/null || true
@@ -83,7 +83,7 @@ cleanup_services() {
     systemctl daemon-reload
 }
 
-# --- 2. Robust Display Manager Restoration ---
+# --- 2. Display Manager Restoration ---
 restore_display_manager() {
     stage "2/3 · Display Manager Restoration"
     info "Detecting system Display Manager..."
@@ -117,7 +117,7 @@ restore_display_manager() {
     fi
 }
 
-# --- 3. Comprehensive File Cleanup ---
+# --- 3. File Cleanup ---
 remove_components() {
     stage "3/3 · Comprehensive File Cleanup"
     info "Removing DIY shims and libraries..."
@@ -161,7 +161,7 @@ remove_components() {
 finalize_uninstallation() {
     if systemctl is-active steamos_diy.service &>/dev/null; then
         warn "Terminating DIY session in 2 seconds..."
-        # We stop the service in the background and immediately start Getty
+        # In the background, after 2s: stop the session, then start Getty.
         ( sleep 2; systemctl stop steamos_diy.service; systemctl start getty@tty1.service ) &
     fi
 }
