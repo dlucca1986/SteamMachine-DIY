@@ -3,8 +3,8 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Health & Preflight Backend
 # VERSION:      2.1.9
-# DESCRIPTION:  Pure config-validation and service-status helpers.
-#               No Qt dependency — fully testable in isolation.
+# DESCRIPTION:  Config preflight checks and service-status helpers.
+#               No Qt dependency — testable in isolation.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         /usr/local/lib/steamos_diy/health.py
@@ -55,9 +55,9 @@ _BINARY_KEYS: tuple[tuple[str, str], ...] = (
 # notify() writes status straight to /dev/tty1 via the C-Core.
 _CRITICAL_GROUPS: tuple[str, ...] = ("tty", "video", "render", "input")
 
-# Global-config fields the session launcher iterates directly: a string
-# instead of a list is walked character-by-character into junk argv, and
-# runtime has no guard — the one mistyping worth catching before boot.
+# Global-config fields that must be lists: the session launcher silently
+# ignores any other type (no flags / no post-start commands at all), so a
+# string written instead of a list is worth catching before boot.
 _LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
 
 _SERVICE_UNIT: str = "steamos_diy.service"
@@ -220,21 +220,14 @@ def _check_gamescope_flags(data: object) -> CheckResult:
 
     A flag the running gamescope does not recognise makes it exit at
     launch — the session never starts, systemd retries, and TTY1 goes
-    black with no hint. Catching a typo, or a flag dropped/renamed across
-    gamescope versions, here before boot is the whole point. Scope is the
-    global config (the flags always passed); per-game profiles keep to
-    their own launch path.
+    black with no hint. Only the global config is checked: per-game
+    profiles don't pass gamescope flags.
 
-    Runs the actual configured flags through gamescope itself
-    (`gamescope <flags> --help`) rather than diffing against
-    `gamescope --help`'s documented option list: gamescope accepts some
-    flags it never lists in --help (e.g. --fade-out-duration), so a
-    text-based allowlist reports those as false failures. --help still
-    makes gamescope print usage and exit immediately without touching
-    display/DRM, so this stays as side-effect-free as the old approach.
-    getopt_long stops at the first bad option, so only the first one (if
-    any) is ever reported — still strictly better than false-flagging a
-    valid flag.
+    Runs `gamescope <flags> --help` instead of comparing against the
+    option list --help prints: gamescope accepts some flags it never lists
+    (e.g. --fade-out-duration). --help makes it print usage and exit
+    without touching the display. getopt_long stops at the first bad
+    option, so at most one is reported.
     """
     flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:
@@ -246,8 +239,8 @@ def _check_gamescope_flags(data: object) -> CheckResult:
         argv.extend(tokens)
     argv.append("--help")
     try:
-        # gs_bin is the SSoT-configured gamescope path; flags come from
-        # the local YAML config, never shell=True or externally-supplied.
+        # argv list, no shell: the SSoT gamescope path plus the user's
+        # own config flags, each passed as separate arguments.
         res = subprocess.run(  # nosec B603
             argv, capture_output=True, text=True, check=False, timeout=5
         )
