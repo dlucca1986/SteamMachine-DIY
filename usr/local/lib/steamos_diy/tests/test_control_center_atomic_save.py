@@ -1,12 +1,9 @@
-"""Regression tests for control_center.py's _atomic_save: a saved profile
-whose YAML root isn't a mapping used to report success while
-load_yaml_safe() (utils.py) silently degrades that exact shape to {} on
-the next load, dropping the whole profile; and write_atomic()'s bool
-return (added when c_write_atomic stopped being void) must actually be
-checked, not just called.
+"""Regression tests for control_center.py's _atomic_save: a YAML root that
+isn't a mapping must be refused (load_yaml_safe() turns it into {} on
+the next load), and write_atomic()'s bool result must be checked.
 
-Split out of test_control_center.py (which was already at the pylint
-too-many-lines ceiling) rather than trimming other tests to make room."""
+Split out of test_control_center.py, which is at pylint's
+too-many-lines limit."""
 
 from types import SimpleNamespace
 
@@ -40,8 +37,7 @@ def test_atomic_save_rejects_non_mapping_root(monkeypatch, tmp_path):
     validate syntax, discarding the result -- a syntactically valid but
     non-mapping root (e.g. a bare list) reported "Configuration saved!"
     even though load_yaml_safe() degrades that exact shape to {} on the
-    next load, silently dropping the whole profile (found via a
-    full-file 9-agent review, 2026-08-31)."""
+    next load, silently dropping the whole profile."""
     calls, written, editor = _atomic_save_harness(
         monkeypatch, tmp_path, "- one\n- two\n"
     )
@@ -74,13 +70,10 @@ def test_atomic_save_accepts_empty_content(monkeypatch, tmp_path):
 
 
 def test_atomic_save_reports_write_atomic_failure(monkeypatch, tmp_path):
-    """Regression: write_atomic() used to be void (no return value at
-    all), so _atomic_save always showed "Configuration saved!" and
-    cleared the modified flag even when the C-Core write was refused or
-    failed (symlink/FIFO at the tmp path, a short write, a failed
-    rename). Now checks the bool return and reports a Save Error without
-    clearing modified, so closeEvent's unsaved-changes guard still
-    catches it too (found via a third full-file review pass, 2026-09-03)."""
+    """Regression: a refused or failed C-Core write (tmp path refused,
+    short write, failed rename) must show a Save Error and keep the
+    document modified, so closeEvent still warns — not "Configuration
+    saved!"."""
     calls, written, editor = _atomic_save_harness(
         monkeypatch, tmp_path, "flags:\n  - -W 1280\n", write_succeeds=False
     )
@@ -94,8 +87,7 @@ def test_atomic_save_survives_unbuildable_scalar(monkeypatch, tmp_path):
     """Regression: ruamel raises a plain ValueError, not YAMLError, for an
     unquoted impossible date. Uncaught in this Qt slot, PyQt6 aborted the
     whole Control Center (exit 134 on the real window) with the unsaved
-    edit in it; it must be reported like any other syntax error
-    (2026-11-09 audit)."""
+    edit in it; it must be reported like any other syntax error."""
     calls, written, editor = _atomic_save_harness(
         monkeypatch, tmp_path, "released: 2026-02-30\n"
     )

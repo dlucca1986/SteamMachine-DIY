@@ -1,10 +1,8 @@
-"""Regression test for health.py's _check_groups group-resolution guard.
+"""Tests for health.py's preflight checks and service-status snapshot.
 
-Before the fix, one stale/deleted gid in os.getgroups() (grp.getgrgid
-raises KeyError for it) aborted the whole set-comprehension, so every
-critical group came back "missing" even when the user actually belonged
-to all of them — a misleading "everything is broken" preflight result
-caused by one unrelated stale entry."""
+_check_groups: one stale gid in os.getgroups() (grp.getgrgid raises
+KeyError) once made every critical group read "missing", even with the
+user in all of them."""
 
 import subprocess
 from types import SimpleNamespace
@@ -32,8 +30,7 @@ def test_check_groups_survives_one_stale_gid(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# get_service_status — subprocess timeout discipline (CLAUDE.md review
-# checklist item 14): a wedged `systemctl show` must degrade to the
+# get_service_status — a wedged `systemctl show` must time out to the
 # "unknown" fallback, not hang the Control Center's status refresh.
 # ---------------------------------------------------------------------------
 
@@ -52,11 +49,8 @@ def test_get_service_status_falls_back_on_timeout(monkeypatch):
 # ---------------------------------------------------------------------------
 # _check_yaml / _read_user_config — non-UTF-8 content must degrade to a
 # failed CheckResult / _UNREADABLE, not raise UnicodeDecodeError past the
-# except clause. An uncaught exception here previously killed
-# control_center.py's validate_config worker thread silently (nothing
-# printed, no dialog, no log — the app is launched detached with stderr
-# to /dev/null), the same failure mode as the journal.py aware/naive
-# datetime bug.
+# except clause; uncaught, it ended control_center.py's validate_config
+# worker with no dialog and no project log line.
 # ---------------------------------------------------------------------------
 
 
@@ -86,8 +80,7 @@ def test_check_yaml_reports_unbuildable_scalar_instead_of_raising(tmp_path):
     """Regression: ruamel raises a plain ValueError, not YAMLError, for an
     unquoted scalar shaped like a date that isn't one — it escaped
     _check_yaml and aborted the whole preflight with a bare "day 30 must
-    be in range..." and no file name (2026-11-09 audit, found by feeding
-    odd inputs to the real parser)."""
+    be in range..." and no file name."""
     bad = tmp_path / "config.yaml"
     bad.write_text("released: 2026-02-30\n")
 
@@ -111,8 +104,7 @@ def test_check_binaries_rejects_a_directory(tmp_path, monkeypatch):
     """Regression: os.access(path, os.X_OK) alone is true for a
     traversable directory, not just an executable file -- a SSoT binary
     key mistakenly pointed at a directory passed this preflight as "OK"
-    even though session_launch.py can't actually exec it (found via a
-    third full-file review pass, 2026-09-03)."""
+    even though session_launch.py can't actually exec it."""
     fake_dir = tmp_path / "not-a-binary"
     fake_dir.mkdir()
     monkeypatch.setattr(health, "get_ssot_var", lambda key, default: (
@@ -128,8 +120,8 @@ def test_check_binaries_rejects_a_directory(tmp_path, monkeypatch):
 
 # ---------------------------------------------------------------------------
 # _check_gamescope_flags — validated via gamescope's own argv parser, not
-# a text-parsed --help allowlist (which false-flags real-but-undocumented
-# flags like --fade-out-duration; found live on real hardware, 2026-09-03)
+# a --help-derived allowlist (which false-flags real but undocumented
+# flags like --fade-out-duration)
 # ---------------------------------------------------------------------------
 
 
@@ -146,12 +138,9 @@ def test_check_gamescope_flags_accepts_undocumented_but_valid_flag(
     monkeypatch,
 ):
     """Regression: gamescope accepts some flags (e.g. --fade-out-duration)
-    it never lists in --help. The old approach diffed configured flags
-    against a --help-derived allowlist and false-flagged this as
-    "unrecognised" even though gamescope itself accepts it fine -- now
-    runs the flags through gamescope's own parser instead, which prints
-    normal usage (no "unrecognized option") for a flag it actually
-    accepts, undocumented or not."""
+    it never lists in --help: run through gamescope's own parser, such
+    a flag yields normal usage output (no "unrecognized option"), so it
+    must not be reported as unrecognised."""
     monkeypatch.setattr(
         health, "get_ssot_var", lambda *a, **k: "/usr/bin/gamescope"
     )

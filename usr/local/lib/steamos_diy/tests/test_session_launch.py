@@ -1,19 +1,14 @@
 """Tests for session_launch.py: shlex parsing of user config, and the
 crash-detection / recovery-to-Desktop mechanism.
 
-Before the fix, an unbalanced quote in a hand-edited `flags:`/
-`post_start_cmds:` entry raised ValueError out of run() with nothing
-catching it — the whole Game Mode session crashed instead of falling
-back to Desktop, and systemd's restart limit eventually took the unit
-to `failed`. Those tests pin the degrade-gracefully behavior instead.
+An unbalanced quote in a hand-edited `flags:`/`post_start_cmds:` entry
+once raised ValueError out of run(): the session crashed until systemd's
+restart limit failed the unit. The parsing tests pin the
+degrade-gracefully behavior.
 
-The crash-recovery tests below cover `_monitor_process`/
-`_terminate_gracefully`/`_run_session` with real short-lived
-subprocesses (no mocking of the process lifecycle itself) because this
-is the single mechanism that decides whether the machine self-heals to
-Desktop after a crash or is left with a black screen — arguably the
-most safety-critical behavior in the whole project, and previously
-untested."""
+The crash-recovery tests drive `_monitor_process`/`_terminate_gracefully`/
+`_run_session` with real short-lived subprocesses, unmocked: this is what
+decides whether a crash lands on Desktop or on a black screen."""
 
 import os
 import signal
@@ -58,7 +53,7 @@ def test_build_gamescope_args_survives_non_list_flags(set_ssot):
     (e.g. `flags: true` from a hand-edited config.yaml) made the loop
     raise TypeError uncaught in run() -- before _run_session's try/except
     even starts, crash-looping the systemd unit on every Game Mode boot
-    attempt (found via a full-file 9-agent review, 2026-08-31)."""
+    attempt."""
     set_ssot()
     cfg = {"env_vars": {}, "flags": True}
 
@@ -71,7 +66,7 @@ def test_build_gamescope_args_survives_a_bad_env_var_name(set_ssot):
     """Regression: an env_vars key the OS refuses (here one holding "=")
     raised out of _build_gamescope_args, which run() calls before
     _run_session's try/except even starts — same boot crash-loop as the
-    non-list flags case above (2026-11-09 audit)."""
+    non-list flags case above."""
     set_ssot()
     cfg = {"env_vars": {"MANGOHUD=1": 1, "SDY_TEST_OK": "yes"}}
 
@@ -82,13 +77,11 @@ def test_build_gamescope_args_survives_a_bad_env_var_name(set_ssot):
 
 
 def test_game_mode_env_matches_real_steamos_agnostic_vars():
-    """Pins the vars ported from Valve's gamescope-session that are both
-    hardware/user-config agnostic AND verified functional on this
-    project's own target systems (this system ships
-    KDEPlasmaPlatformTheme6.so). QT_IM_MODULE/GTK_IM_MODULE/XCURSOR_THEME
-    were deliberately NOT ported — their "steam" plugin/theme only exists
-    inside the real SteamOS image, so setting them would be inert here;
-    see the comment above GAME_MODE_ENV in session_launch.py."""
+    """Pins the vars ported from Valve's gamescope-session that are
+    hardware-agnostic and verified to work here. QT_IM_MODULE/
+    GTK_IM_MODULE/XCURSOR_THEME are deliberately absent: their "steam"
+    plugin/theme exists only inside the SteamOS image (see the comment
+    above GAME_MODE_ENV)."""
     assert session_launch.GAME_MODE_ENV["QT_QPA_PLATFORM_THEME"] == "kde"
     assert session_launch.GAME_MODE_ENV["XCURSOR_SCALE"] == "256"
     assert session_launch.GAME_MODE_ENV["STEAM_MULTIPLE_XWAYLANDS"] == "1"
@@ -117,8 +110,7 @@ def test_raise_nofile_limit_raises_soft_below_target(monkeypatch):
 
 def test_raise_nofile_limit_noop_when_already_at_target(monkeypatch):
     """A user/distro-set soft limit already at or above target must never
-    be lowered — this is the exact overlap risk raised before implementing
-    this fix."""
+    be lowered."""
     monkeypatch.setattr(
         session_launch.resource, "getrlimit", lambda _r: (524288, 1048576)
     )
@@ -177,11 +169,8 @@ def test_get_post_start_cmds_returns_empty_for_non_list(set_ssot):
 
 def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
     """Matches _build_gamescope_args's degrade-via-str.split() behavior
-    for the identical class of hand-edited field, instead of silently
-    skipping the malformed command outright (code-review finding,
-    2026-08-27: the two fields had diverged to different error-handling
-    despite this file's own docstring already documenting one shared
-    degrade-gracefully contract for both)."""
+    for the same kind of hand-edited field, instead of silently skipping
+    the malformed command outright."""
     monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
     spawned = []
     monkeypatch.setattr(
@@ -205,8 +194,7 @@ def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
 def test_schedule_post_start_cmds_clamps_negative_delay(monkeypatch):
     """A negative POST_START_DELAY (a plausible SSoT typo) used to reach
     time.sleep() raw, raising ValueError uncaught in this daemon thread
-    -- silently dropping every post_start_cmds with no diagnostic (found
-    via a full-file 9-agent review, 2026-08-31). Must clamp to 0 instead
+    -- silently dropping every post_start_cmds. Must clamp to 0 instead
     of skipping the commands."""
     slept = []
     monkeypatch.setattr(session_launch.time, "sleep", slept.append)
@@ -228,10 +216,9 @@ def test_schedule_post_start_cmds_clamps_negative_delay(monkeypatch):
 def test_schedule_post_start_cmds_survives_unexpected_exception(
     monkeypatch,
 ):
-    """Regression: no try/except at all previously wrapped this daemon
-    thread's body -- any unexpected exception (e.g. spawn_native raising)
-    vanished silently (stderr is /dev/null when the app is launched
-    detached)."""
+    """Regression: an unexpected exception in this daemon thread (e.g.
+    spawn_native raising) ended it with no project log line at all; it
+    must be caught and logged."""
     monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
 
     def raising_spawn(*_a, **_k):
@@ -281,11 +268,10 @@ def test_monitor_process_detects_survival_as_stable(tmp_path, set_ssot):
 def test_monitor_process_logs_when_write_atomic_fails(
     tmp_path, set_ssot, monkeypatch
 ):
-    """Regression: write_atomic() used to be void, so a persist failure
-    on the stable path (symlink/FIFO at the tmp path, a failed rename)
-    was invisible here (found via a third full-file review pass,
-    2026-09-03). Patched at the utils level since 2026-09-16, when the
-    write-or-log shape moved into utils.persist_next_session()."""
+    """Regression: a failed persist on the stable path (refused tmp path,
+    failed rename) must be logged, not invisible. Patched at the utils
+    level, where the write-or-log logic lives
+    (utils.persist_next_session)."""
     set_ssot()
     monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     logged = []
@@ -337,8 +323,7 @@ def test_terminate_gracefully_returns_even_if_still_alive_after_sigkill(
     """Regression: a process stuck in uninterruptible I/O (D-state) can
     outlive even SIGKILL. The final proc.wait() must be bounded so this
     function returns instead of blocking forever — systemd's own
-    KillMode=mixed + TimeoutStopSec backstop handles the cgroup regardless
-    (code-review finding, 2026-08-27)."""
+    KillMode=mixed + TimeoutStopSec backstop handles the cgroup regardless."""
     set_ssot(TERM_TIMEOUT="0.05")
     calls = {"kill": 0}
 
@@ -366,8 +351,8 @@ def test_term_handler_stops_stable_session_promptly(tmp_path, set_ssot):
     thread is itself blocked in _run_session's untimed stable-phase
     proc.wait() (Popen's waitpid lock is held) — every stop ran out both
     TERM_TIMEOUT windows and logged a false SIGTERM_TIMEOUT/SIGKILL_TIMEOUT
-    pair (KISS audit, 2026-09-27). Runs on pytest's main thread because
-    Python only delivers signals there, exactly like the real launcher."""
+    pair. Runs on pytest's main thread because Python only delivers
+    signals there, exactly like the real launcher."""
     set_ssot(TERM_TIMEOUT="2.0")
     proc_holder = [None]
     previous = signal.signal(
@@ -421,13 +406,10 @@ def test_run_session_crash_recovers_to_desktop(tmp_path, set_ssot):
 
 
 def test_handle_recovery_logs_when_write_atomic_fails(set_ssot, monkeypatch):
-    """Regression: this is the single most important write_atomic() call
-    in the file (persists the desktop fallback after a crash) -- a
-    silent failure here used to mean the next boot could re-read
-    whatever next_session already held, possibly the same target that
-    just crashed (found via a third full-file review pass, 2026-09-03).
-    Patched at the utils level since 2026-09-16, when the write-or-log
-    shape moved into utils.persist_next_session()."""
+    """Regression: this write persists the Desktop fallback after a crash;
+    if it fails silently, the next boot re-reads whatever next_session
+    held, possibly the target that just crashed. Must be logged. Patched
+    at the utils level (utils.persist_next_session)."""
     set_ssot(TERM_TIMEOUT="1.0")
     monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     logged = []
@@ -452,8 +434,7 @@ def test_run_session_skips_post_start_cmds_after_crash(
     """Regression: the post_start_cmds daemon thread had no link to
     session outcome -- it fired its configured commands even after
     _monitor_process detected an early crash and _handle_recovery had
-    already switched to desktop (found via the second full-file review
-    pass, 2026-09-02)."""
+    already switched to desktop."""
     set_ssot(TERM_TIMEOUT="1.0", POST_START_DELAY="0.05")
     spawned = []
     monkeypatch.setattr(
@@ -517,8 +498,7 @@ def test_run_session_survives_embedded_null_byte_in_argv(
     malformed argv element (e.g. an embedded null byte from a
     hand-edited flags/env_vars entry) -- uncaught by the previous
     except OSError, crashing the whole session launcher instead of
-    degrading like every other malformed-config path in this file
-    (found via the second full-file review pass, 2026-09-02)."""
+    degrading like every other malformed-config path in this file."""
 
     def raising_popen(*_a, **_k):
         raise ValueError("embedded null byte")

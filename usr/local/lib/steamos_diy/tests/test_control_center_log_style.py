@@ -1,17 +1,10 @@
 """Regression tests for control_center.py's Diagnostics-tab log coloring
 (_apply_log_style / _highlight_log_markers).
 
-Before this fix, "ERROR:"/"DEBUG:" lived in the same log_styles dict as
-the CORE:/STEAM:/SYSTEM: identifier tags, matched in a loop that returned
-on the *first* hit — since every real line already contains its
-identifier (CORE:/STEAM:/SYSTEM: is always present), that match always
-won first and "ERROR:"/"DEBUG:" could never be reached, even though
-"ERROR:" genuinely appears as a substring in real jlog message text
-(SCAN_ERROR:, OS_ERROR:, etc.). Confirmed live with the real function
-before fixing it, not just reasoned about (2026-09-14). Also never
-covered the more common _FAIL:/_FAILED: message family at all. Fixed by
-making identifier colour and message-content markers independent layers
-instead of mutually exclusive."""
+The identifier colour (CORE:/STEAM:/SYSTEM:) and the message markers
+(error/success/switch) are independent layers. They once shared one
+first-match-wins lookup: since every line carries its identifier, the
+error markers were never reached."""
 
 from typing import ClassVar
 
@@ -59,9 +52,8 @@ def test_apply_log_style_colours_identifier_and_error_marker_together():
 
 
 def test_apply_log_style_colours_failed_family_not_just_error():
-    """_FAIL:/_FAILED: (the more common family in this codebase — 18+
-    distinct tags) must be highlighted the same as _ERROR:, not missed
-    entirely like before this fix."""
+    """_FAIL:/_FAILED: (the most common failure tags) must be highlighted
+    the same as _ERROR:."""
     win = _FakeLogWindow()
 
     styled = win._apply_log_style(
@@ -86,9 +78,8 @@ def test_apply_log_style_colours_early_exit_recovery():
 
 
 def test_apply_log_style_colours_restore_rejected_family():
-    """RESTORE_REJECTED_* (7 security-relevant tags, restore.py) — found by
-    the 2026-09-15 KISS audit's new item 13 (message-tag coverage), never
-    matched by the original _ERROR:/_FAIL:/_FAILED: pattern."""
+    """RESTORE_REJECTED_* (restore.py's security rejections) don't end in
+    _ERROR:/_FAIL:/_FAILED:, so they need their own pattern."""
     win = _FakeLogWindow()
 
     styled = win._apply_log_style(
@@ -101,7 +92,7 @@ def test_apply_log_style_colours_restore_rejected_family():
 
 def test_apply_log_style_colours_bad_family():
     """BAD_* (malformed user-editable input, e.g. BAD_FLAG_ENTRY,
-    BAD_SSOT_NUM) — same 2026-09-15 audit finding as RESTORE_REJECTED_*."""
+    BAD_SSOT_NUM) — same reason as RESTORE_REJECTED_*."""
     win = _FakeLogWindow()
 
     styled = win._apply_log_style(
@@ -113,8 +104,7 @@ def test_apply_log_style_colours_bad_family():
 
 
 def test_apply_log_style_colours_timeout_suffix():
-    """SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT: — covered by adding TIMEOUT to the
-    existing suffix alternation, same 2026-09-15 audit finding."""
+    """SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT: — matched by the TIMEOUT suffix."""
     win = _FakeLogWindow()
 
     styled = win._apply_log_style(
@@ -126,12 +116,8 @@ def test_apply_log_style_colours_timeout_suffix():
 
 
 def test_apply_log_style_colours_standalone_error_literals():
-    """These tags don't follow any regex convention, so they're matched
-    as explicit literals, same treatment as the original EARLY_EXIT_RECOVERY:
-    special case. The last 3 (BACKUP_LINK_SKIPPED:/YAML_NOT_MAPPING:/
-    RESTORE_EMPTY:) were found by scripts/audit-log-markers.py, not the
-    manual 2026-09-14/15 sweeps — real gaps the mechanical check catches
-    that a human re-read of the codebase had missed twice already."""
+    """These tags follow no naming convention, so they're matched as
+    explicit literals, like EARLY_EXIT_RECOVERY:."""
     win = _FakeLogWindow()
 
     literals = (
@@ -185,7 +171,7 @@ def test_apply_log_style_leaves_unmatched_message_unhighlighted():
 def test_apply_log_style_gamescope_lines_still_route_separately():
     """Regression guard: gamescope's own [Error]/[Warn]/[Info] styling
     must still take the _style_gamescope_line() path, unaffected by the
-    new marker layer."""
+    marker layer."""
     win = _FakeLogWindow()
 
     styled = win._apply_log_style(

@@ -1,23 +1,17 @@
 """Regression tests for control_center.py's editor-loading state machine
 (toggle_template, load_global_file, load_game_file).
 
-Split out of test_control_center.py (which was already at the pylint
-too-many-lines ceiling) rather than trimming other tests to make room.
+Split out of test_control_center.py, which is at pylint's
+too-many-lines limit.
 
-toggle_template: the target combo (combo_global_files/combo_games) must
-stay disabled for the duration of a template preview. Regression:
-switching the target file mid-preview fired load_global_file/
-load_game_file (wired to the combo's own change signal) while
-is_template/cache still tracked the PREVIOUS file; exiting template mode
-then restored that stale cache over the newly-selected file, and a
-subsequent Save wrote it to the wrong path (found via the second
-full-file review pass, 2026-09-02).
+toggle_template: the target combo must stay disabled during a template
+preview. Switching file mid-preview once restored the previous file's
+cache over the new one on exit, and Save then wrote it to the wrong
+path.
 
-load_global_file/load_game_file/_enter_template_mode: none of their
-read_text() calls had a try/except, unlike every other hand-edited-file
-reader in this codebase — a non-UTF-8 profile/config crashed the load
-instead of degrading with a status-bar message (found via the same
-review pass)."""
+load_global_file/load_game_file/_enter_template_mode: an unreadable
+(e.g. non-UTF-8) file must degrade to a status-bar message, not crash
+the load."""
 
 from types import SimpleNamespace
 
@@ -187,7 +181,7 @@ def test_toggle_template_disables_and_restores_games_combo(tmp_path):
 # load_global_file / load_game_file / _enter_template_mode - a read_text()
 # failure (non-UTF-8 content, or a TOCTOU delete after the exists() check)
 # must degrade to a status-bar message, not an uncaught exception out of a
-# Qt slot (found via the second full-file review pass, 2026-09-02).
+# Qt slot.
 # ---------------------------------------------------------------------------
 
 
@@ -229,8 +223,7 @@ def test_enter_template_mode_survives_non_utf8_content(tmp_path):
 
 # ---------------------------------------------------------------------------
 # load_global_file / load_game_file - switching the combo to another file
-# must not silently drop unsaved edits (KISS audit, 2026-09-27): closeEvent
-# already guarded them, a file switch didn't.
+# must not silently drop unsaved edits, just as closing the window doesn't.
 # ---------------------------------------------------------------------------
 
 
@@ -308,8 +301,7 @@ def test_clean_editor_switches_without_asking(tmp_path, monkeypatch):
 def test_save_game_profile_without_a_name_says_so(tmp_path):
     """Regression: with no game selected or typed, Save returned without
     writing and without a word — the edit just stayed unsaved, and
-    closeEvent's Save kept the window open just as silently (found
-    2026-11-09, same silent-no-op class as the Scan History fix)."""
+    closeEvent's Save kept the window open just as silently."""
     win = _FakeWindow(tmp_path)
     win.combo_games = _FakeCombo("   ")
 
@@ -322,8 +314,7 @@ def test_save_game_profile_without_a_name_says_so(tmp_path):
 def test_template_preview_preserves_the_unsaved_edits_flag(tmp_path):
     """Regression: entering a preview cleared the editor's modified flag
     and leaving it never restored it — the edits came back, but neither
-    closeEvent nor a file switch warned about them any more (2026-11-09
-    audit, confirmed on the real window)."""
+    closeEvent nor a file switch warned about them any more."""
     (tmp_path / "config.example.yaml").write_text("template: global\n")
     win = _FakeWindow(tmp_path)
     win.global_editor.document().setModified(True)
@@ -350,8 +341,8 @@ def test_template_preview_keeps_a_clean_editor_clean(tmp_path):
 # ---------------------------------------------------------------------------
 # A load that doesn't happen must not leave the combo on the new entry
 # with the previous file's text still in the editor: Save writes the
-# editor to whatever the combo names (2026-11-09 audit — verified on the
-# real window: one game's profile was written into another's file).
+# editor to whatever the combo names (on the real window, one game's
+# profile was written into another's file).
 # ---------------------------------------------------------------------------
 
 
@@ -396,7 +387,7 @@ def test_game_load_failure_puts_the_combo_back(tmp_path):
 # ---------------------------------------------------------------------------
 # _reload_clean_editors — after a restore the editors must show what is
 # now on disk, or the next Save writes the pre-restore text back over the
-# restored file (2026-11-09 audit, confirmed on the real window).
+# restored file.
 # ---------------------------------------------------------------------------
 
 

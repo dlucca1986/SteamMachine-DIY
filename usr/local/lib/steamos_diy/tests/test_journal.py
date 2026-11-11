@@ -1,10 +1,10 @@
-"""Regression tests for journal.py's export-format parsing safety.
+"""Regression tests for journal.py's parsing: export format, game
+detection and gamescope lines.
 
-Before the fix, a malformed __REALTIME_TIMESTAMP= (corrupted journal, or
-a MESSAGE field that flips journalctl into binary-safe encoding) raised
-an uncaught ValueError/UnicodeDecodeError that neither control_center.py
-except clause covers — the Diagnostics tab got stuck on "Loading
-logs..." forever. These tests pin the graceful-degrade behavior."""
+A malformed __REALTIME_TIMESTAMP= (corrupted journal) or non-UTF-8
+output once raised ValueError/UnicodeDecodeError that no
+control_center.py except clause covers, leaving the Diagnostics tab on
+"Loading logs..." forever."""
 
 import subprocess
 from datetime import datetime
@@ -31,9 +31,9 @@ def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
 # ---------------------------------------------------------------------------
 # parse_game_logs — per-pid attribution
 #
-# Before the fix, a single global "current name" was reassigned on every
-# NAME line regardless of which process logged it, so an ID line from one
-# process could get attributed to a different, more-recently-seen game.
+# One global "current name" once tracked every NAME line regardless of
+# process, so an ID line could be attributed to another, more recently
+# seen game.
 # ---------------------------------------------------------------------------
 
 
@@ -45,8 +45,7 @@ def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
 def test_filter_game_journal_lines_rejects_sibling_home_dir():
     """Regression: chdir_marker had no trailing boundary, so
     home="/home/deck" false-positive-matched a chdir into a DIFFERENT
-    user's home, "/home/deck2/..." (found via the second full-file
-    review pass, 2026-09-02)."""
+    user's home, "/home/deck2/..."."""
     stdout = 'chdir "/home/deck2/.steam/steamapps/common/GameA"'
 
     matched = journal.filter_game_journal_lines(stdout, "/home/deck")
@@ -80,8 +79,7 @@ def test_parse_game_logs_keeps_short_valve_appids():
     literal "gameID"/"AppID = " token, and several of Valve's own early
     AppIDs are genuinely 1-2 digits (10 = Counter-Strike, 70 = Half-Life,
     still playable today). The filter silently dropped real detections
-    for exactly those games (found via the second full-file review pass,
-    2026-09-02)."""
+    for exactly those games."""
     lines = (
         'steam[1001]: chdir "/home/user/.steam/steamapps/common/Half-Life"\n'
         "steam[1001]: gameID 70"
@@ -93,9 +91,7 @@ def test_parse_game_logs_does_not_cross_attribute_pidless_lines():
     """Regression: pid = pid_match.group(1) if pid_match else "" made
     every line lacking a [pid]: suffix share the SAME cur_by_pid[""]
     bucket, reintroducing the exact cross-attribution the pid-keyed
-    tracking exists to prevent -- just for pid-less lines instead of
-    present ones (found via the second full-file review pass,
-    2026-09-02)."""
+    tracking exists to prevent, for pid-less lines."""
     lines = (
         'chdir "/home/user/.steam/steamapps/common/GameA"\n'
         "gameID 220\n"
@@ -160,9 +156,8 @@ def test_fetch_tagged_entries_decodes_with_replace(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# subprocess timeout discipline (CLAUDE.md review checklist item 14) —
-# every journalctl call must bound how long it can block, since this runs
-# on a handheld that can wedge or lose power mid-operation.
+# subprocess timeouts — every journalctl call must bound how long it can
+# block.
 # ---------------------------------------------------------------------------
 
 
@@ -210,13 +205,10 @@ def test_run_journalctl_iso_returns_empty_on_timeout(monkeypatch):
 # Gamescope/export timestamp mixing (control_center.py's load_logs sorts
 # fetch_tagged_entries + fetch_gamescope_logs together for tag ALL/STEAM).
 #
-# Before the fix, _split_gamescope_line stripped tzinfo from its parsed
-# timestamp while _finalize_export_entry's timestamps stayed timezone-aware
-# (via .astimezone()). Mixing aware/naive datetimes in the same sort() call
-# raises TypeError, uncaught by load_logs's except clause — the Diagnostics
-# tab got stuck on "Loading logs..." forever whenever a real gamescope
-# session ran alongside any CORE/STEAM/SYSTEM activity (the default ALL tag
-# hits this on every normal session).
+# Both kinds of timestamp must be timezone-aware: sorting aware and naive
+# datetimes together raises TypeError, uncaught by load_logs, and once
+# left the Diagnostics tab on "Loading logs..." after every gamescope
+# session.
 # ---------------------------------------------------------------------------
 
 

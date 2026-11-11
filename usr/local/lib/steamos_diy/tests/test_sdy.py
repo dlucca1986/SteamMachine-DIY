@@ -5,11 +5,8 @@ A malformed GAME_WRAPPER/GAME_EXTRA_ARGS in a hand-edited profile must
 degrade gracefully instead of crashing the game launch (sdy.py execvpe's
 the game; a crash here means the game never starts, with no fallback).
 
-Profile resolution is covered because it's fiddly by design (AppID
-header matching must be an exact, anchored match — 2.1.4 fixed a real
-bug where searching for AppID "220" also matched a profile declaring
-"SDY_ID: 2201290") and a future edit could silently reintroduce that
-class of bug without a regression test pinning the exact-match contract."""
+Profile resolution is fiddly: AppID header matching must be exact and
+anchored (searching for "220" once also matched "SDY_ID: 2201290")."""
 
 import os
 
@@ -71,8 +68,7 @@ def test_exec_game_survives_embedded_null_byte(monkeypatch):
     malformed argv element (e.g. an embedded null byte from a
     hand-edited GAME_WRAPPER/GAME_EXTRA_ARGS entry) -- uncaught by the
     previous except OSError, crashing sdy.py's run() with a raw
-    traceback instead of the documented graceful exit(1) (found via the
-    second full-file review pass, 2026-09-02)."""
+    traceback instead of the documented graceful exit(1)."""
 
     def raising_execvpe(*_a, **_k):
         raise ValueError("embedded null byte")
@@ -97,8 +93,7 @@ def test_exec_game_launches_a_binary_with_a_non_utf8_name(monkeypatch):
     raised UnicodeEncodeError for a stem Python had decoded from
     non-UTF-8 bytes — a ValueError, so _exec_game's own except turned it
     into EXECUTION_FAILED + exit(1) before os.execvpe was ever called.
-    The game never started, over its own log line (2026-11-09 audit,
-    reproduced end to end through sdy.run())."""
+    The game never started, over its own log line."""
     name = os.fsdecode(b"Pok\xe9mon")  # carries a lone surrogate
     launched = []
     monkeypatch.setattr(
@@ -111,7 +106,7 @@ def test_exec_game_launches_a_binary_with_a_non_utf8_name(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _header_declares_id — exact match, not substring (2.1.4 regression)
+# _header_declares_id — exact match, not substring
 # ---------------------------------------------------------------------------
 
 
@@ -123,7 +118,7 @@ def test_header_declares_id_exact_match(tmp_path):
 
 
 def test_header_declares_id_rejects_substring_match(tmp_path):
-    """The exact 2.1.4 bug: searching '220' must not hit 'SDY_ID: 2201290'."""
+    """Searching '220' must not hit 'SDY_ID: 2201290'."""
     profile = tmp_path / "other_game.yaml"
     profile.write_text("SDY_ID: 2201290\n")
 
@@ -145,8 +140,7 @@ def test_header_declares_id_tolerates_invalid_utf8(tmp_path):
     """Regression: a non-UTF-8 profile file (e.g. hand-edited with a
     Latin-1 accented game name) raised UnicodeDecodeError uncaught,
     crashing the game launch instead of degrading like the equivalent
-    utils.py::read_session_target() guard already does (found via a
-    full-file 9-agent review, 2026-08-31)."""
+    utils.py::read_session_target() guard already does."""
     profile = tmp_path / "game.yaml"
     profile.write_bytes(b"# SDY_ID: 220\nGAME_WRAPPER: \xe9cran\n")
 
@@ -203,8 +197,7 @@ def test_resolve_effective_name_skips_trailing_directory_arg(tmp_path):
     """Regression: a trailing existing-but-directory argument (e.g. a
     --workshop-dir value) must not be mistaken for the game binary just
     because it's the rightmost existing absolute path — only a real file
-    can be the thing actually being launched (code-review finding,
-    2026-08-27)."""
+    can be the thing actually being launched."""
     game_dir = tmp_path / "MyGame"
     game_dir.mkdir()
     binary = game_dir / "start.sh"
@@ -266,9 +259,8 @@ def test_get_profile_path_none_when_nothing_matches(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# run() — exit contract (its own docstring: "Exits with 1 on failure; never
-# returns on success" — the no-argv guard used to plainly `return` instead,
-# matching neither outcome; code-review finding, 2026-08-27)
+# run() — exit contract (its docstring: "Exits with 1 on failure; never
+# returns on success"), the no-argv case included
 # ---------------------------------------------------------------------------
 
 

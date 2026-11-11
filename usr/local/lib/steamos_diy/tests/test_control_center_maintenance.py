@@ -1,8 +1,8 @@
 """Regression tests for control_center.py's Maintenance-tab actions
 (edit_ssot_privileged, export_support_log).
 
-Split out of test_control_center.py (which was already at the pylint
-too-many-lines ceiling) rather than trimming other tests to make room."""
+Split out of test_control_center.py, which is at pylint's
+too-many-lines limit."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,8 +32,7 @@ class _FakeMaintenanceWindow:
 
 # ---------------------------------------------------------------------------
 # edit_ssot_privileged — routed through _launch_or_warn/spawn_native like
-# every other Maintenance-tab button, instead of its own bare Popen (which
-# didn't detach via start_new_session=True the way spawn_native does)
+# every other Maintenance-tab button, so the editor runs in its own session
 # ---------------------------------------------------------------------------
 
 
@@ -42,8 +41,7 @@ def test_edit_ssot_privileged_uses_spawn_native(monkeypatch):
     unlike the other 3 Maintenance-tab buttons (Switch to Steam/Konsole/
     Browse Config) which all route through spawn_native's
     start_new_session=True detachment. Kate/KWrite stayed attached to
-    Control Center's own process group instead (found via the second
-    full-file review pass, 2026-09-02)."""
+    Control Center's own process group instead."""
     calls = []
     monkeypatch.setattr(control_center.os.path, "exists", lambda _p: False)
     monkeypatch.setattr(
@@ -79,9 +77,8 @@ def test_edit_ssot_privileged_reports_spawn_failure(monkeypatch):
 
 
 def test_export_support_log_skips_while_already_busy():
-    """Regression: export_support_log had no re-entrancy guard at all,
-    unlike refresh_detected_games/load_logs's established _busy pattern
-    (found via the second full-file review pass, 2026-09-02)."""
+    """Regression: a second export while one is in flight must be skipped
+    (same _busy guard as refresh_detected_games/load_logs)."""
     win = SimpleNamespace(_export_busy=True)
 
     # Must return before ever touching QFileDialog/threading — no
@@ -121,8 +118,7 @@ def test_export_support_log_reports_an_unexpected_failure(
 ):
     """Regression: the worker only caught OSError, so anything else
     raised while building the report (it runs the whole preflight) killed
-    the daemon thread — the button then did nothing, with no dialog
-    (2026-11-09 audit)."""
+    the daemon thread — the button then did nothing, with no dialog."""
     monkeypatch.setattr(
         control_center.QFileDialog,
         "getSaveFileName",

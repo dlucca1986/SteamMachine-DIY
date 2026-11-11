@@ -126,12 +126,10 @@ def test_prune_old_archives_ignores_in_flight_tmp_files(tmp_path, set_ssot):
 
 
 def test_prune_old_archives_survives_nan_backup_keep(tmp_path, set_ssot):
-    """Regression: get_ssot_num() already degrades a non-numeric value,
-    but "nan" parses as a valid float (float() accepts it) — int(nan)
-    is what actually raises (ValueError), uncaught, AFTER run_backup()
-    already logged BACKUP_SUCCESS, reporting a false "Backup Error" for
-    an archive that's actually fine (found via the second full-file
-    review pass, 2026-09-02)."""
+    """Regression: get_ssot_num() degrades non-numeric values, but float()
+    accepts "nan" and int(nan) raises ValueError — uncaught, after
+    BACKUP_SUCCESS was already logged, it reported a good archive as a
+    "Backup Error"."""
     set_ssot(BACKUP_KEEP="nan")
     names = [
         "sdy_backup_20260101_000000.tar.gz",
@@ -262,11 +260,9 @@ def test_run_backup_refuses_symlinked_tmp_path(tmp_path, monkeypatch):
 def test_run_backup_aborts_cleanly_when_backup_dir_creation_fails(
     tmp_path, monkeypatch
 ):
-    """Regression: _ensure_backup_dir() runs before BACKUP_START is even
-    logged and was previously outside any try/except - an OSError from
-    mkdir() (permission denied, full disk, a path component that's
-    already a file) crashed with an unhandled traceback instead of
-    exiting cleanly like every other failure path in run_backup()."""
+    """Regression: an OSError from _ensure_backup_dir()'s mkdir() (full
+    disk, a path component that's a file) crashed with a traceback
+    instead of exiting cleanly like run_backup()'s other failure paths."""
     home = tmp_path / "home" / "tester"
     user_config_dir = home / ".config" / "steamos_diy"
     user_config_dir.parent.mkdir(parents=True)

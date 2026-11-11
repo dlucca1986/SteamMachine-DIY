@@ -1,12 +1,8 @@
-"""Regression test for updater.py's download worker exception backstop.
+"""Regression tests for updater.py's download worker and _on_download.
 
-_download's worker previously had no try/except at all -- an uncaught
-exception from download_release() (e.g. the empty-tarball
-FileNotFoundError pinned in test_utils.py) killed the daemon thread
-silently before emitting anything, exactly like the validate_config bug
-already fixed in control_center.py: stderr is /dev/null when the app is
-launched detached, so nothing is printed and the button stays disabled
-forever with no error shown.
+An uncaught exception from download_release() (e.g. the empty-tarball
+FileNotFoundError pinned in test_utils.py) once ended the worker before
+it emitted anything: the button stayed disabled forever with no error.
 
 No real QApplication/QPushButton is needed: _download only touches
 self.button, self._dest_root and self._download_ready, so a plain
@@ -130,9 +126,8 @@ def test_check_worker_survives_emit_on_torn_down_window(monkeypatch):
 
 def test_on_download_shows_error_when_konsole_fails_to_spawn(monkeypatch):
     """Regression: spawn_native()'s return value (0 on failure, per its
-    own documented contract) was discarded -- if Konsole fails to
-    launch, the user previously saw "Installing Update..." and then
-    nothing, with no indication the update never actually started."""
+    own documented contract) was discarded -- if Konsole failed to
+    launch, the user saw "Installing Update..." and then nothing."""
     calls = []
     monkeypatch.setattr(updater, "QMessageBox", _FakeMessageBox(calls))
     monkeypatch.setattr(
@@ -151,9 +146,8 @@ def test_on_download_shows_error_when_konsole_fails_to_spawn(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # _on_download — re-entrancy: the button must stay disabled from download
-# through the privileged install actually starting, not re-idle at the top
-# of the handler (a second click could launch a second concurrent
-# `install.sh --update` against the same files, checklist item 15)
+# through the privileged install actually starting (a second click could
+# launch a second concurrent `install.sh --update` against the same files)
 # ---------------------------------------------------------------------------
 
 
@@ -163,8 +157,7 @@ def test_on_download_stays_busy_through_a_successful_install(monkeypatch):
     even launched -- the button was clickable again well before the
     privileged install (a detached process this handler never awaits)
     actually finished, letting a second click start a second concurrent
-    `pkexec install.sh --update` (found via a third full-file review
-    pass, 2026-09-03)."""
+    `pkexec install.sh --update`."""
     monkeypatch.setattr(updater, "QMessageBox", _FakeMessageBox([]))
     monkeypatch.setattr(
         updater, "verify_file_sha256", lambda *_a, **_k: True

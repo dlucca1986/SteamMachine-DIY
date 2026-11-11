@@ -98,7 +98,7 @@ def test_write_member_reports_an_ordinary_open_failure_as_write_fail(
     """Regression: any failure opening the tmp file (name too long, disk
     full, permissions) was logged as RESTORE_REJECTED_TMP_SYMLINK — a
     planted-symlink security message for what is an ordinary write error
-    (2026-11-10, found restoring a member with a 300-char name)."""
+    (found restoring a member with a 300-char name)."""
     logged = []
     monkeypatch.setattr(
         restore, "jlog", lambda _t, msg, level="INFO": logged.append(msg)
@@ -116,7 +116,7 @@ def test_write_member_removes_its_tmp_when_the_replace_fails(tmp_path):
     """Regression: when os.replace failed (here the target is a directory,
     as when an archive holds a file where the system now has a folder),
     the already-written *.sdy_restore_tmp was left behind — root-owned,
-    in the user's config dir or under /etc/ (2026-11-10)."""
+    in the user's config dir or under /etc/."""
     target = tmp_path / "config.yaml"
     (target / "inner").mkdir(parents=True)
 
@@ -145,8 +145,7 @@ def test_write_member_survives_makedirs_failure(tmp_path):
     "system/steamos_diy.conf/evil" when "system/steamos_diy.conf" is a
     plain-file mapping key) raised NotADirectoryError uncaught, which
     escaped all the way to _execute_restore's archive-level except and
-    aborted the ENTIRE restore instead of just rejecting this one member
-    (found via the second full-file review pass, 2026-09-02)."""
+    aborted the ENTIRE restore instead of just rejecting this one member."""
     blocker = tmp_path / "blocker"
     blocker.write_text("i am a file, not a directory")
     target = blocker / "evil"
@@ -305,8 +304,8 @@ def test_is_member_safe_accepts_regular_file_and_dir():
 
 
 # ---------------------------------------------------------------------------
-# _ensure_safe_target — refuse to write through a pre-existing symlink
-# (a malicious archive could plant one to redirect a later write)
+# _ensure_safe_target — refuse to write through a symlink already at the
+# target, which would redirect the root write wherever it points
 # ---------------------------------------------------------------------------
 
 
@@ -471,26 +470,21 @@ def test_resolve_target_rejects_outside_allowlist():
 
 
 # ---------------------------------------------------------------------------
-# backup/restore symmetry — get_backup_mapping() is generated once and
-# consumed independently by backup.py (tar.add) and restore.py's own
-# prefix-matching (_resolve_target). CLAUDE.md calls this out explicitly:
-# a key that backs up cleanly but restore can't resolve is a silent
-# data-loss bug, not a cosmetic mismatch — so every real mapping key must
-# round-trip through restore's actual resolution+allow-list logic.
+# backup/restore symmetry — get_backup_mapping() is consumed independently
+# by backup.py (tar.add) and restore.py's prefix matching (_resolve_target).
+# A key that backs up but restore can't resolve is silent data loss, so
+# every real mapping key must round-trip through restore's resolution and
+# allow-list.
 # ---------------------------------------------------------------------------
 
 
 def test_every_backup_mapping_key_resolves_via_restore(monkeypatch):
-    # The autouse _isolate_ssot_cache fixture points SSOT_CONF_PATH at a
-    # nonexistent tmp path (outside /etc/, /usr/, /var/) so no test
-    # touches the real conf file — but this test's whole point is to
-    # verify the *real* production path actually lands in restore's
-    # allow-list, so it must use the real value here. home must be the
-    # real $HOME too: the real conf's SSoT-read values (e.g.
-    # games_conf_dir) are absolute paths install.sh patched against this
-    # actual home, not a fabricated tmp one — on a machine with no real
-    # conf installed (CI), every SSoT-read key just falls back to its
-    # home-relative default instead, so this stays hermetic either way.
+    # Real SSOT_CONF_PATH and $HOME on purpose (the autouse fixture points
+    # the SSoT at a tmp path outside /etc/): the point is that the *real*
+    # production paths land in restore's allow-list. The installed conf's
+    # paths were patched against the real home; with no conf installed (CI)
+    # every key falls back to its home-relative default, so it stays
+    # hermetic either way.
     monkeypatch.setattr(
         utils, "SSOT_CONF_PATH", "/etc/default/steamos_diy.conf"
     )
@@ -561,8 +555,7 @@ def test_fresh_install_restore_places_archived_relocated_games_dir(
     The archive's members are named "user/games_conf_dir/..." regardless
     of where this system currently resolves that to - restore's mapping
     must still route them there via the for_restore=True mapping, or
-    they're silently dropped (found via a dedicated cross-file-contracts
-    review, 2026-09-02)."""
+    they're silently dropped."""
     home = str(tmp_path / "home" / "tester")
     mapping = utils.get_backup_mapping(home, for_restore=True)
     home_real = str(Path(home).resolve())
@@ -632,9 +625,8 @@ def test_prepare_restore_requests_for_restore_mapping(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _reload_systemd — subprocess timeout discipline (CLAUDE.md review
-# checklist item 14): a wedged `systemctl daemon-reload` must be logged
-# and swallowed, not left to hang the restore flow indefinitely.
+# _reload_systemd — a wedged `systemctl daemon-reload` must time out, be
+# logged and be swallowed, not hang the restore indefinitely.
 # ---------------------------------------------------------------------------
 
 
@@ -700,11 +692,8 @@ def test_execute_restore_aborts_when_nothing_matched(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# run_restore — the actual root-privileged entry point (pkexec runs this).
-# Found at 0% coverage by scripts/audit-coverage-critical.py: both halves
-# it delegates to (_prepare_restore/_execute_restore) are tested
-# separately, but the wiring between them at the real entry point never
-# was.
+# run_restore — the root entry point pkexec runs: pins the wiring between
+# _prepare_restore and _execute_restore, which are tested separately.
 # ---------------------------------------------------------------------------
 
 

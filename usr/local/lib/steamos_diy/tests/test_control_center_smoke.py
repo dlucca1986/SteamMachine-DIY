@@ -4,10 +4,9 @@ Every other control_center test binds single methods onto minimal fakes
 (no QApplication), which is fast and precise but structurally blind to
 what only shows up when the whole window actually runs: a Qt API that
 changed under a PyQt upgrade, a slot raising on real widget state, a
-background worker dying. On 2026-11-09 an ad-hoc offscreen run of the
-real window was the only thing that caught the invisible game-selector
-hints (and the wrong 2.1.9 description of the Scan History bug), after
-many static reads had missed them — this keeps that run in the suite.
+background worker dying. An offscreen run of the real window once
+caught invisible game-selector hints that many static reads had
+missed; this keeps that run in the suite.
 
 Real: QApplication (offscreen platform), SDYControlCenter, its event
 loop, every tab, a full Scan History round-trip through its worker
@@ -147,9 +146,9 @@ def test_control_center_runs_every_tab_and_a_scan(qapp, captured):
 def test_save_and_beautify_survive_an_unbuildable_scalar(qapp, captured):
     """Regression, on the real window: an unquoted impossible date makes
     ruamel raise ValueError, not YAMLError. Uncaught in these slots,
-    PyQt6 aborted the whole app (exit 134) with the unsaved edit in it
-    (2026-11-09 audit). Called directly here, so an escaping exception
-    fails the test instead of aborting pytest."""
+    PyQt6 aborted the whole app (exit 134) with the unsaved edit in it.
+    Called directly here, so an escaping exception fails the test instead
+    of aborting pytest."""
     import control_center  # pylint: disable=import-outside-toplevel
 
     win = control_center.SDYControlCenter()
@@ -174,7 +173,7 @@ def test_save_and_beautify_survive_an_unbuildable_scalar(qapp, captured):
 def test_closing_during_a_template_preview_still_warns(qapp, captured):
     """Regression, on the real window: closing while a template preview
     was open skipped the unsaved-changes prompt, because the edits lived
-    only in the preview's cache (2026-11-09 audit). The fixture's fake
+    only in the preview's cache. The fixture's fake
     dialog answers Cancel, so the window must stay out of the preview
     with the edit and its dirty flag intact."""
     import control_center  # pylint: disable=import-outside-toplevel

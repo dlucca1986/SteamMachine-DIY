@@ -2,10 +2,8 @@
 (refresh_detected_games's journalctl invocation, _update_game_combo_ui's
 editable-combo handling).
 
-Split out of test_control_center.py (which was already at the pylint
-too-many-lines ceiling) rather than trimming other tests to make room —
-reuses that file's own _FakeGamesWindow/_sync_thread_factory instead of
-duplicating them (pylint's duplicate-code check flags a copy)."""
+Split out of test_control_center.py, which is at pylint's
+too-many-lines limit; reuses its _FakeGamesWindow/_sync_thread_factory."""
 
 import control_center
 from test_control_center import _FakeGamesWindow, _sync_thread_factory
@@ -15,8 +13,7 @@ def test_refresh_detected_games_caps_journalctl_line_count(monkeypatch):
     """Regression: the journalctl call had no -n line cap, unlike
     journal.py's own bounded get_journal_cmd() pattern (-n 300) — every
     "Scan History" click pulled the WHOLE 24h system journal, mostly
-    discarded by the Python-side filter (found via the second full-file
-    review pass, 2026-09-02)."""
+    discarded by the Python-side filter."""
     win = _FakeGamesWindow()
     monkeypatch.setattr(
         control_center.threading, "Thread", _sync_thread_factory()
@@ -73,13 +70,10 @@ class _FakeEditableCombo:
 
     def addItems(self, items):  # pylint: disable=invalid-name
         # A real QComboBox auto-selects index 0 when items land on a
-        # cleared combo — unless the combo has a placeholderText set,
-        # which keeps the index at -1. The app set one before every scan
-        # until 2026-11-09 (invisible on an editable combo; its hints now
-        # live on the line edit), so the auto-pick is real again and
-        # _update_game_combo_ui must undo it explicitly. Verified on the
-        # real window both ways, 2026-11-09. No setPlaceholderText() here
-        # on purpose: a call on the combo itself would be invisible again.
+        # cleared combo, unless the combo has a placeholderText. The hints
+        # live on the line edit (a combo placeholder is invisible when
+        # editable), so none is set and _update_game_combo_ui must undo the
+        # auto-pick explicitly. No setPlaceholderText() here on purpose.
         self.items = list(items)
         if items:
             self._text = items[0]
@@ -124,8 +118,7 @@ def test_update_game_combo_ui_preserves_in_progress_typed_entry(tmp_path):
     still typing a manually-added game's name into the editable combo
     wiped that text — QComboBox.clear() resets the line-edit text along
     with the item list, and a subsequent Save silently no-ops on the
-    now-empty currentText() (found via the second full-file review pass,
-    2026-09-02)."""
+    now-empty currentText()."""
     win = _FakeComboWindow(tmp_path / "games.d", typed_text="MyCustomGame")
 
     win._update_game_combo_ui({"OtherGame": "OtherGame"})
@@ -147,11 +140,7 @@ def test_update_game_combo_ui_keeps_a_non_first_selection(tmp_path):
     restored, so an already-listed selection was lost on every Scan
     History — the combo ended up with no selection and empty text while
     the editor still held the game's profile, and the next Save (which
-    targets currentText()) silently did nothing (fixed 2026-09-27).
-    Originally described as "overwrote the first game's file": true only
-    for a QComboBox without a placeholder, which auto-selects index 0 —
-    re-verified on the real window 2026-11-09, where the scan's
-    placeholder keeps the index at -1."""
+    targets currentText()) silently did nothing."""
     gdir = tmp_path / "games.d"
     win = _FakeComboWindow(gdir, typed_text="Beta (20)")
 
@@ -166,8 +155,7 @@ def test_update_game_combo_ui_never_auto_picks_a_game(tmp_path):
     must stay unselected afterwards. addItems() auto-picks the first entry
     on a real QComboBox, but `activated` doesn't fire programmatically, so
     the editor never loads that game — a Save would write the editor's
-    content over its file. Until 2026-11-09 an invisible combo placeholder
-    suppressed the auto-pick by accident; it's now explicit."""
+    content over its file."""
     win = _FakeComboWindow(tmp_path / "games.d", typed_text="")
 
     win._update_game_combo_ui({"Alpha": "10", "Beta": "20"})
@@ -178,9 +166,9 @@ def test_update_game_combo_ui_never_auto_picks_a_game(tmp_path):
 def test_update_game_combo_ui_hints_live_on_the_line_edit(tmp_path):
     """Regression: "Scanning history..."/"Journal unavailable." were set
     on the editable combo itself, which never paints its placeholder —
-    the user only ever saw an empty box (found 2026-11-09 by rendering
-    the real widget). An empty result also wasn't necessarily a journal
-    failure, so the empty-state text no longer claims one."""
+    the user only ever saw an empty box. An empty result isn't
+    necessarily a journal failure, so the empty-state text doesn't claim
+    one."""
     win = _FakeComboWindow(tmp_path / "games.d")
 
     win._update_game_combo_ui({})

@@ -1,13 +1,12 @@
 """Regression tests for control_center.py's SSoT path resolution, combo
-display-name parsing, the pkexec re-entrancy guard, and (CLAUDE.md review
-checklist item 14) the subprocess timeout discipline of the two
-background workers that talk to journalctl/pkexec.
+display-name parsing, the pkexec re-entrancy guard, and the subprocess
+timeouts of the background workers that call journalctl/pkexec.
 
 None need a real QMainWindow/QApplication: _resolve_config_paths and
 _extract_game_name_from_display are pure functions, and _run_pkexec /
 refresh_detected_games only touch self._pkexec_busy, self.statusBar(),
-self.combo_games and their signal's .emit() — a plain stand-in object
-exercises the exact same code path without pulling Qt into the suite."""
+self.combo_games and their signals' .emit() — a plain stand-in object
+runs the same code path without Qt."""
 
 import subprocess
 from types import SimpleNamespace
@@ -52,10 +51,8 @@ def test_resolve_config_paths_fallback_follows_games_conf_subdir_constant(
 ):
     """Pins that the games_conf_dir fallback derives from the shared
     utils.GAMES_CONF_SUBDIR constant (also used by
-    utils.default_games_conf_dir() for sdy.py) rather than an
-    independently hardcoded "games.d" literal — the exact class of
-    divergence bug CLAUDE.md's 2026-08-26 audit already found once for
-    this same concept."""
+    utils.default_games_conf_dir() for sdy.py), not its own "games.d"
+    literal: the two once drifted apart for this same setting."""
     set_ssot()
     monkeypatch.setattr(control_center, "GAMES_CONF_SUBDIR", "custom.d")
     default_root = tmp_path / "default"
@@ -182,7 +179,7 @@ class _FakeButton:
 
 
 class _FakeWindow:
-    """Stand-in for SDYControlCenter: only what _run_pkexec touches."""
+    """Stand-in for SDYControlCenter: only what the tested methods touch."""
 
     def __init__(self):
         self._pkexec_busy = {}
@@ -280,10 +277,8 @@ def test_run_pkexec_lock_keys_are_independent(monkeypatch):
 
 def test_run_pkexec_disables_buttons_for_its_lock_key(monkeypatch):
     """Regression: starting a privileged operation must visually disable
-    the button(s) tied to its lock_key — previously the only feedback for
-    a double-click was a 3s status-bar toast, unlike updater.py's
-    _set_busy pattern (CLAUDE.md checklist item 15; code-review finding,
-    2026-08-27)."""
+    the button(s) tied to its lock_key, like updater.py's _set_busy —
+    a status-bar toast alone doesn't stop a second click."""
     win = _FakeWindow()
     btn = _FakeButton()
     win._lock_key_buttons = {"files": [btn]}
@@ -384,8 +379,7 @@ def test_refresh_service_status_skips_tick_while_busy(monkeypatch):
     """Regression: _service_status_busy must block an overlapping poll —
     get_service_status's subprocess timeout (5s) exceeds the QTimer
     interval that calls it (4s), so without this guard a slow systemctl
-    call would let ticks pile up instead of just skipping one
-    (code-review finding, 2026-08-27)."""
+    call would let ticks pile up instead of just skipping one."""
     win = _FakeWindow()
     win._service_status_busy = True
     started = []
@@ -423,11 +417,9 @@ def test_refresh_service_status_resets_guard_after_completion(monkeypatch):
 
 
 def test_validate_config_worker_survives_unexpected_exception(monkeypatch):
-    """Regression: validate_config's worker previously had no try/except
-    at all — an uncaught exception (e.g. run_preflight() raising) killed
-    the daemon thread silently before emitting anything, exactly like the
-    journal.py aware/naive-datetime bug (nothing printed: stderr is
-    /dev/null when the app is launched detached)."""
+    """Regression: an uncaught exception in validate_config's worker (e.g.
+    run_preflight() raising) ended the thread before it emitted anything,
+    so the button did nothing and no dialog appeared."""
     win = _FakeWindow()
     finished = []
     win.process_finished = SimpleNamespace(
@@ -448,8 +440,8 @@ def test_validate_config_worker_survives_unexpected_exception(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# subprocess timeout discipline (CLAUDE.md review checklist item 14) —
-# _run_pkexec's own worker, and refresh_detected_games's journalctl scan.
+# subprocess timeouts — _run_pkexec's own worker, and
+# refresh_detected_games's journalctl scan.
 # ---------------------------------------------------------------------------
 
 
@@ -503,8 +495,7 @@ def test_run_pkexec_non_sticky_timeout_resets_guard(monkeypatch):
     """Regression: sticky_on_timeout=False (journal vacuum) must reset the
     guard on a timeout instead of leaving it permanently stuck — a timeout
     there is far more likely to be a slow polkit prompt than a wedged
-    operation, and vacuum runs are idempotent (code-review finding,
-    2026-08-27)."""
+    operation, and vacuum runs are idempotent."""
     win = _FakeWindow()
     monkeypatch.setattr(
         control_center.threading, "Thread", _sync_thread_factory()
@@ -602,12 +593,9 @@ def test_run_pkexec_resets_guard_on_an_unforeseen_exception(monkeypatch):
 def test_run_pkexec_survives_emit_on_torn_down_window(monkeypatch):
     """Regression: closing Control Center while a privileged operation is
     still in flight (Backup/Restore can run for up to the 300s pkexec
-    budget) deletes the underlying Qt object; emitting on it then raises
-    RuntimeError. Before _safe_emit, only TimeoutExpired/
-    CalledProcessError/OSError were caught here — an uncaught RuntimeError
-    from process_finished.emit() propagated straight out of the worker,
-    the exact silent-vanish class already hardened in updater.py's own
-    workers."""
+    budget) deletes the underlying Qt object, and emitting on it raises
+    RuntimeError. safe_emit must swallow it instead of letting it escape
+    the worker."""
     win = _FakeWindow()
 
     def dying_emit(*_a):
@@ -655,10 +643,9 @@ class _FakeGamesWindow:  # pylint: disable=too-few-public-methods
 
 
 def test_refresh_detected_games_passes_a_timeout(monkeypatch):
-    """The except clause in refresh_detected_games already caught
-    SubprocessError before the CLAUDE.md item-14 fix — timeout= itself
-    is the only thing that actually changed, so this pins that directly
-    rather than exercising the (already-covered) recovery path."""
+    """Pins timeout= itself: the except clause already handles
+    SubprocessError (TimeoutExpired included), so only a missing
+    timeout could hang the scan."""
     win = _FakeGamesWindow()
     monkeypatch.setattr(
         control_center.threading, "Thread", _sync_thread_factory()
@@ -679,13 +666,10 @@ def test_refresh_detected_games_passes_a_timeout(monkeypatch):
 
 
 def test_refresh_detected_games_passes_errors_replace(monkeypatch):
-    """Regression: journalctl output was decoded with subprocess's default
-    strict UTF-8 handling, unlike journal.py's own journalctl calls (which
-    already use errors="replace" because a MESSAGE field with an embedded
-    newline flips journalctl's export format to binary-safe encoding, not
-    guaranteed valid UTF-8) -- an undecodable byte here raised
-    UnicodeDecodeError uncaught by the except (SubprocessError, OSError)
-    clause, silently killing the daemon thread."""
+    """Regression: journalctl output was decoded as strict UTF-8, so one
+    undecodable byte in the journal raised UnicodeDecodeError, which the
+    except (SubprocessError, OSError) clause doesn't catch: the thread
+    died silently. journal.py's own calls use errors="replace" too."""
     win = _FakeGamesWindow()
     monkeypatch.setattr(
         control_center.threading, "Thread", _sync_thread_factory()
@@ -707,10 +691,8 @@ def test_refresh_detected_games_passes_errors_replace(monkeypatch):
 
 def test_refresh_detected_games_skips_scan_while_busy(monkeypatch):
     """Regression: a second click while a scan is in flight must not
-    start a new one — the previous, unguarded version let two scans
-    overlap, and whichever journalctl call finished last would silently
-    overwrite the other's (possibly fresher) result (CLAUDE.md checklist
-    item 17; code-review finding, 2026-08-27)."""
+    start a new one: two overlapping scans would let whichever finished
+    last overwrite the other's (possibly fresher) result."""
     win = _FakeGamesWindow()
     win._scan_games_busy = True
     started = []
@@ -773,8 +755,7 @@ def test_load_logs_skips_while_already_busy(monkeypatch):
     Diagnostics tab (re-)selection — without this guard, switching away
     and back while a fetch is still in flight starts a second worker, and
     whichever thread's logs_ready lands last silently overwrites the
-    other's result (same class of guard as _scan_games_busy/
-    _service_status_busy, CLAUDE.md checklist item 17)."""
+    other's result (same guard as _scan_games_busy/_service_status_busy)."""
     win = _FakeLogsWindow()
     win._logs_busy = True
     started = []
@@ -821,11 +802,9 @@ class _FakeTimer:  # pylint: disable=too-few-public-methods
 
 
 def test_schedule_log_filter_starts_the_debounce_timer():
-    """Regression: textChanged used to call _apply_log_filter directly,
-    re-rendering the whole log view (clear + one QTextEdit.append() per
-    surviving line) on every keystroke - a real stutter with hours/days
-    of accumulated journal lines. It must now (re)start a single-shot
-    timer instead of rendering immediately on every character typed."""
+    """Regression: rendering the whole log view on every keystroke
+    stutters with days of journal lines. Typing must (re)start a
+    single-shot timer instead of rendering at once."""
     win = SimpleNamespace(_log_filter_timer=_FakeTimer())
 
     control_center.SDYControlCenter._schedule_log_filter(win)
@@ -894,9 +873,8 @@ def test_show_completion_message_refreshes_stale_ssot_cache_on_success(
     read (restore.py runs as a separate pkexec'd process, so it can't
     invalidate Control Center's in-process cache itself). Priming the
     cache with the pre-restore value, then changing the file on disk
-    without calling clear_ssot_cache(), reproduces exactly what a restore
-    leaves behind - the old code kept self.conf_root pointed at the
-    stale directory until the app restarted."""
+    without calling clear_ssot_cache(), reproduces what a restore
+    leaves behind: self.conf_root must move to the new directory."""
     calls = []
     monkeypatch.setattr(
         control_center, "QMessageBox", _FakeMessageBox(calls)

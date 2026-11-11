@@ -1,9 +1,8 @@
-"""Regression tests for control_center.py's closeEvent — whether a failed
-save (YAMLError/OSError inside _atomic_save) still lets the window close
-and silently discard the edit.
+"""Regression tests for control_center.py's closeEvent: a failed save
+must keep the window open instead of silently discarding the edit.
 
-Split out of test_control_center.py (which was already at the pylint
-too-many-lines ceiling) rather than trimming other tests to make room."""
+Split out of test_control_center.py, which is at pylint's
+too-many-lines limit."""
 
 import control_center
 from test_control_center import _FakeEditor
@@ -114,12 +113,10 @@ def test_close_event_save_success_accepts_and_clears_dirty(monkeypatch):
 
 
 def test_close_event_save_failure_keeps_window_open(monkeypatch):
-    """Regression: _atomic_save swallows YAMLError/OSError internally and
-    gives closeEvent no success signal, so closeEvent used to call
-    event.accept() unconditionally right after the save loop -- a failed
-    save (e.g. a YAML syntax error introduced right before closing) was
-    silently treated like Discard instead of keeping the edit alive for
-    another try (found via the third full-file review pass, 2026-09-03)."""
+    """Regression: _atomic_save reports its own errors and returns nothing,
+    so closeEvent must check the document's modified flag after saving. A
+    failed save (e.g. a YAML syntax error typed just before closing) was
+    treated like Discard instead of keeping the edit for another try."""
     monkeypatch.setattr(
         control_center,
         "QMessageBox",

@@ -111,15 +111,10 @@ def test_select_persists_state_even_when_dispatch_fails(
 
 
 def test_select_logs_when_write_atomic_fails(monkeypatch, tmp_path):
-    """Regression: write_atomic() used to be void, so a persist failure
-    (symlink/FIFO at the tmp path, a failed rename) was invisible to
-    select() -- the DISPATCH_FAILED log's "state persisted" claim could
-    be a lie. Now logs NEXT_SESSION_WRITE_FAILED separately when the
-    write itself didn't land (found via a third full-file review pass,
-    2026-09-03). Patched at the utils level since 2026-09-16, when the
-    write-or-log shape moved into utils.persist_next_session(): this
-    still exercises select() -> the real helper -> the failure log,
-    not just the helper in isolation."""
+    """Regression: a failed persist (refused tmp path, failed rename) must
+    log NEXT_SESSION_WRITE_FAILED, or DISPATCH_FAILED's "state persisted"
+    would be false. Patched at the utils level, but run through select()
+    -> the real utils.persist_next_session() -> the failure log."""
     monkeypatch.setattr(
         session_select.sys, "argv", ["session_select.py", "steam"]
     )
@@ -166,7 +161,7 @@ def test_dispatch_switch_fails_when_the_helper_exits_with_an_error(
     """Regression: spawn_native only reports whether the helper STARTED.
     After a compositor update renamed its quit action, the helper exited
     at once with an error, and select() still saw success — 18 switch
-    requests did nothing and logged nothing (2026-11-09, Umbriel)."""
+    requests in a row did nothing and logged nothing."""
     _bin_dbus_is(monkeypatch, "/bin/false")
 
     assert session_select._dispatch_switch("steam") is False

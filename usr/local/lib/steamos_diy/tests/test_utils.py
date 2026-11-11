@@ -1,18 +1,14 @@
 """Tests for utils.py's SSoT numeric-value guard and the self-update path.
 
-get_ssot_num() is what stands between a hand-edited SSoT typo and an
-unguarded ValueError aborting the session boot (the exact failure mode
-2.1.1 fixed: a malformed VALIDATION_TIMEOUT crashed run() before the
-session launched, and systemd's Restart=on-failure looped until the
-start-limit tripped — black TTY, no diagnostic). This pins the
-degrade-to-default contract every timing parameter in the SSoT relies
-on.
+get_ssot_num() stands between a hand-edited SSoT typo and a ValueError
+aborting the session boot (a malformed VALIDATION_TIMEOUT once did:
+restart loop, then a black TTY). This pins the degrade-to-default
+contract every timing value relies on.
 
-The download_release()/check_latest_release() coverage below targets
-CLAUDE.md's own highest-priority supply-chain concern: the update path
-fetches and unpacks a GitHub release tarball with elevated privileges
-downstream (install.sh runs as root), so its HTTPS-only guardrail and
-extraction behavior are worth pinning even without full network mocking."""
+The download_release()/check_latest_release() tests cover the update
+path: it fetches and unpacks a release tarball whose install.sh then
+runs as root, so its HTTPS-only rule, checksum check and extraction
+are pinned with a faked network."""
 
 import hashlib
 import io
@@ -56,8 +52,8 @@ def test_get_ssot_var_survives_a_line_the_os_rejects(tmp_path, monkeypatch):
     update(), which raises on an entry the OS refuses as an environment
     variable — a line starting with "=" (empty name) or one holding a NUL
     byte. That escaped every get_ssot_var() caller, session_launch.py
-    included: one stray character crash-looped the session at boot
-    (2026-11-09 audit). The rest of the file must still load."""
+    included: one stray character crash-looped the session at boot.
+    The rest of the file must still load."""
     conf_path = tmp_path / "steamos_diy.conf"
     conf_path.write_text("=oops\nbin_gs=/usr/bin/a\x00b\nTERM_TIMEOUT=7.5\n")
     monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
@@ -97,8 +93,7 @@ def test_get_ssot_var_survives_non_utf8_conf_file(tmp_path, monkeypatch):
     (both already catch UnicodeDecodeError too). Since get_ssot_var is
     called from virtually every module (including jlog() itself), a
     hand-edited SSoT conf saved with a non-UTF-8 byte would crash the
-    very first get_ssot_var() call anywhere instead of degrading (found
-    via the second full-file review pass, 2026-09-02)."""
+    very first get_ssot_var() call anywhere instead of degrading."""
     conf_path = tmp_path / "steamos_diy.conf"
     conf_path.write_bytes(b"\xff\xfe not valid utf-8\n")
     monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
@@ -188,7 +183,7 @@ def test_get_backup_mapping_degrades_when_user_config_has_no_dirname(
     resolves to the process's CURRENT WORKING DIRECTORY, silently
     widening the privileged (root, under pkexec) restore write allow-list
     to an unpredictable cwd instead of degrading to the default config
-    dir (found via the second full-file review pass, 2026-09-02)."""
+    dir."""
     set_ssot(user_config="config.yaml")
     home = tmp_path / "home"
 
@@ -308,10 +303,8 @@ def test_release_from_api_ignores_malformed_assets_list():
 
 
 # ---------------------------------------------------------------------------
-# check_latest_release — the network wrapper around _release_from_api.
-# Found at 0% coverage by scripts/audit-coverage-critical.py: only
-# _release_from_api's own pure-parsing logic was tested directly, never
-# this function's _https_open/json.load/exception-handling around it.
+# check_latest_release — the network wrapper around _release_from_api
+# (_https_open, json.load and the exception handling around them).
 # ---------------------------------------------------------------------------
 
 
@@ -454,7 +447,7 @@ def test_download_release_checksum_mismatch_preserves_stale_cache(
 ):
     """Regression: pruning must happen only after checksum verification —
     a corrupted/mismatched download must not cost the last known-good
-    previously-cached release (code-review finding, 2026-08-27)."""
+    previously-cached release."""
     stale = tmp_path / "v1.0.0"
     stale.mkdir()
     (stale / "marker").write_text("stale")
@@ -553,7 +546,7 @@ def test_download_release_missing_install_sh_preserves_stale_cache(
     """Regression: pruning must happen only after install.sh is confirmed
     present, not merely after checksum verification — a checksum-valid
     but malformed release must not cost the last known-good previously
-    cached release either (code-review finding, 2026-08-27)."""
+    cached release either."""
     stale = tmp_path / "v1.0.0"
     stale.mkdir()
     (stale / "marker").write_text("stale")
@@ -609,8 +602,8 @@ def test_verify_file_sha256_accepts_untampered_file(tmp_path):
 
 def test_verify_file_sha256_rejects_tampered_file(tmp_path):
     """Regression: a file swapped after the original hash was taken must
-    fail verification, not silently pass — this is what closes the
-    TOCTOU window between download-time checksum and pkexec execution."""
+    fail verification, not silently pass — this is what narrows the
+    TOCTOU window between the download-time checksum and pkexec."""
     target = tmp_path / "install.sh"
     target.write_bytes(b"#!/bin/bash\necho hi\n")
     original_digest = hashlib.sha256(b"#!/bin/bash\necho hi\n").hexdigest()
@@ -692,10 +685,9 @@ def test_download_verified_tarball_returns_none_on_network_error(
 def test_default_games_conf_dir_under_user_config_home(monkeypatch, tmp_path):
     """Pins the shared fallback sdy.py and control_center.py must agree on.
 
-    sdy.py used to hardcode an unrelated, never-created "/etc/steamos_diy/
-    games.d" as its own fallback — a dead path that would silently
-    diverge from where control_center.py actually saves per-game
-    profiles if the SSoT's games_conf_dir key were ever unset.
+    sdy.py once fell back to a never-created "/etc/steamos_diy/games.d",
+    not where control_center.py saves profiles, whenever the SSoT's
+    games_conf_dir was unset.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
     assert utils.default_games_conf_dir() == tmp_path / (
@@ -704,9 +696,8 @@ def test_default_games_conf_dir_under_user_config_home(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# fix_ownership — subprocess timeout discipline (CLAUDE.md review checklist
-# item 14): a wedged `chown -R` must be logged and swallowed, not left to
-# hang backup/restore indefinitely.
+# fix_ownership — a wedged `chown -R` must time out, be logged and be
+# swallowed, not hang backup/restore indefinitely.
 # ---------------------------------------------------------------------------
 
 
@@ -731,18 +722,15 @@ def test_fix_ownership_swallows_timeout(monkeypatch, tmp_path):
 
 
 def test_write_atomic_returns_true_on_success(monkeypatch, tmp_path):
-    """Regression: c_write_atomic used to be void, so write_atomic() gave
-    callers no way to learn a write failed (symlink/FIFO refused at
-    tmp_path, a short write, a failed rename) short of grepping syslog.
-    Now forwards the C-side int return as bool (found via a third
-    full-file review pass, 2026-09-03).
+    """Regression: write_atomic() must forward c_write_atomic's int result
+    as bool, so callers learn a write failed (refused tmp path, short
+    write, failed rename) without grepping syslog.
 
-    Swaps the whole utils._LIB (a module attribute) rather than patching
-    c_write_atomic on conftest's shared MagicMock: since pytest 9.x,
-    monkeypatch only restores attributes found in the target's __dict__,
-    and a MagicMock child lives elsewhere — so undo() DELETED it, and the
-    next test patching it failed with AttributeError (found 2026-11-09,
-    pytest 9.2.0)."""
+    Swaps the whole utils._LIB instead of patching c_write_atomic on
+    conftest's shared MagicMock: since pytest 9, monkeypatch only restores
+    attributes found in the target's __dict__, and a MagicMock child lives
+    elsewhere, so undo() deleted it and the next test patching it failed
+    with AttributeError."""
     monkeypatch.setattr(
         utils, "_LIB", SimpleNamespace(c_write_atomic=lambda *_a: 1)
     )
@@ -816,9 +804,8 @@ def test_verify_archive_rejects_a_bad_gzip_checksum(tmp_path):
     the end-of-archive marker without ever reaching the gzip trailer — so
     the CRC32 was never checked, and content corruption that left the tar
     structure readable passed as "verified" (357/400 single-bit flips of
-    a realistic archive, 2026-11-09 audit). Flipping the stored CRC is
-    the minimal case: every member still reads fine, only the checksum
-    disagrees."""
+    a realistic archive). Flipping the stored CRC is the minimal case:
+    every member still reads fine, only the checksum disagrees."""
     archive = tmp_path / "crc.tar.gz"
     _write_backup_like_archive(archive)
     raw = bytearray(archive.read_bytes())
@@ -859,7 +846,7 @@ def test_load_yaml_safe_warns_when_it_drops_a_file(
     """Regression: these were logged at DEBUG, below the default
     LOG_LEVEL=INFO — a syntax error in config.yaml silently produced a
     default session with nothing in the journal, while the milder
-    YAML_NOT_MAPPING case warned (2026-11-09 audit)."""
+    YAML_NOT_MAPPING case warned."""
     logged = []
     monkeypatch.setattr(
         utils,

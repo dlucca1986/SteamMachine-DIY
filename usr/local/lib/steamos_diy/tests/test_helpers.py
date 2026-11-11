@@ -2,15 +2,11 @@
 
 Covers two independent things:
 
-1. The ImportError/SystemExit fallback shared by all 5 shims. utils.py's
-   own module-level C-Core load failure raises SystemExit(127), not
-   ImportError -- previously invisible to each shim's `except
-   ImportError` handler, so a missing/broken libcore.so (e.g.
-   mid-upgrade, a corrupted install) made every "self-sufficient" shim
-   exit 127 instead of its documented fallback code (0 or 7), confusing
-   Steam's own update UI instead of letting it treat the call as
-   simulated/up-to-date. steamos-update.py is exercised here as the
-   representative case per KISS/rule-of-three.
+1. The ImportError/SystemExit fallback shared by all 5 shims. A failed
+   C-Core load in utils.py raises SystemExit(127), not ImportError: with
+   only `except ImportError`, a broken libcore.so made every shim exit
+   127 instead of its fallback code (0 or 7). steamos-update.py stands
+   in for all five (scripts check that they share the template).
 
 2. steamos-select-branch.py's -c/-l stdout contract (see the dedicated
    comment block below)."""
@@ -47,12 +43,10 @@ def test_steamos_update_shim_falls_back_when_utils_load_fails(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# steamos-select-branch.py -c/-l — Steam reads these from stdout to
-# populate its (inapplicable-here) update-channel UI; confirmed live
-# 2026-09-16 that Steam calls -c on every normal game launch, not just a
-# rarely-visited settings page, so an empty answer was hit constantly, not
-# hypothetically. -c/-l get a plain "stable" on stdout; an actual branch-
-# switch request (any other argv) keeps logging only, no stdout output.
+# steamos-select-branch.py -c/-l — Steam reads the answer from stdout for
+# its update-channel UI, and runs -c at every Game Mode start. -c/-l get a
+# plain "stable" on stdout; a branch-switch request (any other argv) is
+# only logged, nothing on stdout.
 # ---------------------------------------------------------------------------
 
 _SELECT_BRANCH = _HELPERS_DIR / "steamos-select-branch.py"
