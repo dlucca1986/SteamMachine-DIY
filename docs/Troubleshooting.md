@@ -26,8 +26,8 @@ syslog message's `_SYSTEMD_UNIT` from the sender's *current* cgroup at send time
 `CORE`/`STEAM`/`SYSTEM` line ends up filed under that session scope, not under
 `steamos_diy.service`. Only systemd's own service-lifecycle lines (Started/Stopped, exit
 codes — emitted by systemd itself, not the child process) show up under `-u`. Always use
-`-t <tag>` (section 3 below) to see actual application log content; confirmed by inspecting
-a live entry's fields with `journalctl -t CORE -o verbose`.
+`-t <tag>` (section 3 below) to see actual application log content; gamescope's own output is
+under `-t python3`.
 
 ---
 
@@ -68,7 +68,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `CORE` | `BAD_LAUNCH_ARGV: <error>` | ERROR | The command line itself was malformed (e.g. an embedded null byte from a hand-edited config value) — the process was never even spawned. |
 | `CORE` | `SIG_<N>: Shutting down...` | INFO | `SIGTERM`/`SIGINT` received — clean shutdown in progress, not a crash. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
-| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; the desktop shutdown command — `bin_dbus`, or `desktop_shutdown_cmd` where configured — towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk, so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
+| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; `qdbus6 org.kde.Shutdown /Shutdown logout` via `bin_dbus` towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk, so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
 | `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted both from a post-crash Desktop-recovery write and from a switch request's own persist step. |
 
 ### Game launch (`sdy.py`)
@@ -171,11 +171,15 @@ These scripts stand in for real `steamos-*`/`jupiter-*` system tools Steam calls
 
 ### C-Core (`steamos_diy_core.c`)
 
-One message is logged directly by the C library, not through Python's `jlog()` — it has no `CORE`/`STEAM`/`SYSTEM` tag prefix, so it won't match a `journalctl -t` filter; grep for the function name instead.
+`c_write_atomic` (behind `write_atomic()`: the session state file and Control Center saves) logs its failures directly from C, not through `jlog()`. They appear under the identifier of the last `jlog()` call in that process (often `CORE`), or `python3` if there was none — search for the function name: `journalctl --since today | grep c_write_atomic`.
 
 | Message | Level | Meaning |
 | :--- | :--- | :--- |
-| `c_write_atomic: rename <tmp> -> <path>: <errno message>` | `LOG_ERR` | The final atomic `rename()` step of a privileged config write failed — the write did not land; the target file still holds its previous content. |
+| `c_write_atomic: open <tmp>: <errno message>` | `LOG_WARNING` | The temporary file couldn't be created. `Too many levels of symbolic links` means a symlink sat at the temporary path and was refused. Nothing was written. |
+| `c_write_atomic: refusing non-regular tmp path <tmp>` | `LOG_WARNING` | Something other than a plain file (e.g. a FIFO) sat at the temporary path — refused, nothing written. |
+| `c_write_atomic: write <tmp>: <errno message>` / `short write <tmp>` | `LOG_WARNING` | Writing the temporary file failed or was incomplete (e.g. disk full) — the target is untouched. |
+| `c_write_atomic: fdatasync <tmp>: <errno message>` | `LOG_WARNING` | The flush to disk reported an error; the write still went ahead. Repeated, it can point at failing storage. |
+| `c_write_atomic: rename <tmp> -> <path>: <errno message>` | `LOG_ERR` | The final atomic `rename()` failed — the write did not land; the target still holds its previous content. |
 
 ---
 
@@ -213,7 +217,7 @@ Backup and Restore each guard against a double-click, and if a `pkexec` call for
 ---
 
 ## 💡 5. Diagnostic Aliases (Terminal Power-User)
-Add these to your `~/.bashrc` to control the architecture. These commands interact directly with the **Journal** and the **Next Session logic**.
+Optional shortcuts for `~/.bashrc`.
 
 ```
 # =============================================================================
@@ -221,10 +225,10 @@ Add these to your `~/.bashrc` to control the architecture. These commands intera
 # =============================================================================
 
 # --- 📝 JOURNAL MONITORING ---
-# Service lifecycle logs (session start/stop/restart — use -t CORE -t STEAM -t SYSTEM for application logs)
-alias sdy-logs='journalctl -u steamos_diy.service -f -n 100'
+# Follow the project's logs
+alias sdy-logs='journalctl -t CORE -t STEAM -t SYSTEM -f -n 100'
 
-# Display only critical errors recorded by the service (must use -t, not -u — see section 1)
+# Errors only (must use -t, not -u — see section 1)
 alias sdy-errors='journalctl -t CORE -t STEAM -t SYSTEM --priority=3'
 
 # --- 🚀 SESSION MANAGEMENT ---

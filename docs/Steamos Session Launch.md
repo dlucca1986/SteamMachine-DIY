@@ -37,23 +37,23 @@ The session target is persisted to `/var/lib/steamos_diy/next_session` via `writ
 Gamescope is launched with two hardcoded flags, followed by the user-defined YAML flags, and finally the Steam process after `--`:
 
 ```python
-gs_args = [gs_bin, "-e", "-f"]          # hardcoded: embedded + fullscreen
+gs_args = [gs_bin, "-e", "-f"]          # hardcoded: Steam integration + fullscreen
 apply_env_map(GAME_MODE_ENV)            # session capabilities (see below)
 apply_env_map(cfg.get("env_vars"))      # user env_vars — applied last, win
 # ... flags from config.yaml appended here ...
 gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
 ```
 
-* **`-e`**: Runs Gamescope in embedded mode, integrating with the existing DRM/KMS session rather than creating a new display server.
+* **`-e`** (`--steam`): Enables gamescope's Steam integration (overlay and Steam-driven features).
 * **`-f`**: Forces fullscreen output.
 * **`-gamepadui`**: Launches Steam in Big Picture / Gamepad UI mode — the controller-friendly interface optimised for TV/couch use.
-* **`-steamos3`**: Activates SteamOS-specific features, including system update channels and controller mapping.
+* **`-steamos3`**: Tells Steam it runs on SteamOS 3, enabling the SteamOS-only parts of Game Mode.
 * **`-steamdeck`**: Unlocks the full Quick Access side menu and its live controls (scaling, frame limit, etc.). Additive to `-gamepadui`, not a replacement.
 
 ---
 
 ## 🧩 Session Capabilities (`GAME_MODE_ENV`)
-Before the user's `env_vars`, the launcher applies a fixed map of **compositor/Mesa capabilities** so Steam's Game Mode exposes the matching Quick Access controls on **any GPU**. The user never needs to set these:
+Before the user's `env_vars`, the launcher applies a fixed map of **session variables**: most make Steam's Game Mode expose the matching Quick Access controls on **any GPU**, the rest are session tweaks. The user never needs to set these:
 
 | Capability env | Steam control unlocked |
 | :--- | :--- |
@@ -74,7 +74,7 @@ These are **panel-independent** — the control is always safe to expose; only i
 ---
 
 ## ⚙️ Post-Start Hook
-After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **daemon thread** is started that sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then fires each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by the time the delay elapses, in which case the commands are skipped entirely instead of firing for a session that already failed over (see Watchdog & Recovery below). `POST_START_DELAY` and `VALIDATION_TIMEOUT` are independently configurable SSoT values with no enforced ordering between them — the crash-skip check, not a fixed timing guarantee, is what keeps a failed session from still firing its post-start commands even on a hand-edited config where the delay happens to exceed the timeout.
+After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **background thread** sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then runs each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by then, in which case the commands are skipped (see Watchdog & Recovery below). This check, not the relation between `POST_START_DELAY` and `VALIDATION_TIMEOUT` (independent settings), is what keeps a failed session from running them.
 
 This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
 
@@ -86,7 +86,7 @@ This mechanism is designed for runtime calls that require the Gamescope socket t
 The supervisor uses an event-driven mechanism to monitor process health and prevent boot loops.
 
 * **Process monitoring**: Uses `proc.wait()` instead of a polling loop. If the session exits before `VALIDATION_TIMEOUT` elapses, it is treated as a crash.
-* **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration. Default is `5.0s`; lower values (e.g. `3.0s`) suit fast NVMe storage.
+* **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration (default `5.0s`): how long a session must stay up after starting to count as stable.
 * **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. Termination sends `SIGTERM` and waits up to `TERM_TIMEOUT` seconds (SSoT, default `5`); if the process doesn't exit, `SIGKILL` is sent.
 
 ## 🔌 Signal Handling & Exit Codes

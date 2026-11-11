@@ -22,20 +22,20 @@
 * **Compatibility Shims**: Redirects SteamOS-specific system calls (e.g., updates, BIOS) to DIY logic, ensuring UI stability.
 * **Dynamic Parameter Mapping**: Maps YAML configuration flags directly to Gamescope command-line arguments without modifying source code.
 * **Game Wrapper (`sdy`)**: Intercepts game launches to apply per-game YAML profiles, environment variables, and wrappers (MangoHud, GameMode).
-* **Zero-DM Boot**: Eliminates SDDM/plasmalogin overhead by running the session manager as a high-priority systemd service on TTY1.
+* **Zero-DM Boot**: No display manager (SDDM/plasmalogin): the session launcher runs as a systemd service on TTY1.
 * **Control Center**: PyQt6 dashboard for system management, log analysis, and profile editing.
 
 ## 🛡️ Design Principles
 * **Standard Hierarchy**: Logic resides in `/usr/local/lib/steamos_diy/`, preserving host system integrity.
 * **User-Agnostic**: Dynamically detects UIDs and environment paths.
-* **Full Reversibility**: Includes an automated uninstaller to restore the original system state.
+* **Reversible**: An uninstaller removes the project's files and restores the original boot chain.
 
 ## 🛠️ Hardware Support
 * **AMD**: RADV (Mesa).
 * **Intel**: ANV (Mesa).
 * **NVIDIA**:
-    * **Open Source Drivers (NVK/Nouveau)**: Supported via Mesa. The installer detects the active driver and deploys `mesa` + `lib32-mesa`.
-    * **Proprietary Drivers**: **Supported.** When the `nvidia` kernel module is detected, the installer deploys `nvidia-utils` + `lib32-nvidia-utils`.
+    * **Open Source Drivers (NVK/Nouveau)**: Supported via Mesa: without the `nvidia` package installed, the installer deploys `mesa` + `lib32-mesa`.
+    * **Proprietary Drivers**: **Supported.** When the `nvidia` package is installed, the installer deploys `nvidia-utils` + `lib32-nvidia-utils`.
 
 > [!IMPORTANT]
 > **NVIDIA Proprietary Drivers & Gamescope**:

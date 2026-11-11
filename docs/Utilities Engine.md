@@ -30,12 +30,12 @@ The target file is never left in a partial state, even after a sudden power loss
 
 `get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising an unguarded `ValueError` that would otherwise abort the session boot loop.
 
-`clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but a long-lived tool — the Control Center doctor (`health.run_preflight`) — must re-validate the *current* on-disk config after the user edits it, instead of seeing stale cached values.
+`clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but the long-lived Control Center must see the *current* file: its **Validate Configuration** check (`health.run_preflight`) and the reload after a restore both clear the cache first.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
 `load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` on any error (missing file, parse error) and on a valid document whose root is not a mapping — callers do `cfg.get(...)` on the result, so a list/scalar root is degraded to empty and logged as `YAML_NOT_MAPPING` (WARN). Never raises.
 
-`apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are silently ignored.
+`apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are ignored; an entry the OS refuses as an environment variable (a name with `=`, an empty name, a NUL byte) is skipped with a `BAD_ENV_ENTRY` warning.
 
 ### 4. Session State (`read_session_target`)
 `read_session_target(path, default="steam")` opens `path`, reads the first line and runs it through `_strip_quotes`. Returns the cleaned string, or `default` if the file is missing or unreadable.
@@ -46,7 +46,7 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 * `USER_CONFIG_REL` — relative path of the user-config directory (`".config/steamos_diy"`). Also reused by `control_center.py`.
 * `BACKUP_MANIFEST_NAME` — name of the embedded links manifest (`"links.txt"`), a plain-data list of `link<TAB>target` rows.
 * `BACKUP_SCRIPT_NAME` — name of the link-recreation script (`"restore_links.sh"`) embedded by pre-manifest releases. Kept only so restore can recognise the entry in old archives; new backups never write it.
-* `get_backup_mapping(home)` — returns the `{archive_path: filesystem_path}` dict. Adding a new entry here propagates simultaneously to backup (where to read from) and restore (where to write to); they can never disagree about the archive layout.
+* `get_backup_mapping(home)` — returns the `{archive_path: filesystem_path}` dict, read by backup (where to read from) and restore (where to write to). Restore matches archive entries against it with its own logic, so a new entry must be exercised on both sides (the tests round-trip every entry).
 
 ---
 

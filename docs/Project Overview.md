@@ -12,7 +12,7 @@ System requirements, main features, and the packages involved.
     * **AMD**: RADV — Recommended
     * **Intel**: ANV
     * **NVIDIA (NVK/Nouveau)**: Mesa open-source Vulkan ICD
-    * **NVIDIA (Proprietary)**: `nvidia-utils` deployed automatically if the `nvidia` module is detected
+    * **NVIDIA (Proprietary)**: `nvidia-utils` deployed automatically if the `nvidia` package is installed
 * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
 * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 
@@ -34,7 +34,7 @@ Replaces traditional Display Managers (SDDM/plasmalogin) to eliminate session co
 #### 2. Session Management
 Session state is persisted to `/var/lib/steamos_diy/next_session` via [atomic writes](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine), ensuring the file is never partially written after a power loss.
 
-* **Crash Recovery**: The launcher monitors sessions via `proc.wait()`. If a session exits before `VALIDATION_TIMEOUT` (default: 5s), the system boots to Desktop to prevent a soft-lock loop.
+* **Crash Recovery**: If a session exits before `VALIDATION_TIMEOUT` (default: 5s), the next session started is Desktop, so a broken Game Mode can't trap you in a restart loop.
 
 #### 3. Dynamic Parameter Mapping
 Acts as a bridge between user configuration and the compositor:

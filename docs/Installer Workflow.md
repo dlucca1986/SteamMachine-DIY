@@ -7,13 +7,10 @@ What `install.sh` does, stage by stage.
 
 ## ✅ Precondition Check
 Before touching anything, the installer verifies `qdbus6` and `startplasma-wayland` are
-already on `$PATH` — this project augments an existing **KDE Plasma 6 (Wayland)** install
-with a Zero-DM gamescope-first boot path, it does not install Plasma itself (a full desktop
-environment is out of scope for what this installer silently pulls in, unlike the small
-standalone `kate`/`konsole`/`xdg-utils` packages below). Missing either one aborts immediately with a
-clear error instead of completing silently — the installer goes on to disable SDDM/plasmalogin
-and mask `getty@tty1`, so discovering a missing Desktop Mode binary only on first boot would leave
-no obvious way back to a working desktop. Install Plasma (`qt6-tools` + `plasma-workspace`,
+on `$PATH`: it adds a gamescope-first boot to an existing **KDE Plasma 6 (Wayland)** install
+and does not install Plasma itself. If either is missing it stops with an error — the later
+steps disable SDDM/plasmalogin and mask `getty@tty1`, so without Plasma the first boot would
+have no working desktop to fall back to. Install Plasma (`qt6-tools` + `plasma-workspace`,
 or the full `plasma` group) first if this check fails.
 
 ---
@@ -25,8 +22,8 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 
 * **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `intel-media-driver`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`. For VAAPI, 64-bit processes pick the maintained `intel-media-driver` (iHD) automatically; the legacy `libva-intel-driver` (i965) covers pre-Gen8 GPUs and 32-bit processes.
 * **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `mesa`, `lib32-mesa` (VAAPI is built into `mesa` since 1:24.2.7).
-* **NVIDIA (Proprietary):** If the `nvidia` kernel module package is already installed, installs `nvidia-utils`, `lib32-nvidia-utils`.
-* **NVIDIA (NVK/Nouveau):** If no proprietary driver is detected, installs `mesa`, `lib32-mesa` for the open-source Vulkan ICD.
+* **NVIDIA (Proprietary):** If the `nvidia` package is already installed, installs `nvidia-utils`, `lib32-nvidia-utils`.
+* **NVIDIA (NVK/Nouveau):** Otherwise, installs `mesa`, `lib32-mesa` for the open-source Vulkan ICD.
 * **Unrecognized GPU:** If no known vendor is detected, driver-specific packages are skipped and a warning is printed. The base stack is still installed.
 
 ### 2. Dependency & Privilege Management

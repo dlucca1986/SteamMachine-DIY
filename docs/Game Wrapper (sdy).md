@@ -43,9 +43,9 @@ if extra:
 os.execvpe(full_cmd[0], full_cmd, os.environ)
 ```
 
-**YAML Resilience**: If a profile YAML is missing or unparseable, `load_yaml_safe` returns `{}` — no exception is raised, so the game still launches using only the global `config.yaml` values. The failure is logged (`YAML_LOAD_ERROR`/`YAML_PARSE_ERROR`, tag `CORE`, level `DEBUG`), just invisible at the default `LOG_LEVEL=INFO` — set `LOG_LEVEL=DEBUG` in the SSoT to see it.
+**YAML Resilience**: If a profile YAML is missing or unparseable, `load_yaml_safe` returns `{}` — no exception is raised, so the game still launches using only the global `config.yaml` values. An unparseable file is logged as `YAML_PARSE_ERROR` (or `YAML_LOAD_ERROR` if it can't be read), tag `CORE`, level `WARN`.
 
-**Malformed Overrides**: `_safe_split` wraps `shlex.split` — an unbalanced quote in a hand-edited `GAME_WRAPPER`/`GAME_EXTRA_ARGS` (e.g. `mangohud "unterminated`) no longer aborts the launch with an unhandled exception; it falls back to a plain whitespace split and logs `BAD_GAME_WRAPPER`/`BAD_GAME_EXTRA_ARGS` at `WARN` instead.
+**Malformed Overrides**: `_safe_split` wraps `shlex.split` — an unbalanced quote in a hand-edited `GAME_WRAPPER`/`GAME_EXTRA_ARGS` (e.g. `mangohud "unterminated`) doesn't abort the launch: it falls back to a plain whitespace split and logs `BAD_GAME_WRAPPER`/`BAD_GAME_EXTRA_ARGS` at `WARN`.
 
 ---
 

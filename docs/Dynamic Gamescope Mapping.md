@@ -30,13 +30,19 @@ This is a **YAML List** that defines how Gamescope should render the session.
 > [!NOTE]
 > When `--mangoapp` is active, the overlay reads its configuration from `~/.config/MangoHud/presets.conf` — **not** `MangoHud.conf`, which only applies when `mangohud` is used as a per-game `GAME_WRAPPER`. Create `presets.conf` manually to customise the overlay; if you use both modes, keep the two files in sync.
 
-#### ⚠️ Essential Syntax Rule
-In YAML, parameters and values must be enclosed in the **same set of quotes** to be parsed correctly by the launcher.
-* ✅ **Correct**: `- "-F fsr"`
-* ❌ **Wrong**: `- -F fsr` (missing quotes), `- "-F" "fsr"` (split into two items), `- "-Ffsr"` (missing space between flag and value)
+#### ⚠️ Syntax
+Each list item is split like a shell command line and the pieces are passed to gamescope in order. Writing a flag and its value in one item (`- "-F fsr"`) is the clearest form, but `- -F fsr` (no quotes), `- "-Ffsr"`, `- "--sharpness=5"` and `"-F"`/`"fsr"` as two separate items work too.
+
+What actually breaks:
+* ❌ `- "-F" "fsr"` — two quoted strings in one item is invalid YAML: the **whole file** is ignored (no flags, `env_vars` or `post_start_cmds`), logged as `YAML_PARSE_ERROR`.
+* ❌ A TAB used for indentation — also invalid YAML, same result.
+* ❌ A misspelled flag (`--sharpnes 5`) — gamescope refuses to start and the session falls back to Desktop.
+* ❌ `flags: "-W 1280 -H 720"` — a string instead of a list: all flags are ignored.
+
+**Maintenance → Validate Configuration** in the Control Center reports all four.
 
 ### 3. Post-Start Commands (`post_start_cmds`)
-This is a **YAML List** of shell commands executed once after Gamescope has started, in a background thread. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
+This is a **YAML List** of commands run once after Gamescope has started, in a background thread. Each is split like a shell command line, but no shell runs it: pipes, redirects and `$VARIABLES` don't work. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
 
 Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay ensures the Gamescope socket is ready before the commands are executed. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
 

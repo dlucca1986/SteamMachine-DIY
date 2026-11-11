@@ -15,7 +15,7 @@ The system bypasses traditional login managers to initialize the graphical envir
 4.  **Session Execution**:
     *   **Gaming Mode**: Generates Gamescope parameters ➔ Spawns Steam ➔ Activates Watchdog.
     *   **Desktop Mode**: Spawns a native KDE Plasma session.
-5.  **Session Transition**: `session_select.py` updates the state file and sends a termination signal to the active session. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
+5.  **Session Transition**: `session_select.py` updates the state file and asks the active session to quit. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
 
 ---
 
@@ -31,13 +31,13 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 
 ### Environment & Recovery
 *   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>`, `XDG_SESSION_TYPE=wayland`, `SSOT_CONF=/etc/default/steamos_diy.conf`, and `XDG_DESKTOP_PORTAL_DIR=/usr/share/xdg-desktop-portal/portals` explicitly, ensuring Gamescope, Wayland clients, and portal-dependent apps operate correctly outside a standard desktop login session.
-*   **Log Routing**: `StandardOutput=journal` and `StandardError=journal` route the process's raw stdout/stderr (uncaught tracebacks, systemd's own lifecycle lines) to the journal, visible via `journalctl -u steamos_diy.service`. The application's own structured logging (`jlog()`'s `CORE`/`STEAM`/`SYSTEM` tags) does **not** show up there: `PAMName=login` moves the process into its own login-session cgroup, and journald attributes a `syslog()`-sent message's unit from the sender's current cgroup — use `journalctl -t CORE -t STEAM -t SYSTEM` instead (see [Troubleshooting](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Troubleshooting)).
+*   **Log Routing**: `StandardOutput=journal` and `StandardError=journal` send the process's stdout/stderr (gamescope's output, uncaught tracebacks) to the journal under the `python3` identifier. `PAMName=login` moves the process into its own login-session cgroup, and journald attributes messages by the sender's cgroup, so `journalctl -u steamos_diy.service` shows only systemd's own start/stop lines. Use `journalctl -t CORE -t STEAM -t SYSTEM` for the project's logs and `journalctl -t python3` for gamescope's output (see [Troubleshooting](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Troubleshooting)).
 *   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay recovers the session automatically from crashes and after session switches — this is frequent and expected (every switch exits `75` by design, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch)).
 
 > [!WARNING]
 > **Restart limit — give-up condition**
 >
-> `StartLimitIntervalSec=120` / `StartLimitBurst=10` caps restarts at 10 within 120 seconds. This is deliberate: if *both* Gaming and Desktop targets crash instantly (e.g. a broken Wayland/Plasma install), the guard stops systemd from hammering TTY1 at ~1 Hz forever. It is tuned generously enough to never trip during normal Steam↔Desktop toggling.
+> `StartLimitIntervalSec=120` / `StartLimitBurst=10` caps restarts at 10 within 120 seconds. This is deliberate: a Game Mode that dies at start already falls back to Desktop, so the runaway case is Desktop itself dying at start (e.g. a broken Wayland/Plasma install); the limit stops systemd from restarting it every second forever. It leaves room to spare for normal Steam↔Desktop switching.
 >
 > If the limit is ever hit, `steamos_diy.service` stops retrying and TTY1 goes black — with `getty@tty1` masked, there is no automatic way back. **Recovery**: switch to another TTY (`Ctrl+Alt+F2`) or SSH in, then run `sudo systemctl reset-failed steamos_diy.service && sudo systemctl start steamos_diy.service` after fixing the underlying issue (check `journalctl -t CORE -t STEAM -t SYSTEM` for the crash cause first — `-u steamos_diy.service` only shows the restart loop itself, not why each attempt failed).
 *   **TTY Cleanup**: `TTYReset=yes` and `TTYVTDisallocate=yes` ensure the terminal is fully reset between session restarts, preventing display artifacts.
@@ -48,7 +48,7 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 >
 > Modern Plasma 6.x environments may use `plasmalogin.service`.
 >
-> The installer automatically detects and disables it.
+> The installer disables it (along with SDDM).
 >
 > Please refer to the **[Arch Wiki](https://wiki.archlinux.org/title/Plasma_Login_Manager)** for technical details.
 

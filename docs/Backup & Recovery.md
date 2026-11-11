@@ -39,7 +39,7 @@ The easiest way to manage your data is through the **Maintenance** tab in the Co
 
 ## 🔍 Mapping Logic
 
-The utility targets specific paths to maintain a minimal backup footprint. The mapping is defined in `utils.get_backup_mapping(home)` as the single source of truth — both `backup.py` (writing the archive) and `restore.py` (reading it back) consume the same dict, so the archive layout can never drift between the two sides.
+The utility targets specific paths to keep backups small. The mapping is defined once in `utils.get_backup_mapping(home)`: `backup.py` reads from it, and `restore.py` matches archive entries against it with its own logic (the tests round-trip every entry through both).
 
 | Source Path | Description |
 |:---|:---|
@@ -74,13 +74,13 @@ sudo python3 /usr/local/lib/steamos_diy/restore.py /path/to/your/backup.tar.gz
 
 ## 🛡️ Restore Security
 The restore tool implements multiple layers of validation before writing anything to disk:
-* **Path allow-list**: Writes are only permitted to `/etc/`, `/usr/`, `/var/`, and the user's home directory. Any archive member resolving outside these paths is rejected and logged.
+* **Path allow-list**: Writes are only permitted to `/etc/`, `/usr/`, `/var/`, the user's home directory, and the folders the mapping points to (e.g. a `games_conf_dir` moved elsewhere via the SSoT). Any archive member resolving outside these paths is rejected and logged.
 * **Path traversal protection**: Archive members containing `..` components are rejected before resolution, preventing crafted archives from escaping the allow-list.
 * **Archive content filter**: Hardlinks, symlinks, device nodes, and FIFOs inside the archive are rejected — only regular files and directories are extracted.
 * **Pre-existing symlink guard**: If a symlink already exists at the target path on disk, the write is refused to prevent redirect attacks from a previously planted link.
 * **Permission mask**: File modes from the archive are applied masked to `0o777` — a crafted archive cannot plant setuid/setgid binaries through a root-run restore.
 * **Link manifest validation**: Every `link → target` pair from the manifest (or mined from a legacy script) must resolve inside the allow-list on **both** ends, or it is rejected and logged. No shell is ever involved in link reconstruction.
-* **Atomic extraction**: Each file is written to a temporary sibling and `os.replace()`d into place — a crash or power loss mid-restore can never leave a target missing or truncated, and (like `backup.py`'s own archive write) this still avoids `ETXTBSY` when replacing a currently-running binary, since `os.replace()` swaps the directory entry instead of truncating the file in place.
+* **Atomic extraction**: Each file is written to a temporary sibling and `os.replace()`d into place — a crash or power loss mid-restore can never leave a target missing or truncated. Replacing the directory entry instead of truncating the file also avoids `ETXTBSY` on a currently-running binary.
 
 > [!WARNING]
 > **What these checks do not cover — treat a backup archive like a root password**
@@ -91,7 +91,7 @@ The restore tool implements multiple layers of validation before writing anythin
 
 ## ⚠️ Important Notes
 * **Service Reload**: The restoration process reloads the `systemd` daemon automatically to ensure the session launcher is ready immediately.
-* **Ownership**: The restore tool is aware of your `SUDO_USER` and will ensure that files in your home directory are not locked as "root" after extraction.
+* **Ownership**: The restore tool resolves the real user behind `sudo`/`pkexec`, so restored files in your home directory are owned by you, not root.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

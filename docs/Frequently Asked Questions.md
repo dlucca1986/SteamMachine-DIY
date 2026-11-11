@@ -39,8 +39,8 @@ Yes. `sdy` is binary-agnostic. It scans the executable path and looks for a matc
 
 ### 6. Steam shows "Update Error" or "BIOS Update Failed".
 This is expected on non-Valve hardware. **Compatibility Shims** intercept these calls and return a safe exit code to maintain Steam UI stability.
-* `steamos-update` exits **7** (RAUC convention: "no update available") — Steam treats this as "up to date".
-* `jupiter-dock-updater` exits **7** (same RAUC convention — "firmware up to date").
+* `steamos-update` exits **7** (SteamOS convention: "no update available") — Steam treats this as "up to date".
+* `jupiter-dock-updater` exits **7** (same convention — "firmware up to date").
 * All other helpers (`jupiter-biosupdate`, `steamos-set-timezone`, `steamos-select-branch`) exit **0** (success).
 ---
 
@@ -59,14 +59,14 @@ The logic handles the termination signals and ensures a clean transition to KDE 
 ## 🔊 Audio & Peripherals
 
 ### 9. Why is there no sound?
-This project is optimized for **Pipewire**. Ensure `pipewire-alsa`, `pipewire-pulse`, and `wireplumber` are active. Gamescope requires a functional Pipewire node to route audio from the containerized session to your hardware.
+This project expects **PipeWire**. Ensure `pipewire-alsa`, `pipewire-pulse`, and `wireplumber` are installed and running for your user: the Game Mode session plays audio through them.
 
 ---
 
 ## 🛠️ System & Updates
 
 ### 10. Will a system update (`pacman -Syu`) break the setup?
-The project uses a **non-destructive** approach. Core system binaries are never modified. Standard updates are safe.
+The project uses a **non-destructive** approach: it replaces no system files (gamescope only gets file capabilities, re-applied by a pacman hook after each gamescope update). Standard updates are safe.
 > [!IMPORTANT]
 >
 > If you update the Kernel, ensure your **Early KMS** is rebuilt so the driver loads before the `steamos_diy` service starts.
