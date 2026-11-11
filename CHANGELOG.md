@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   running as you. Accepted limit of the design (no code change), same class as the updater's.
 
 ### Fixed
+- C-Core: when an atomic write was refused because a symlink or FIFO sat at its temporary path,
+  or the data was only partly written, the failure left no trace in the journal — so the Control
+  Center's "Write failed — see system logs" message pointed at logs that didn't exist. Both cases
+  are now logged with their reason, like the other failure paths already were.
 - Switching session: when the command that ends the current session failed straight away (for
   example after a desktop update changed the syntax of its quit command), the switch did nothing
   and nothing was logged, so repeated attempts failed with no explanation. The switcher now watches

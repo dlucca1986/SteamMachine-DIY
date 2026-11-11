@@ -92,7 +92,11 @@ int c_write_atomic(const char *path, const char *val) {
         O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
         0644
     );
-    if (fd < 0) return 0;
+    if (fd < 0) {
+        // ELOOP here is O_NOFOLLOW refusing a symlink at tmp_path.
+        syslog(LOG_WARNING, "c_write_atomic: open %s: %m", tmp_path);
+        return 0;
+    }
     // A reader could still be attached to a pre-existing FIFO at tmp_path,
     // letting the O_NONBLOCK open above succeed anyway — fstat and refuse
     // anything that isn't a plain file before writing/renaming it over the
@@ -109,6 +113,10 @@ int c_write_atomic(const char *path, const char *val) {
     size_t len = strlen(val);
     ssize_t written = write(fd, val, len);
     if (written < 0 || (size_t)written != len) {
+        if (written < 0)
+            syslog(LOG_WARNING, "c_write_atomic: write %s: %m", tmp_path);
+        else
+            syslog(LOG_WARNING, "c_write_atomic: short write %s", tmp_path);
         close(fd);
         unlink(tmp_path);
         return 0;
