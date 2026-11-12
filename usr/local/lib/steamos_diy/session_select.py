@@ -27,7 +27,7 @@ from utils import (
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — resolved once, never re-read from disk.
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 # Keywords that map argv[1] to the desktop target.

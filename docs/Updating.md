@@ -18,7 +18,7 @@ How to move an existing installation to a new release. One procedure — `instal
 
 This covers the Control Center's download (step 2); a manual download or `git pull` is yours to verify. Every release from 2.1.8 on publishes a `SHA256SUMS` asset, and the tarball's SHA-256 is checked against it before anything is extracted. **Fail-closed**: if the asset is missing, malformed or doesn't match, nothing is extracted or installed, and the reason is in the Diagnostics logs (`UPDATE_CHECKSUM_FAIL` / `UPDATE_DOWNLOAD_FAIL`).
 
-This defends against transport-level corruption or tampering of the download itself — it does not defend against a compromised GitHub account publishing a bad release with a matching checksum (there is no independent signature). A release published without a `SHA256SUMS` asset (only possible before 2.1.8, or if the release process was run incorrectly) simply cannot be installed via the in-app updater; use the manual terminal procedure below instead, after verifying the source yourself.
+This catches a corrupted or truncated download. The tarball and the checksum both come from the same GitHub release over HTTPS, so it is no defense against a compromised GitHub account or release (there is no independent signature). A release published without a `SHA256SUMS` asset (only possible before 2.1.8, or if the release process was run incorrectly) simply cannot be installed via the in-app updater; use the manual terminal procedure below instead, after verifying the source yourself.
 
 `install.sh`'s checksum is also re-checked right after you click **OK** on the "Installing Update" dialog, not just at download time. The extracted files live under your own home directory, so this narrows the window in which something else already running as you could swap `install.sh` while the dialog waits. It does not close it entirely: the password prompt still comes between the check and the installer starting. If the file no longer matches, the update is aborted with an **"Update Aborted"** message.
 
@@ -40,14 +40,14 @@ Same behavior as the Control Center path: non-interactive, ends with the 10-seco
 | SSoT (`/etc/default/steamos_diy.conf`) | Deployed from template | **Preserved** — if the shipped template changed, the new one is staged as `steamos_diy.conf.new` (pacman `.pacnew` style) for manual review |
 | Core library (`/usr/local/lib/steamos_diy/`) | Deployed | **Wiped and redeployed** — files removed or renamed by the new release cannot linger |
 | C-Core (`libcore.so`) | Built from source | Rebuilt from source |
-| Packages | `pacman -Syu --needed` | Same — the system is brought fully up to date |
+| Packages | `pacman -Syu --needed` | Same (a full system upgrade) |
 | Reboot | Asks | **Automatic** after a 10s countdown (`CTRL+C` aborts) |
 
-After the reboot, check `steamos_diy.conf.new` if the installer warned about it, and merge any new SSoT keys you care about. Missing keys are never fatal: every SSoT read falls back to a sane default, and the Control Center preflight reports anything worth fixing.
+After the reboot, check `steamos_diy.conf.new` if the installer warned about it, and merge any new SSoT keys you care about. A key missing from your SSoT isn't fatal: the code falls back to its built-in default. **Validate Configuration** in the Control Center checks the SSoT's paths and binaries.
 
-## 🧹 4. The classic way still works
+## 🧹 4. Uninstall and reinstall
 
-A clean reinstall remains fully supported and is functionally equivalent:
+A reinstall also works, but it is not the same as an update — it removes the SSoT and the session state:
 
 ```bash
 sudo ./uninstall.sh   # answer "n" to keep your user data

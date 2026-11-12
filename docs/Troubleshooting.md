@@ -8,7 +8,7 @@ Log tags, diagnostic commands, and handy shell aliases.
 
 ## 🔍 1. System Journal Tags
 
-The framework uses a unified tagging system. Use `journalctl` to filter logs and identify issues quickly.
+Every project log line carries one of three journal tags:
 
 | Tag | Origin | Diagnostic Value |
 | :--- | :--- | :--- |
@@ -189,10 +189,10 @@ These scripts stand in for real `steamos-*`/`jupiter-*` system tools Steam calls
 | :--- | :--- |
 | `journalctl -u steamos_diy.service -f` | Systemd's own service lifecycle only (start/stop/restart, exit codes) — **not** the application log tags, see the note in section 1. |
 | `journalctl -t CORE -t STEAM -t SYSTEM` | Full project log view — single tags can be filtered individually (see the table above). |
-| `sudo fuser -v /dev/dri/card*` | Identify which process is currently locking the GPU. |
-| `cat /sys/class/drm/*/modes` | List all resolutions natively detected by the Kernel (DRM). |
-| `vulkaninfo --summary` | Verify that the Vulkan stack (Mesa/NVK) is operational. |
-| `python3 -m py_compile script.py` | Check for syntax errors in the core logic after a manual edit. |
+| `sudo fuser -v /dev/dri/card*` | List the processes that have the GPU device open. |
+| `cat /sys/class/drm/*/modes` | List the modes the kernel (DRM) reports for each connector. |
+| `vulkaninfo --summary` | List the Vulkan devices and drivers in use. |
+| `python3 -m py_compile script.py` | Check a project script for syntax errors after a manual edit. |
 | `pkexec journalctl --rotate --vacuum-time=1s` | Rotate and purge system logs in a single invocation (mirrors the Control Center cleanup action). |
 
 ---
@@ -207,7 +207,7 @@ On older or low-power GPUs, Steam's embedded Chromium (CEF) can fail at GPU-acce
 ### Mouse cursor gets "stuck" after closing the Steam overlay (stretched/custom-aspect sessions)
 On a gamescope session running a stretched or non-native aspect ratio (4:3, 16:10, etc. — not a plain 1:1 inner=outer session), closing the Steam Big Picture overlay can fail to re-grab raw mouse input, leaving the in-game camera/aim stuck or pinned to an edge. This is a [known upstream gamescope issue](https://github.com/ValveSoftware/gamescope/issues/2042), not specific to this project.
 
-**Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` — it's a real gamescope flag (always use relative mouse mode instead of flipping based on cursor visibility), usable today with no code change. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
+**Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` (gamescope: "always use relative mouse mode instead of flipping dependent on cursor visibility"). The project has not reproduced the issue or tested the fix. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
 
 ### "Another privileged operation is already running…" won't go away
 Backup and Restore share one lock (they touch the same files). If either times out (after 5 minutes), the lock is deliberately kept: the privileged process it started (`backup.py`, `restore.py`, a `chown -R`) may still be running, and there's no way to confirm it finished. Journal-vacuum has its own lock, which clears on a timeout (usually just a slow password prompt).
@@ -216,7 +216,7 @@ Backup and Restore share one lock (they touch the same files). If either times o
 
 ---
 
-## 💡 5. Diagnostic Aliases (Terminal Power-User)
+## 💡 5. Diagnostic Aliases
 Optional shortcuts for `~/.bashrc`.
 
 ```
@@ -240,10 +240,10 @@ alias sdy-mode-game='steamos-session-select steam'
 # Check session status
 alias sdy-status='pgrep -a gamescope || pgrep -a steam || echo "No gaming session active."'
 
-# Terminate session
+# Kill gamescope and Steam (the service then starts the saved session again)
 alias sdy-kill='pkill -9 gamescope && pkill -9 steam'
 
-# GPU Reset
+# Kill every process that has the GPU device open (this ends the session)
 alias sdy-gpu-fix='sudo fuser -k /dev/dri/card*'
 
 # Restart systemd service

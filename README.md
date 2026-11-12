@@ -17,18 +17,18 @@
 ---
 
 ## ✨ Key Features
-* **SSOT Architecture**: System lifecycle and identity are governed by a central configuration: `/etc/default/steamos_diy.conf`.
+* **SSoT**: binary paths, config paths, timeouts and the log level live in one file, `/etc/default/steamos_diy.conf`.
 * **Session Launcher**: Manages transitions between Gamescope and KDE Plasma with atomic state updates and crash recovery.
-* **Compatibility Shims**: Redirects SteamOS-specific system calls (e.g., updates, BIOS) to DIY logic, ensuring UI stability.
-* **Dynamic Parameter Mapping**: Maps YAML configuration flags directly to Gamescope command-line arguments without modifying source code.
-* **Game Wrapper (`sdy`)**: Intercepts game launches to apply per-game YAML profiles, environment variables, and wrappers (MangoHud, GameMode).
+* **Compatibility Shims**: Stand-ins for SteamOS helper commands that Steam's Game Mode can call (OS update, BIOS update, timezone, branch); each returns a fixed exit code and changes nothing.
+* **Dynamic Parameter Mapping**: The `flags` list in `config.yaml` is passed to Gamescope as command-line arguments.
+* **Game Wrapper (`sdy`)**: With `sdy %command%` as a game's launch option, applies its per-game YAML profile: environment variables, a wrapper command (e.g. `mangohud`, `gamemoderun`) and extra arguments.
 * **Zero-DM Boot**: No display manager (SDDM/plasmalogin): the session launcher runs as a systemd service on TTY1.
 * **Control Center**: PyQt6 dashboard for system management, log analysis, and profile editing.
 
 ## 🛡️ Design Principles
-* **Standard Hierarchy**: Logic resides in `/usr/local/lib/steamos_diy/`, preserving host system integrity.
-* **User-Agnostic**: Dynamically detects UIDs and environment paths.
-* **Reversible**: An uninstaller removes the project's files and restores the original boot chain.
+* **Standard Hierarchy**: The code lives in `/usr/local/lib/steamos_diy/`; everything deployed outside it is listed in the [Installer Workflow](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Installer-Workflow) wiki page.
+* **No hardcoded user**: the installer resolves the installing user's name, UID and home.
+* **Reversible**: An uninstaller removes the project's files and puts getty back on TTY1; it offers to re-enable your display manager.
 
 ## 🛠️ Hardware Support
 * **AMD**: RADV (Mesa).
@@ -90,4 +90,4 @@ sudo ./uninstall.sh
 ```
 
 > [!NOTE]
-> The uninstaller removes every file the project deployed and restores the boot chain (getty on TTY1, your display manager, the default target). Installed packages (`steam`, `gamescope`, Mesa…), the `[multilib]` repository and the group memberships added for your user are deliberately **left in place** — they are standard system components, not project files, and removing them could break unrelated software.
+> The uninstaller removes every file the project deployed (your user configs only if you confirm), puts getty back on TTY1 and asks whether to re-enable your display manager (if you decline, the system boots to a text console). Installed packages (`steam`, `gamescope`, Mesa…), the `[multilib]` repository and the group memberships added for your user are deliberately **left in place** — they are standard system components, not project files, and removing them could break unrelated software.

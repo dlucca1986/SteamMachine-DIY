@@ -7,30 +7,31 @@ The DM-less boot: systemd service, TTY1 handover, and boot-time tuning.
 
 ## 🔄 1. The Startup Sequence (Boot Flow)
 
-The system bypasses traditional login managers to initialize the graphical environment directly:
+No login manager is involved:
 
 1.  **Unit Initialization**: `systemd` triggers `steamos_diy.service` on TTY1 as part of the `graphical.target`.
 2.  **Configuration Sourcing**: The launcher reads global variables from the SSoT file (`/etc/default/steamos_diy.conf`).
 3.  **State Identification**: The engine queries `/var/lib/steamos_diy/next_session` to determine the target environment.
 4.  **Session Execution**:
-    *   **Gaming Mode**: Generates Gamescope parameters ➔ Spawns Steam ➔ Activates Watchdog.
-    *   **Desktop Mode**: Spawns a native KDE Plasma session.
-5.  **Session Transition**: `session_select.py` updates the state file and asks the active session to quit. The Launcher (`session_launch.py`) detects the session exit, handles the notification delay, and terminates. Finally, `systemd` triggers an automatic **Unit Restart**.
+    *   **Gaming Mode**: builds the Gamescope command line and starts Gamescope with Steam inside it.
+    *   **Desktop Mode**: starts KDE Plasma (`startplasma-wayland`).
+    *   Either way the launcher then waits out the validation window: a session that exits within it is treated as a crash and the next one started is Desktop.
+5.  **Session Transition**: `session_select.py` updates the state file and asks the active session to quit. The Launcher (`session_launch.py`) sees the session exit, prints the transition message on TTY1 and exits with code `75`; `systemd` then restarts the unit (`Restart=on-failure`).
 
 ---
 
 ## 🏗️ 2. Core Implementation
 
-The framework integrates directly into the systemd hierarchy, replacing the display manager with a single service.
+One systemd service takes the display manager's place.
 
 ### Systemd & TTY Control
-*   **Targeting**: The unit is linked to `graphical.target.wants/`. Standard DMs (SDDM, plasmalogin) are disabled to avoid resource conflicts.
-*   **TTY Exclusive Access**: The service masks `getty@tty1.service` to take direct control of `/dev/tty1`, preventing login prompts from flickering during boot.
-*   **PAM Authentication**: By using `PAMName=login`, the service initializes a full authenticated session, ensuring proper permissions for **Pipewire**, **DRI/GPU acceleration**, and device mounting.
+*   **Targeting**: The unit is linked to `graphical.target.wants/`. The installer disables SDDM and plasmalogin.
+*   **TTY1**: The installer masks `getty@tty1.service`, so no login prompt runs on TTY1; the unit attaches to it with `TTYPath=/dev/tty1`.
+*   **PAM session**: `PAMName=login` with `User=` opens a logind session for the user on `seat0`/`tty1` without asking for a password (`loginctl list-sessions` shows it). That session is what gives Gamescope and Plasma access to the seat's devices and starts the user's systemd instance (PipeWire and the other user services).
 *   **Readiness Notification**: `Type=notify` is set so systemd receives `READY=1` only after the session survives the validation window. This means dependent units and `systemctl start` calls block until the session is confirmed stable.
 
 ### Environment & Recovery
-*   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>`, `XDG_SESSION_TYPE=wayland`, `SSOT_CONF=/etc/default/steamos_diy.conf`, and `XDG_DESKTOP_PORTAL_DIR=/usr/share/xdg-desktop-portal/portals` explicitly, ensuring Gamescope, Wayland clients, and portal-dependent apps operate correctly outside a standard desktop login session.
+*   **Runtime Context**: The service sets `XDG_RUNTIME_DIR=/run/user/<UID>`, `XDG_SESSION_TYPE=wayland`, `SSOT_CONF=/etc/default/steamos_diy.conf`, and `XDG_DESKTOP_PORTAL_DIR=/usr/share/xdg-desktop-portal/portals` explicitly.
 *   **Log Routing**: `StandardOutput=journal` and `StandardError=journal` send the process's stdout/stderr (gamescope's output, uncaught tracebacks) to the journal under the `python3` identifier. `PAMName=login` moves the process into its own login-session cgroup, and journald attributes messages by the sender's cgroup, so `journalctl -u steamos_diy.service` shows only systemd's own start/stop lines. Use `journalctl -t CORE -t STEAM -t SYSTEM` for the project's logs and `journalctl -t python3` for gamescope's output (see [Troubleshooting](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Troubleshooting)).
 *   **Fault Tolerance**: A `Restart=on-failure` policy with a `1-second` delay recovers the session automatically from crashes and after session switches — this is frequent and expected (every switch exits `75` by design, see [SteamOS Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch)).
 
@@ -39,8 +40,8 @@ The framework integrates directly into the systemd hierarchy, replacing the disp
 >
 > `StartLimitIntervalSec=120` / `StartLimitBurst=10` caps restarts at 10 within 120 seconds. This is deliberate: a Game Mode that dies at start already falls back to Desktop, so the runaway case is Desktop itself dying at start (e.g. a broken Wayland/Plasma install); the limit stops systemd from restarting it every second forever. It leaves room to spare for normal Steam↔Desktop switching.
 >
-> If the limit is ever hit, `steamos_diy.service` stops retrying and TTY1 goes black — with `getty@tty1` masked, there is no automatic way back. **Recovery**: switch to another TTY (`Ctrl+Alt+F2`) or SSH in, then run `sudo systemctl reset-failed steamos_diy.service && sudo systemctl start steamos_diy.service` after fixing the underlying issue (check `journalctl -t CORE -t STEAM -t SYSTEM` for the crash cause first — `-u steamos_diy.service` only shows the restart loop itself, not why each attempt failed).
-*   **TTY Cleanup**: `TTYReset=yes` and `TTYVTDisallocate=yes` ensure the terminal is fully reset between session restarts, preventing display artifacts.
+> If the limit is ever hit, `steamos_diy.service` stops retrying — with `getty@tty1` masked, nothing else starts on TTY1. **Recovery**: switch to another TTY (`Ctrl+Alt+F2`) or SSH in, then run `sudo systemctl reset-failed steamos_diy.service && sudo systemctl start steamos_diy.service` after fixing the underlying issue (check `journalctl -t CORE -t STEAM -t SYSTEM` for the crash cause first — `-u steamos_diy.service` only shows the restart loop itself, not why each attempt failed).
+*   **TTY Cleanup**: `TTYReset=yes` resets the terminal before and after each run; `TTYVTDisallocate=yes` clears the VT's screen and scrollback.
 *   **Kill Policy**: `KillMode=mixed` sends `SIGTERM` to the main process only (not the whole cgroup), allowing `session_launch.py`'s signal handler to forward it to the session (gamescope/Steam or the desktop) and exit once that has ended. `TimeoutStopSec=10` sets the hard limit before systemd escalates to `SIGKILL` on everything left in the cgroup — the only escalation path for a session that ignores `SIGTERM` on a normal stop.
 
 > [!IMPORTANT]
@@ -66,8 +67,8 @@ For the full lifecycle including crash recovery, see [SteamOS Session Launch](ht
 
 ---
 
-## 🏎️ 4. Performance Optimization: Removing Plymouth
-Optional: Plymouth isn't needed here — TTY1 goes straight to the session.
+## 🏎️ 4. Optional: Removing Plymouth
+Plymouth (the boot splash) isn't used by this setup. Removing it is optional; the project has not measured any boot-time difference.
 
 ### **Step 1: Initramfs Configuration**
 
@@ -75,7 +76,7 @@ Optional: Plymouth isn't needed here — TTY1 goes straight to the session.
 1. Edit `/etc/mkinitcpio.conf` and remove `plymouth` from the `HOOKS` array.
 2. Rebuild: `sudo mkinitcpio -P`
 
-#### **B. Systems using `dracut` (EndeavourOS / Modern Defaults)**
+#### **B. Systems using `dracut` (EndeavourOS)**
 1. Remove package: `sudo pacman -Rs plymouth`.
 2. Rebuild: `sudo dracut-rebuild` (or `sudo reinstall-kernels`).
 
@@ -95,7 +96,7 @@ Remove the `splash` flag from the kernel command line.
 
 ## 💡 5. Post-Installation Tips
 ### Disable Plasma Splash Screen
-To prevent visual artifacts during the handover to the Wayland compositor:
+Optional, a matter of taste: skips Plasma's splash when switching to Desktop.
 1. Navigate to **System Settings** > **Colors & Themes** > **Splash Screen**.
 2. Select **None** and click **Apply**.
 

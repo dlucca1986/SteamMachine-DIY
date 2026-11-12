@@ -3,21 +3,21 @@
 
 ## 🔗 Useful Links & Resources
 
-A curated list of tools, guides, and communities to help you get the most out of your DIY Steam Machine.
+Tools and guides related to this setup. Descriptions are short summaries; the project doesn't test or endorse them.
 
 ---
 
 ## 🛠️ **System Tools**
 * **[LACT](https://github.com/ilya-zlobintsev/LACT)**: GPU control for AMD, NVIDIA, and Intel — overclocking, undervolting, fan curves.
-* **[MangoHud](https://github.com/flightlessmango/MangoHud)**: High-performance Vulkan/OpenGL overlay for monitoring FPS, temps, and load.
-* **[GOverlay](https://github.com/benjamimgois/goverlay)**: Graphical UI to easily manage and style your MangoHud overlay.
-* **[ProtonUp-Qt](https://github.com/DavidoTek/ProtonUp-Qt)**: Install and manage **Proton-GE** and **Wine-GE** with a single click.
+* **[MangoHud](https://github.com/flightlessmango/MangoHud)**: Vulkan/OpenGL overlay for monitoring FPS, temperatures and load.
+* **[GOverlay](https://github.com/benjamimgois/goverlay)**: Graphical UI to configure MangoHud.
+* **[ProtonUp-Qt](https://github.com/DavidoTek/ProtonUp-Qt)**: Install and manage **Proton-GE** and other compatibility tools.
 
 ---
 
 ## 🎮 **Game Launchers & Compatibility**
 * **[ProtonDB](https://www.protondb.com/)**: Check compatibility reports and user tweaks for thousands of Steam games.
-* **[Lutris](https://lutris.net/)**: The all-in-one launcher for GOG, Epic, Ubisoft, and classic emulators.
+* **[Lutris](https://lutris.net/)**: Launcher for GOG, Epic, Ubisoft and emulators.
 * **[Heroic Games Launcher](https://heroicgameslauncher.com/)**: Open-source alternative for Epic, GOG, and Amazon Games.
 * **[Bottles](https://usebottles.com/)**: Run Windows apps and non-gaming software in isolated "bottles".
 * **[Emudeck](https://github.com/dragoonDorise/EmuDeck)**: Autoconfigure emulators and ROM directory structure on Linux.
@@ -26,23 +26,24 @@ A curated list of tools, guides, and communities to help you get the most out of
 ---
 
 ## 📚 **Deep Dive: Arch Wiki & Guides**
-* **[Arch Wiki - Gaming](https://wiki.archlinux.org/title/Gaming)**: The definitive guide to gaming on Arch.
-* **[Arch Wiki - AMDGPU](https://wiki.archlinux.org/title/AMDGPU)**: Official documentation for the AMD open-source driver.
-* **[Arch Wiki - Intel Graphics](https://wiki.archlinux.org/title/Intel_graphics)**: Official documentation for Intel's open source driver stack.
-* **[Arch Wiki - NVIDIA Graphics](https://wiki.archlinux.org/title/NVIDIA)**: Official NVIDIA driver documentation.
+* **[Arch Wiki - Gaming](https://wiki.archlinux.org/title/Gaming)**: Gaming on Arch.
+* **[Arch Wiki - AMDGPU](https://wiki.archlinux.org/title/AMDGPU)**: The AMD open-source driver.
+* **[Arch Wiki - Intel Graphics](https://wiki.archlinux.org/title/Intel_graphics)**: Intel's open-source driver stack.
+* **[Arch Wiki - NVIDIA Graphics](https://wiki.archlinux.org/title/NVIDIA)**: The NVIDIA proprietary driver.
 * **[Arch Wiki - Nouveau](https://wiki.archlinux.org/title/Nouveau)**: Open-source NVIDIA driver (NVK/Nouveau).
-* **[Arch Wiki - Improving Performance](https://wiki.archlinux.org/title/Improving_performance)**: System-wide optimization guide.
+* **[Arch Wiki - Improving Performance](https://wiki.archlinux.org/title/Improving_performance)**: System-wide performance tuning.
+* **[Arch Wiki - Gamescope](https://wiki.archlinux.org/title/Gamescope)**: Gamescope on Arch, including its NVIDIA requirements.
 * **[Arch Wiki - Vulkan](https://wiki.archlinux.org/title/Vulkan)**: Vulkan setup and troubleshooting on Arch.
-* **[Arch Wiki - Wayland](https://wiki.archlinux.org/title/Wayland)**: Wayland compositor reference.
-* **[EndeavourOS Gaming 101](https://discovery.endeavouros.com/gaming/gaming-101/2022/01/)**: User-friendly gaming setup guide for Arch-based distros.
-* **[Mesa 3D](https://docs.mesa3d.org/envvars.html)**: Full list of environment variables for Mesa/RADV tuning and debugging.
+* **[Arch Wiki - Wayland](https://wiki.archlinux.org/title/Wayland)**: Wayland on Arch.
+* **[EndeavourOS Gaming 101](https://discovery.endeavouros.com/gaming-101/)**: Gaming setup guide for EndeavourOS.
+* **[Mesa 3D](https://docs.mesa3d.org/envvars.html)**: Mesa's environment variables.
 * **[Steam Launch Options](https://developer.valvesoftware.com/wiki/Command_line_options)**: Reference for Steam command-line arguments and launch options.
 
 ---
 
 ## ⚙️ **Core Components Documentation**
-* **[Gamescope GitHub](https://github.com/ValveSoftware/gamescope)**: Learn about the flags and features of the session's compositor.
-* **[Feral GameMode](https://github.com/FeralInteractive/gamemode)**: How the CPU optimization daemon works under the hood.
+* **[Gamescope GitHub](https://github.com/ValveSoftware/gamescope)**: The session's compositor.
+* **[Feral GameMode](https://github.com/FeralInteractive/gamemode)**: The GameMode daemon (`gamemoderun`).
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

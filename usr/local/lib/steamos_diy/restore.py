@@ -234,7 +234,7 @@ def _write_member(
     except OSError as err:
         # ELOOP is what O_NOFOLLOW raises on a symlink. Anything else (a
         # name too long, a full disk, a permission error) is an ordinary
-        # write failure — reporting it as a planted symlink was misleading.
+        # write failure, not a planted symlink.
         tag = (
             "RESTORE_REJECTED_TMP_SYMLINK"
             if err.errno == errno.ELOOP

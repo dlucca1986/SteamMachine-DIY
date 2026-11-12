@@ -68,8 +68,7 @@ CORE_LIB_DIR: str = "/usr/local/lib/steamos_diy"
 _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
 # User-side path (relative to home) and embedded archive-entry names.
-# Centralised here so the archive format contract has a single source of
-# truth — backup and restore can never disagree about what goes where.
+# Shared by backup.py and restore.py.
 # BACKUP_SCRIPT_NAME survives only so restore can recognise the legacy
 # entry in old archives; new backups embed the data manifest instead.
 USER_CONFIG_REL: str = ".config/steamos_diy"
@@ -96,7 +95,7 @@ DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
 # Fixed tool paths, not SSoT-backed (unlike the DEFAULT_*_BIN group above):
-# systemctl/journalctl/python3 live here on every target distro, and
+# systemctl/journalctl/python3 live here on Arch, and
 # konsole is installed by install.sh. Centralized so callers don't each
 # re-declare their own literal.
 SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
@@ -219,8 +218,8 @@ def _load_ssot_cache() -> None:
     """Parse the whole SSoT file into the cache in a single disk read.
 
     First occurrence wins on duplicate keys. The loaded flag is set before
-    parsing so a read failure is
-    cached too instead of being retried on every later lookup. Resolved
+    parsing so a read failure is cached too instead of being retried on
+    every later lookup. Resolved
     values are exported to os.environ so spawned subprocesses inherit
     them without re-reading the config.
     """

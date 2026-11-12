@@ -7,7 +7,7 @@ The shared utility module (`utils.py`) and its integration with the native `libc
 
 ## 🔌 C-Core Integration
 
-`utils.py` delegates a narrow set of operations to **`libcore.so`** — only those where C provides measurable value: atomic writes via `fdatasync`, `O_NOCTTY` TTY notification, `syslog()` journal logging, and `NOTIFY_SOCKET` readiness signalling. Everything else (config parsing, YAML loading, process spawning) stays in pure Python, since `subprocess` and stdlib `open()` already cover those cases.
+`utils.py` delegates four operations to **`libcore.so`**: atomic writes (`fdatasync` + `rename`), the TTY1 status message (`O_NOCTTY`), journal logging via `syslog()`, and the `NOTIFY_SOCKET` readiness message. Everything else (config parsing, YAML loading, process spawning) is Python.
 
 The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/steamos_diy/libcore.so` is missing, the import fails immediately with `sys.exit(127)`.
 
@@ -16,19 +16,19 @@ The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/ste
 ## 🏗️ Core Responsibilities
 
 ### 1. Data Integrity (`write_atomic`)
-Files persisted via `write_atomic()` follow a four-step protocol executed entirely in the C-Core:
+`write_atomic()` runs four steps in the C-Core:
 
 1. Write data to `<path>.tmp`.
-2. Call `fdatasync()` to flush write buffers to physical storage.
+2. Call `fdatasync()` on it (a failure is logged, the write continues).
 3. Call `rename()` to atomically replace the target file.
 4. Best-effort `fsync()` the containing directory, so the rename itself survives a power loss right after it.
 
-The target file is never left in a partial state, even after a sudden power loss. Used for the session state file (`next_session`) and Control Center YAML saves. The new file always gets mode `0644` (tmp+rename creates a new inode), fine for both.
+The target is replaced by a complete file or not at all. Used for the session state file (`next_session`) and Control Center YAML saves. The new file always gets mode `0644` (tmp+rename creates a new inode), fine for both.
 
 ### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
 `get_ssot_var(key)` serves values from the `_SSOT_CACHE` dict, filled on the **first call** by parsing `/etc/default/steamos_diy.conf` once (`key=value` lines, surrounding quotes stripped, first occurrence wins). Later calls never re-read the file, even for a missing key. All values are also exported into `os.environ`, so child processes inherit them.
 
-`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising an unguarded `ValueError` that would otherwise abort the session boot loop.
+`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising a `ValueError` in the launcher at boot.
 
 `clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but the long-lived Control Center must see the *current* file: its **Validate Configuration** check (`health.run_preflight`) and the reload after a restore both clear the cache first.
 
@@ -41,7 +41,7 @@ The target file is never left in a partial state, even after a sudden power loss
 `read_session_target(path, default="steam")` opens `path`, reads the first line and runs it through `_strip_quotes`. Returns the cleaned string, or `default` if the file is missing or unreadable.
 
 ### 5. Backup Format Contract (`USER_CONFIG_REL`, `BACKUP_MANIFEST_NAME`, `get_backup_mapping`)
-Single source of truth for the on-disk format shared between `backup.py` and `restore.py`:
+Names and paths of the archive format, shared by `backup.py` and `restore.py`:
 
 * `USER_CONFIG_REL` — relative path of the user-config directory (`".config/steamos_diy"`). Also reused by `control_center.py`.
 * `BACKUP_MANIFEST_NAME` — name of the embedded links manifest (`"links.txt"`), a plain-data list of `link<TAB>target` rows.
@@ -55,7 +55,7 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | Function | Output target | Notes |
 | :--- | :--- | :--- |
 | `jlog(tag, msg, level)` | `systemd-journal` via `syslog()` | Filtered against `LOG_LEVEL` from the SSoT before any C call. A re-entry guard (`_JLOG_REENTRY`) prevents recursion if the SSoT lookup itself triggers a log call. |
-| `notify(status, clear_after)` | `/dev/tty1` | Written via `O_NOCTTY` to avoid acquiring the controlling terminal. |
+| `notify(status, clear_after)` | `/dev/tty1` | Opened with `O_NOCTTY`, so tty1 doesn't become the process's controlling terminal. |
 | `sd_notify_ready()` | `NOTIFY_SOCKET` | Sends `READY=1` to systemd after session validation succeeds. Supports the `@` prefix for abstract Unix sockets. |
 
 ---
@@ -69,17 +69,17 @@ Single source of truth for the on-disk format shared between `backup.py` and `re
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Detached spawn via `subprocess.Popen(start_new_session=True)`; stdout/stderr redirected to `/dev/null`. Returns the child PID, or `0` on failure. |
 | `verify_archive(path, tag)` | Gzip-tar integrity check: walks every tar member, then reads the gzip stream to its end so the CRC32 in its trailer is actually validated (member iteration alone stops before it and misses content corruption). Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
-| `run_shim(tag, message, exit_code)` | Logs the shim intercept via `jlog(tag, message)` and exits with `exit_code`. Single entry point for all five SteamOS compatibility shims. |
+| `run_shim(tag, message, exit_code)` | Logs the shim intercept via `jlog(tag, message)` and exits with `exit_code`. Used by all five SteamOS compatibility shims. |
 
 ---
 
 ## ⬆️ Update Check & Download (GitHub Releases)
 
-Stdlib-only plumbing (`urllib` + `tarfile`) behind the Control Center's **Check for Updates** button — no Qt, testable standalone:
+Standard-library code (`urllib` + `tarfile`, no Qt) behind the Control Center's **Check for Updates** button:
 
 | Symbol | Description |
 | :--- | :--- |
-| `VERSION` | The running project version. Single runtime source, kept in sync with the file headers by the release bump. |
+| `VERSION` | The project version, compared against the latest release and shown in the Control Center's title. |
 | `check_latest_release()` | Queries the GitHub Releases API (fixed `https` URL, 10s timeout) and returns a `ReleaseInfo(version, is_newer, notes, tarball_url, html_url, checksum_url)` — or `None` when the network or the reply is unusable (logged as `UPDATE_CHECK_FAIL`, never raised). `checksum_url` is the release's `SHA256SUMS` asset URL (`""` if the release has none). Versions compare as integer tuples, so `2.10.0 > 2.9.0`. |
 | `download_release(info, dest_root)` | Requires `info.checksum_url`: fetches and validates the expected SHA-256 (`_fetch_expected_sha256()`), streams the tarball while hashing it (`_download_verified_tarball()`), and aborts — nothing extracted — if the checksum asset is missing, malformed, or doesn't match (`UPDATE_CHECKSUM_FAIL`/`UPDATE_DOWNLOAD_FAIL`). Only after the digest matches does it prune previous `v*` downloads and unpack under `dest_root/v<version>/`. Extraction uses the tarfile `data` filter (rejects absolute paths, traversal and special members) and only accepts `https://` URLs (`_require_https()`, shared with `_fetch_expected_sha256()`). Returns an `ExtractedRelease(dir, install_sh_sha256)` — the inner export directory holding `install.sh` plus that file's own SHA-256 — or `None` on failure. |
 | `verify_file_sha256(path, expected)` | Re-hashes a file already on disk and compares it to `expected`. `updater.py::_on_download` calls this on `install.sh` immediately before handing it to `pkexec`, narrowing (not closing) the TOCTOU window between download-time verification and execution — pkexec's password prompt still follows the check, and the other extracted files aren't re-verified. |

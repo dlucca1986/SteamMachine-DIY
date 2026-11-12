@@ -42,8 +42,8 @@ _GENERIC_STEMS: frozenset[str] = frozenset(
     }
 )
 
-# Bytes read from the head of each YAML file when scanning for an AppID.
-# Headers are always at the top, so reading more would only waste I/O.
+# Bytes read from the head of each YAML file when scanning for an AppID:
+# an ID declared further down is not found.
 _HEADER_READ_BYTES: int = 1024
 
 # ID declaration line in a profile header (value optionally quoted,
@@ -72,7 +72,8 @@ def _header_declares_id(path: str, appid: str) -> bool:
 
 
 def _iter_yaml_files(directory: str):
-    """Yield DirEntry for every *.yaml in *directory*; silent on error."""
+    """Yield DirEntry for every *.yaml in *directory*; a scan error is
+    logged at DEBUG."""
     try:
         # `with`: _find_profile_by_id returns on the first match, leaving
         # this generator suspended mid-scan; closing it then runs the

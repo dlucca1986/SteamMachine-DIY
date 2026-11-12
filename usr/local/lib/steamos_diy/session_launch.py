@@ -58,7 +58,7 @@ STATUS_MAP: dict[str, str] = {
 # journal logger and the Plasma Qt theme plugin. Display-dependent ones
 # (VRR, HDR) stay out — they belong in the user's config.
 GAME_MODE_ENV: dict[str, str] = {
-    # Scaling filters (FSR/NIS) — vendor-agnostic shaders
+    # Scaling filters (FSR/NIS)
     "STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT": "1",
     "STEAM_GAMESCOPE_NIS_SUPPORTED": "1",
     # Tearing controls — compositor capability, user opts in per game
@@ -66,11 +66,11 @@ GAME_MODE_ENV: dict[str, str] = {
     "STEAM_GAMESCOPE_TEARING_SUPPORTED": "1",
     # Steam's in-game FPS limiter
     "STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER": "1",
-    # Latency + embedded-session correctness
+    # Read by gamescope's WSI layer and by SDL
     "vk_xwayland_wait_ready": "false",
     "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
-    # Per-game Xwayland isolation — a session capability, not tied to any
-    # specific hardware or user preference.
+    # Tells Steam there are several Xwayland servers; gamescope starts a
+    # second one only with --xwayland-count 2 in the user's flags.
     "STEAM_MULTIPLE_XWAYLANDS": "1",
     # steam-runtime-tools' logger writes to the journal (ships with Steam
     # itself, not the distro).

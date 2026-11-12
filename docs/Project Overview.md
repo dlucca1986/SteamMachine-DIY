@@ -8,8 +8,8 @@ System requirements, main features, and the packages involved.
 ### 📍 System Requirements
 
 * **Distribution**: Arch Linux or Arch-based distributions (e.g., EndeavourOS) using `systemd`.
-* **Graphics Stack**: Open-source drivers recommended (Mesa). Proprietary NVIDIA also supported.
-    * **AMD**: RADV — Recommended
+* **Graphics Stack**:
+    * **AMD**: RADV
     * **Intel**: ANV
     * **NVIDIA (NVK)**: open Vulkan driver `vulkan-nouveau`, deployed when no proprietary driver is installed
     * **NVIDIA (Proprietary)**: with `nvidia-open`/`nvidia-open-dkms` installed (detected through their `nvidia-utils` dependency), `lib32-nvidia-utils` is added
@@ -17,37 +17,30 @@ System requirements, main features, and the packages involved.
 * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
 * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 
-> [!IMPORTANT]
->
-> **NVK** is currently in active development; users may experience varying compatibility compared to proprietary drivers.
-
 
 ---
 
 ### 🚀 Features
 
 #### 1. Zero-DM & Service-Based Boot
-Replaces traditional Display Managers (SDDM/plasmalogin) to eliminate session conflicts and reduce overhead.
+No display manager (SDDM/plasmalogin are disabled): a systemd service starts the session on TTY1.
 
-* **Gamescope capabilities**: `install.sh` grants the `gamescope` binary `cap_sys_admin`/`cap_sys_nice`/`cap_ipc_lock` via `setcap`, so the session doesn't run as root. `cap_sys_nice` is what gamescope checks for realtime scheduling and higher-priority threads (without it, it logs `No CAP_SYS_NICE, falling back to regular-priority compute and threads`).
-* **Visual Transitions**: The integrated `notify` engine manages visual feedback during session swaps, suppressing raw TTY output.
+* **Gamescope capabilities**: `install.sh` grants the `gamescope` binary `cap_sys_admin`/`cap_sys_nice`/`cap_ipc_lock` via `setcap`. `cap_sys_nice` is what gamescope checks for realtime scheduling and higher-priority threads (without it, it logs `No CAP_SYS_NICE, falling back to regular-priority compute and threads`).
+* **Transition messages**: during a session switch, `notify()` clears TTY1 and prints a one-line status (e.g. `Switching to Desktop...`).
 
 #### 2. Session Management
-Session state is persisted to `/var/lib/steamos_diy/next_session` via [atomic writes](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine), ensuring the file is never partially written after a power loss.
+Session state is persisted to `/var/lib/steamos_diy/next_session` via [atomic writes](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine), so the file is replaced whole, never partially written.
 
 * **Crash Recovery**: If a session exits before `VALIDATION_TIMEOUT` (default: 5s), the next session started is Desktop, so a broken Game Mode can't trap you in a restart loop.
 
 #### 3. Dynamic Parameter Mapping
-Acts as a bridge between user configuration and the compositor:
-
-* **Argument Translation**: The engine parses `config.yaml` and maps variables into command-line arguments for Gamescope (e.g., FSR, HDR, Sharpness).
-* **Configuration-driven Tuning**: Allows modification of rendering behavior and display output through text files without altering the Python source code.
+The launcher reads `config.yaml` and passes its `flags` list to Gamescope as command-line arguments (resolution, upscaling filter, sharpness…) and its `env_vars` to the session environment.
 
 #### 4. Game Wrapper
-Utility for automated game execution and environment setup:
+`sdy %command%` as a game's launch option:
 
-* **Profile Lookup**: Searches the directory tree for specific `.yaml` configurations based on `SteamAppId` or directory names.
-* **Environment Injection**: Applies per-game environment variables and wrappers (e.g., GameMode).
+* **Profile Lookup**: Looks in `games.d/` for the profile declaring the game's `SteamAppId`, then for one named after the executable (or its folder, for generic names like `start`).
+* **Environment Injection**: Applies per-game environment variables, a wrapper command (e.g. `gamemoderun`) and extra arguments.
 ---
 
 ### ⚙️ Centralized Configuration

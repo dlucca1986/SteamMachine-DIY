@@ -30,7 +30,7 @@ When `sdy %command%` is executed, the script performs a hierarchical lookup for 
 ---
 
 ## 🔄 Process Replacement
-To maintain a clean process tree, `sdy` uses `os.execvpe`. The launcher process is replaced by the game process, ensuring that the `GAME_WRAPPER` becomes the direct parent of the game.
+`sdy` doesn't stay running: it replaces itself with the final command (`os.execvpe`), so no `sdy` process sits between Steam and the wrapper/game.
 
 ```python
 # Construction of the final command list
@@ -63,13 +63,13 @@ To enable the wrapper for any game:
 
 ## 📊 Logging Output
 
-To verify if `sdy` has correctly identified your game and applied the right config, check the centralized log via the **Control Center** or the system journal.
+To check what `sdy` did, look at the logs in the **Control Center** (Diagnostics) or with `journalctl -t STEAM -t CORE`.
 
 | Log message | Level | Description |
 | :--- | :--- | :--- |
 | `GAME_LAUNCH: <stem> (AppID: <id>)` | INFO | Emitted just before `os.execvpe`; confirms the resolved stem and AppID. |
 | `EXECUTION_FAILED: <err>` | ERROR | Binary not found or `execvpe` failed; process exits with code 1. |
-| `SCAN_ERROR: <dir> - <err>` | DEBUG | `games.d/` directory could not be scanned (e.g. missing directory). |
+| `SCAN_ERROR: <dir> - <err>` | DEBUG | `games.d/` exists but could not be listed (e.g. permission denied). |
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

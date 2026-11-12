@@ -56,7 +56,7 @@ void c_notify(const char *status, int clear) {
     close(fd);
 }
 
-// 3. ATOMIC WRITE (fdatasync + rename for hardware durability)
+// 3. ATOMIC WRITE (tmp file, fdatasync, rename, directory fsync)
 // Returns 1 on success, 0 on any failure (logged via syslog).
 __attribute__((visibility("default")))
 int c_write_atomic(const char *path, const char *val) {
@@ -65,8 +65,8 @@ int c_write_atomic(const char *path, const char *val) {
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     // O_CLOEXEC: keep this fd out of any concurrently forked child.
     // O_NOFOLLOW: refuse a symlink planted at tmp_path instead of
-    // truncating whatever it points at. Today's callers all run as the
-    // user, never root, but the guard doesn't depend on that.
+    // truncating whatever it points at. The callers run as the user, not
+    // root, but the guard doesn't depend on that.
     // O_NONBLOCK: a FIFO planted at tmp_path makes the open fail (ENXIO)
     // instead of blocking forever; no effect on a regular file.
     // Mode 0644 applies to the new inode whatever the old file's mode was

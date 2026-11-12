@@ -37,14 +37,14 @@ flags:
   - "-F fsr"                 # Upscaling filter
   - "--sharpness 5"          # Sharpness (Value between 0-20)
   - "--rt"                   # Enable Realtime scheduling
-  - "--immediate-flips"      # Minimize latency (Low latency/Tearing)
+  - "--immediate-flips"      # Immediate flips (may tear)
 
   # --- UX polish (universal, panel-independent) ---
   - "--hide-cursor-delay 3000"   # Hide the mouse cursor after 3s idle
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
-  - "--adaptive-sync"         # Enable VRR/FreeSync at the gamescope level
-  - "--mangoapp"              # Native MangoHud overlay (level set from Steam QAM)
+  - "--adaptive-sync"         # Adaptive sync (VRR), if available
+  - "--mangoapp"              # mangoapp overlay (level set from Steam QAM)
 
   # --- WRONG SYNTAX (EXAMPLES) ---
   # - "-H" "720"             # Invalid YAML (two quoted strings in one item):

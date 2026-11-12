@@ -23,9 +23,9 @@ Per-game profiles in `games.d/` override individual keys from `config.yaml`. If 
 ### 2. Gamescope Flags (`flags`)
 This is a **YAML List** that defines how Gamescope should render the session.
 * **Resolution**: `-W 1280` and `-H 720` (Output resolution).
-* **Upscaling**: `-F fsr` (FidelityFX Super Resolution — vendor-agnostic, runs on any GPU) and `--sharpness 5`.
-* **Performance**: `--rt` (Realtime scheduling) and `--immediate-flips` (Low latency/Tearing).
-* **VRR / MangoHud**: `--adaptive-sync` (enables FreeSync/VRR) and `--mangoapp` (native MangoHud overlay embedded directly into the Gamescope compositor).
+* **Upscaling**: `-F fsr` (FidelityFX Super Resolution) and `--sharpness 5` (0 = sharpest, 20 = softest).
+* **Scheduling / flips**: `--rt` (realtime scheduling) and `--immediate-flips` (immediate flips, may tear).
+* **VRR / MangoHud**: `--adaptive-sync` (adaptive sync / VRR, if available) and `--mangoapp` (gamescope starts MangoHud's `mangoapp` overlay itself; its help says to use this instead of running `mangohud` on gamescope or the game).
 
 > [!NOTE]
 > `--mangoapp` uses MangoHud's own files: `~/.config/MangoHud/MangoHud.conf` (which has a "mangoapp" section) and `presets.conf` (see `/usr/share/doc/mangohud/` for both examples).
@@ -44,9 +44,9 @@ What actually breaks:
 ### 3. Post-Start Commands (`post_start_cmds`)
 This is a **YAML List** of commands run once after Gamescope has started, in a background thread. Each is split like a shell command line, but no shell runs it: pipes, redirects and `$VARIABLES` don't work. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
 
-Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay ensures the Gamescope socket is ready before the commands are executed. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
+Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay gives Gamescope time to open its socket; it is a fixed wait, not a readiness check. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
 
-**Typical use case — VRR stability fix with `--mangoapp`:**
+**Example — adaptive sync with the `--mangoapp` overlay:**
 gamescope's `adaptive_sync_ignore_overlay` setting is, in its own words, "whether or not to ignore overlay planes for pushing commits with adaptive sync" — useful with the `--mangoapp` overlay:
 ```yaml
 post_start_cmds:
@@ -58,10 +58,7 @@ post_start_cmds:
 ## 🎮 Per-Game Overrides (`sdy`)
 **Path:** `~/.config/steamos_diy/games.d/[AnyName].yaml`
 
-While the Global Config handles the "window" (Gamescope), `sdy.py` handles the **individual game execution**. The system identifies the correct profile by scanning the **content** of the files for a matching ID, ensuring that logic remains consistent even if files are renamed.
-
-
-Profiles are matched by scanning file content for `SDY_ID:` or `STEAM_APPID:`, so the filename is irrelevant. If no ID matches, `sdy` searches by executable name or parent directory name. Any `env_vars` key defined here overwrites the corresponding key from `config.yaml` for this game only.
+The global config sets up Gamescope; `sdy.py` handles each game's own launch. Profiles are matched by scanning file content for `SDY_ID:` or `STEAM_APPID:`, so the filename is irrelevant. If no ID matches, `sdy` searches by executable name or parent directory name. Any `env_vars` key defined here overwrites the corresponding key from `config.yaml` for this game only.
 
 ---
 
@@ -113,7 +110,7 @@ env_vars:
 ```
 
 ### Gamescope Flags Reference (`gamescope.example.yaml`)
-`~/.config/steamos_diy/gamescope.example.yaml` is a reference document — it is **not** loaded by the launcher. It contains the full list of available Gamescope CLI flags translated to YAML format with descriptions, organized by category (general, HDR & performance, embedded mode, VR, debug, shaders, keyboard shortcuts).
+`~/.config/steamos_diy/gamescope.example.yaml` is a reference document — it is **not** loaded by the launcher. It lists every long option of `gamescope --help` (checked against gamescope 3.17.0) in YAML form with a description, by category (general, HDR & performance, nested mode, embedded mode, VR, debug, shaders, keyboard shortcuts). A newer gamescope may add options: `gamescope --help` is the reference.
 
 > [!WARNING]
 > The Control Center's file selector lists it alongside `config.yaml` and `config.example.yaml`, and Save is **not** disabled while it's open (only entering **View Template** mode disables Save). If you open this file directly from the combo and press Ctrl+S, you will overwrite your own reference copy. Use **View Template** to browse it safely, or edit it outside the Control Center.
@@ -121,18 +118,18 @@ env_vars:
 ---
 
 ## 🚀 Dynamic Argument Mapping (DGM)
-The **DGM** engine maps **YAML** flags directly to the gamescope command line. This allows the system to support new Gamescope features without core script modifications.
+The launcher passes the `flags` list to gamescope as it is, so any option your gamescope version accepts can be used without a code change.
 
 * **Find a new flag**: Check `gamescope --help` or consult `~/.config/steamos_diy/gamescope.example.yaml` for the full categorized reference.
 
-* **Add it**: Simply add a new line to your `flags`: list in `config.yaml`.
+* **Add it**: add a line to the `flags:` list in `config.yaml`.
 
 * **Deploy**: The launcher applies the updated arguments on the next session start.
 
 ---
 
 > [!TIP]
-> Configuration templates and active files are all managed from the GUI — no manual file paths needed. For a full walkthrough on how to use the editor, see the:
+> These files can be edited from the Control Center. See:
 >
 > 🔍 **[SteamMachine-DIY Control Center Guide](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center)**.
 

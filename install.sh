@@ -293,7 +293,8 @@ deploy_files() {
     mkdir -p "$ALPM_HOOKS_DIR"
     [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp -f usr/share/libalpm/hooks/gamescope-privs.hook "$ALPM_HOOKS_DIR/"
 
-    # Grant Gamescope necessary capabilities for performance
+    # File capabilities for gamescope (it checks CAP_SYS_NICE for realtime
+    # scheduling); the pacman hook above re-applies them after its upgrades.
     if [ -f /usr/bin/gamescope ]; then
         info "Applying Real-Time capabilities to Gamescope..."
         setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope

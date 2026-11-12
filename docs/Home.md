@@ -5,7 +5,7 @@
 
 ---
 
-Transforms Arch Linux into a console-style gaming system — no display manager, direct Gamescope integration, atomic session management, and per-game profile support.
+Transforms Arch Linux into a console-style gaming system — no display manager, a Gamescope + Steam Game Mode session started by a systemd service, switching to and from KDE Plasma, and per-game profiles.
 
 ---
 
@@ -13,7 +13,7 @@ Transforms Arch Linux into a console-style gaming system — no display manager,
 * 📖 **[Project Overview](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Project-Overview)**: System requirements and design principles.
 * 🚀 **[Installer Workflow](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Installer-Workflow)**: Breakdown of the installation process and system configuration.
 * ⬆️ **[Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating)**: Moving an existing installation to a new release (`install.sh --update` and the Control Center updater).
-* 🏗️ **[Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture)**: Technical implementation of **Atomic Writes** and session transition logic.
+* 🏗️ **[Architecture](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Architecture)**: Components, filesystem layout and the SteamOS shim layer.
 * 🛠️ **[The Utilities Engine](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Utilities-Engine)**: Shared modules for I/O handling, SSoT parsing, and logging.
 * ⚡ **[Zero-DM Boot & TTY1](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Zero-DM-Setup)**: TTY1 session management and display manager bypass configuration.
 
@@ -25,7 +25,7 @@ Transforms Arch Linux into a console-style gaming system — no display manager,
 ### 🛠️ Tools & Maintenance
 * 🛠️ **[SteamMachine-DIY Control Center](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center)**: Reference for the PyQt6 configuration dashboard.
 * 📦 **[Backup & Recovery](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Backup-&-Recovery)**: Procedures for system state restoration.
-* 🔍 **[Troubleshooting & Logs](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Troubleshooting)**: Decoding `jlog` tags, solving GPU DRI locks, and handling TTY handovers.
+* 🔍 **[Troubleshooting & Logs](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Troubleshooting)**: Log tags and message reference, diagnostic commands, known issues.
 * ❓ **[Frequently Asked Questions](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Frequently-Asked-Questions)**: Common implementation queries.
 
 ---

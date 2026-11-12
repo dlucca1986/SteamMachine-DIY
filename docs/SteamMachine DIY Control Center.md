@@ -8,13 +8,13 @@ PyQt6 dashboard for system management, YAML configuration editing, and log analy
 ## 📂 UI Navigation & Tab Logic
 
 ### 1. Diagnostics (Tab Index 0)
-Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab. `on_tab_changed` detects the diagnostics tab dynamically via `self.tabs.indexOf(self.diag_tab)` — no magic index.
+Default tab. Logs are fetched in a background thread via `load_logs()` and auto-refresh each time the user switches to this tab.
 
 * **Component Filter**: Combo with `ALL`, `CORE`, `STEAM`, `SYSTEM`. Each selection calls `get_journal_cmd(tag)` which runs `journalctl -t <tag>` (last 12 hours, 300 entries, export format).
 * **Gamescope integration**: When the filter is `ALL` or `STEAM`, a second journal query (`journalctl -t steam -t python3 --since "1 hour ago" -o short-iso`) fetches gamescope output and merges it into the display. Lines are accepted only when their payload matches the gamescope log format (`[Info]`/`[Warn]`/`[Error]`/`[Gamescope WSI]` or `/usr/bin/gamescope:`) so substring noise (e.g. file managers acting on `gamescope.example.yaml`) is filtered out. Already-seen `LAUNCH_ARGS` strings are deduplicated.
 * **Filter box**: A search field live-filters the displayed log (`_apply_log_filter()`) to lines containing the typed text (case-insensitive), re-rendering from the cached fetch — no extra `journalctl` call. Clearing it restores the normal view; a query with no hits shows a *"No lines match the filter."* hint.
 * **Log deduplication**: Consecutive identical lines are collapsed by `_display_colored_logs()` into a *"⤷ Repeated N times"* note (the active filter takes priority — filtered-out lines are skipped first).
-* **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup — ready to attach to a GitHub issue. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
+* **Export**: Copy to clipboard (`copy_logs()`) copies the on-screen view. **Export Support Report** (`export_support_log()`) builds a full diagnostic file instead: kernel, service status, the complete preflight report, and the raw last-12h logs (all tags + gamescope) re-fetched independently of the active filter and without the display-side dedup. Default filename is timestamped (`sdy_support_YYYYMMDD_HHMMSS.log`).
 
 ### 2. Maintenance (Tab Index 1)
 Privileged operations (backup, restore, log vacuum) run in a background thread via `_run_pkexec`; results arrive through the `process_finished` signal. Each passes a `lock_key`: Backup and Restore share `"files"` and exclude each other, vacuum has its own `"vacuum"`. A lock's buttons are disabled while it is held and re-enabled from the main thread (`pkexec_lock_released` → `_on_pkexec_lock_released`). On a timeout (5 minutes) the `"files"` lock stays held until restart, since the privileged process may still be running; the vacuum lock clears (`sticky_on_timeout=False`). Non-privileged launches (Switch to Steam, Edit SSoT, Open Konsole, Browse Config Folder) use `spawn_native` from `utils.py` (detached, `start_new_session=True`) through `_launch_or_warn`, which shows a warning if the program can't be started.
@@ -35,21 +35,21 @@ Buttons in order:
 | **Open Project Wiki** | Opens the wiki URL via `QDesktopServices`. |
 
 ### 3. Global Options (Tab Index 2)
-Text editor for YAML configuration files with real-time validation.
+Text editor for the YAML configuration files; the content is validated on Save and on Beautify.
 
-* **File location**: resolved from the SSoT (`user_config` for the file's directory, `games_conf_dir` for the Game Overrides tab below) via `_resolve_config_paths()`, falling back to `~/.config/steamos_diy/` when either key is unset — the same resolution `sdy.py`/`health.py` already use, so a custom SSoT path is honoured instead of the GUI silently editing a file the session launcher no longer reads.
+* **File location**: resolved from the SSoT (`user_config` for the file's directory, `games_conf_dir` for the Game Overrides tab below) via `_resolve_config_paths()`, falling back to `~/.config/steamos_diy/` when either key is unset — the same resolution `sdy.py` and `health.py` use.
 * **File selector**: Combo listing `config.yaml`, `config.example.yaml`, and `gamescope.example.yaml`. Switching the combo loads the selected file into the editor.
 * **View Template**: Toggles between the active file and its `.example.yaml` counterpart. The editor's previous content is cached in `view_states["global"]` and restored on toggle-back. Saving is disabled while in template view.
 * **Beautify**: `beautify_yaml()` runs the text through the ruamel.yaml round-trip parser — fixing indentation and normalising spacing while preserving comments and quoting. The reformat is applied as a **single undoable edit** (one `Ctrl+Z` reverts it) and the scroll position is preserved; the outcome is reported in the status bar (`✨ YAML formatted` / `Already clean` / `Nothing to format` for a comments-only document / `Syntax error — see highlight`). It only reformats documents that already parse — broken YAML (including TAB indentation, which YAML forbids) surfaces as a syntax error instead, and string *values* (e.g. the content inside each `flags` entry) are left verbatim.
 * **Save**: `_atomic_save()` validates the YAML and delegates persistence to `write_atomic()` (C-Core) — the same `tmp + fdatasync + rename` protocol used for the session state file. **Ctrl+S** saves the editor on the active tab (`_save_current_tab()`).
 * **Unsaved-changes guard**: closing the window with pending edits in either YAML editor prompts Save / Discard / Cancel (`closeEvent` → `_dirty_editors()`) instead of dropping them silently. Switching the target file in either editor's selector with pending edits prompts Discard / Cancel (`_confirm_discard()`) — no Save option there, since by then the selector already names the new file; Cancel puts the selector back on the file the edits belong to. The editor's modified flag is cleared on load and save, so the prompt only appears for genuine unsaved edits. A template preview never counts as dirty itself, but it keeps the real content's flag: edits made before opening the preview are still reported after leaving it, and closing the window during a preview leaves the preview first so they are not skipped.
-* **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background, helping identify root causes like unclosed quotes. The highlight clears on any user edit.
+* **Error highlighting**: On a YAML parse error, the offending line gets a red background and the preceding line an orange background (the cause, e.g. an unclosed quote, is often on the line before). The highlight clears on any user edit.
 
 ### 4. Game Overrides (Tab Index 3)
 Per-game YAML profile editor backed by journal-based game discovery.
 
 * **Scan History**: `refresh_detected_games()` runs `journalctl --since "24 hours ago" -n 5000 --no-hostname --no-pager` in a background thread. `filter_game_journal_lines()` (from `journal.py`) then extracts game-related lines (matching `chdir`, `gameID`, or `AppID` patterns, noise-filtered), keeping at most the last **2000** matching lines. `parse_game_logs()` (from `journal.py`) then builds the `{name: appid}` dict by calling `extract_game_metadata()` per line.
-* **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so profiles are always accessible even if the game wasn't recently launched.
+* **On-disk merge**: After scanning, `_merge_on_disk_profiles()` adds any existing `games.d/*.yaml` file not already in the detection results, so a profile stays selectable when its game isn't in the last 24 hours of journal.
 * **Combo display**: Games are shown as `"Name (AppID)"` when an AppID is known, otherwise just `"Name"`. The combo is editable; the profile is loaded (or scaffolded) on selection — typing a new name does not reload until you confirm it.
 * **Profile scaffold**: If no profile exists for the selected game, `_scaffold_game_profile()` generates a YAML stub including `SDY_ID` and `STEAM_APPID` headers when an AppID is available.
 * **Unsaved edits**: `view_states["games"]` caches unsaved editor content while toggling the template preview, and remembers which game the editor was loaded from, so a cancelled switch (see the unsaved-changes guard above) can restore the selector.
@@ -72,7 +72,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
 | **`config flags` / `post_start_cmds`** | if present, are lists — the launcher silently ignores any other type (no flags / no commands at all) |
-| **Gamescope flags** | the configured `flags` are run through the installed gamescope's own argv parser (`gamescope <flags> --help`), checking its error output for an unrecognised option — an unknown or mistyped flag makes gamescope exit at launch (black TTY), so it is caught before boot. `getopt_long` stops at the first bad option, so only one is ever reported per run. Skipped if gamescope can't be run |
+| **Gamescope flags** | the configured `flags` are run through the installed gamescope's own argv parser (`gamescope <flags> --help`), checking its error output for an unrecognised option — an unknown or mistyped flag makes gamescope exit at launch, and the session falls back to Desktop. `getopt_long` stops at the first bad option, so only one is ever reported per run. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
 | **C-Core** | `libcore.so` is loadable |
 | **Session state** | the `next_session` directory is writable |
@@ -88,7 +88,7 @@ A permanent label in the window status bar reports `steamos_diy.service`, refres
 ● steamos_diy: <active> (<sub>) · restarts: <N> · last exit: <code>
 ```
 
-Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_status()` reads `systemctl show` (no root needed) and `parse_service_status()` degrades missing or non-numeric fields to safe placeholders. **Note:** `restarts` (`NRestarts`) increments on every exit-75 session switch, so a high count is normal — `ActiveState=failed` is the real alarm.
+Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_status()` reads `systemctl show` (no root needed) and `parse_service_status()` replaces missing or non-numeric fields with placeholders. **Note:** `restarts` (`NRestarts`) increments on every exit-75 session switch, so a high count is normal — `ActiveState=failed` is the real alarm.
 
 ---
 
@@ -115,17 +115,17 @@ Colour-coded green (`active`) / red (`failed`) / grey (unknown). `get_service_st
 
 ## 🖊️ Editor Widgets
 
-> Defined in `editors.py` — zero dependency on project modules, purely self-contained Qt widgets.
+> Defined in `editors.py`, which imports no other project module.
 
 ### YAMLEditor (`QPlainTextEdit` subclass)
 Custom editor used in both the Global Options and Game Overrides tabs.
 
 * **Line number gutter** (`LineNumberArea`): A side widget rendered via `QPainter`. Width scales dynamically with line count. Background `#2c3e50`, numbers `#95a5a6`.
-* **Auto-indent**: On `Enter`/`Return`, the previous line's leading whitespace is replicated on the new line, preserving YAML indentation without manual spacing.
-* **No word wrap**: `LineWrapMode.NoWrap` keeps long flag lines readable.
+* **Auto-indent**: On `Enter`/`Return`, the previous line's leading whitespace is replicated on the new line.
+* **No word wrap**: `LineWrapMode.NoWrap`.
 
 ### YAMLSyntaxHighlighter (`QSyntaxHighlighter` subclass)
-Rule-based highlighter applied to both editors. Rules are evaluated per visible block by Qt.
+Rule-based highlighter applied to both editors.
 
 ---
 
@@ -202,7 +202,7 @@ yaml_parser.width = 4096
 | :--- | :--- |
 | **Debug a Crash** | Open **Diagnostics**, filter by `ALL` or `STEAM`, look for red `..._ERROR:`/`..._FAIL:`/`..._FAILED:` markers, `[Error]` gamescope lines, or a green `VALIDATED_*_STABLE` to confirm the switch actually landed. |
 | **Verify Configuration** | Use **Global Options**; the editor highlights the error line (red) and its predecessor (orange) on invalid YAML. |
-| **System Recovery** | If shims or symlinks are broken, use **Restore from Archive** in Maintenance. |
+| **System Recovery** | If shims or symlinks are broken, **Restore from Archive** (Maintenance) recreates them from a backup; re-running `install.sh` does too. |
 | **Game Specific Profile** | Use **Game Overrides** → Scan History → select the game → edit and save. |
 
 ---
