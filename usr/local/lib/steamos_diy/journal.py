@@ -84,8 +84,7 @@ def _normalize_appid(value: str) -> str:
 
     Steam logs Non-Steam AppIDs as 64-bit integers: high 32 bits = real
     AppID (matches $SteamAppId), low 32 bits = internal flag mask.
-    Protontricks, compatdata paths, and the Steam URL bar all use the
-    32-bit form, so shift down anything wider.
+    Anything wider than 32 bits is shifted down.
     """
     try:
         n = int(value)
@@ -240,8 +239,7 @@ def fetch_tagged_entries(
 ) -> list[tuple[datetime, str]]:
     """Run journalctl for *tag* and parse into (timestamp, line) entries.
 
-    Shared by the Diagnostics view and the support-report export so the
-    two can never drift on how project logs are fetched. Raises
+    Shared by the Diagnostics view and the support-report export. Raises
     subprocess.SubprocessError (includes TimeoutExpired)/OSError — error
     handling is the caller's concern. errors="replace" keeps decoding
     itself from ever raising: a MESSAGE field with an embedded newline

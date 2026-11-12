@@ -156,7 +156,7 @@ class YAMLSyntaxHighlighter(QSyntaxHighlighter):
             self.rules.append((QRegularExpression(pat), fmt))
 
     def highlightBlock(self, text):  # pylint: disable=invalid-name
-        """Called by Qt per visible block."""
+        """Qt override: apply the rules to one text block."""
         for expression, fmt in self.rules:
             it = expression.globalMatch(text)
             while it.hasNext():

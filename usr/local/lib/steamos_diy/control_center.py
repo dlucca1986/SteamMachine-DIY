@@ -103,9 +103,8 @@ _WINDOW_HEIGHT: int = 700
 _BUTTON_STYLE: str = "height: 40px; text-align: left; padding-left: 15px;"
 _EDITOR_FONT_SIZE: int = 10
 _BUTTON_RESET_MS: int = 2000
-# Redraws the whole log view (clear + one QTextEdit.append() per
-# surviving line) on every keystroke otherwise - a real stutter on a
-# session with hours/days of accumulated journal lines.
+# Without a debounce every keystroke redraws the whole log view (clear +
+# one QTextEdit.append() per surviving line).
 _LOG_FILTER_DEBOUNCE_MS: int = 200
 
 # Game Overrides combo hints. Set on the combo's line edit, not on the
@@ -1133,7 +1132,7 @@ class SDYControlCenter(QMainWindow):
                             # No -t filter: the chdir/gameID/AppID lines
                             # come from Steam's own output, not this
                             # project's jlog() tags. -n bounds the read
-                            # instead (enough for 24h of real launches).
+                            # instead.
                             "-n",
                             "5000",
                             "--no-hostname",
@@ -1248,10 +1247,8 @@ class SDYControlCenter(QMainWindow):
     def _schedule_log_filter(self):
         """Debounce _apply_log_filter (re)starting a single-shot timer.
 
-        Re-rendering on every keystroke (clear + one QTextEdit.append()
-        per surviving line) is a real stutter with hours/days of
-        accumulated journal lines; waiting for a short pause in typing
-        collapses a burst of keystrokes into one render.
+        Waiting for a short pause in typing collapses a burst of
+        keystrokes into one render (see _LOG_FILTER_DEBOUNCE_MS).
         """
         self._log_filter_timer.start(_LOG_FILTER_DEBOUNCE_MS)
 

@@ -51,8 +51,8 @@ _BINARY_KEYS: tuple[tuple[str, str], ...] = (
     ("bin_dbus", DEFAULT_DBUS_BIN),
 )
 
-# Groups whose absence breaks the session — tty is mandatory because
-# notify() writes status straight to /dev/tty1 via the C-Core.
+# Groups install.sh adds the user to that the preflight checks; tty is
+# there for notify()'s write to /dev/tty1.
 _CRITICAL_GROUPS: tuple[str, ...] = ("tty", "video", "render", "input")
 
 # Global-config fields that must be lists: the session launcher silently
@@ -218,10 +218,9 @@ def _check_config_types(data: object) -> list[CheckResult]:
 def _check_gamescope_flags(data: object) -> CheckResult:
     """Validate global-config 'flags' against gamescope's own argv parser.
 
-    A flag the running gamescope does not recognise makes it exit at
-    launch — the session never starts, systemd retries, and TTY1 goes
-    black with no hint. Only the global config is checked: per-game
-    profiles don't pass gamescope flags.
+    A flag the installed gamescope does not recognise makes it exit at
+    launch, and the launcher falls back to Desktop. Only the global
+    config is checked: per-game profiles don't pass gamescope flags.
 
     Runs `gamescope <flags> --help` instead of comparing against the
     option list --help prints: gamescope accepts some flags it never lists

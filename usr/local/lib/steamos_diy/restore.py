@@ -199,7 +199,8 @@ def _write_member(
     """Write member to target via tmp+rename; False on any failure.
 
     Atomic: target holds either the old or the complete new content, even
-    after a crash mid-write. Replacing the inode instead of truncating the
+    if the restore is killed mid-write (tmp isn't fsynced, so this doesn't
+    cover a power loss). Replacing the inode instead of truncating the
     file in place also avoids ETXTBSY on a running binary.
 
     Every OSError is caught and reported as a failed member, so one bad
@@ -389,8 +390,8 @@ def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
     """Recreate one symlink after allow-list validation of both ends.
 
     Atomic via tmp symlink + os.replace, same reasoning as _write_member:
-    a kill between unlink and symlink would leave a critical shim (e.g. a
-    session-select polkit helper) missing entirely rather than stale.
+    a kill between unlink and symlink would leave a shim (e.g.
+    /usr/bin/steamos-session-select) missing entirely rather than stale.
     """
     if not (
         _is_path_safe(link, allowed) and _is_path_safe(target, allowed)
