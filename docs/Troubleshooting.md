@@ -25,7 +25,7 @@ unit's cgroup. `jlog()` messages are sent through `syslog()`, and journald attri
 syslog message's `_SYSTEMD_UNIT` from the sender's *current* cgroup at send time — so every
 `CORE`/`STEAM`/`SYSTEM` line ends up filed under that session scope, not under
 `steamos_diy.service`. Only systemd's own service-lifecycle lines (Started/Stopped, exit
-codes — emitted by systemd itself, not the child process) show up under `-u`. Always use
+codes) and the PAM session-open line show up under `-u`. Always use
 `-t <tag>` (section 3 below) to see actual application log content; gamescope's own output is
 under `-t python3`.
 
@@ -57,19 +57,19 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `STEAM` | `LAUNCH_ARGS: <full gamescope+Steam argv>` | INFO | The exact command line used to launch this session — first place to look for a wrong flag. |
 | `STEAM` | `POST_START_CMDS_SKIPPED: session crashed before delay elapsed` | DEBUG | `post_start_cmds` were **not** run because the session was already detected as crashed by the time the delay elapsed. |
 | `STEAM` | `BAD_POST_START_CMD: <cmd> - <error>` | WARN | A `post_start_cmds` entry had an unbalanced quote; degraded to a naive split and still ran. |
-| `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command fired successfully. |
+| `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command was dispatched (a `SPAWN_ERROR` just before it means it could not be started). |
 | `STEAM` | `POST_START_CMDS_FAILED: <error>` | ERROR | The entire post-start daemon thread crashed unexpectedly (not a single bad command — something broke the loop itself). |
 | `CORE` | `VALIDATED_<TARGET>_STABLE` | DEBUG | The session survived the validation window and was declared stable. |
-| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | During crash recovery (after `EARLY_EXIT_RECOVERY`), the session process ignored `SIGTERM`; force-killing with `SIGKILL`. Never logged by a normal stop/reboot. |
-| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | During crash recovery, the process survived even `SIGKILL` — almost always stuck in uninterruptible I/O (D-state). Nothing more the launcher can do; systemd's own `TimeoutStopSec` eventually reaps the cgroup. |
+| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | Not reachable in the current code: crash recovery only runs after the session process has already exited. |
+| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | Not reachable in the current code (see the row above). |
 | `CORE` | `EARLY_EXIT_RECOVERY: process exited during the validation window...` | ERROR | A crash (or a switch request that raced the launch) was detected — forcing a fallback to Desktop. |
 | `CORE` | `BINARY_NOT_FOUND: <path> - <error>` | ERROR | The configured session binary (gamescope/Steam/Plasma) doesn't exist at that path — check the relevant `bin_*` SSoT key. |
 | `CORE` | `OS_ERROR: <error>` | ERROR | A generic OS-level failure spawning the session (permissions, resource limits, etc). |
 | `CORE` | `BAD_LAUNCH_ARGV: <error>` | ERROR | The command line itself was malformed (e.g. an embedded null byte from a hand-edited config value) — the process was never even spawned. |
 | `CORE` | `SIG_<N>: Shutting down...` | INFO | `SIGTERM`/`SIGINT` received — clean shutdown in progress, not a crash. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
-| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; `qdbus6 org.kde.Shutdown /Shutdown logout` via `bin_dbus` towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk, so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
-| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted both from a post-crash Desktop-recovery write and from a switch request's own persist step. |
+| `CORE` | `DISPATCH_FAILED: target=<target> — state persisted, switch will apply on next session` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; `qdbus6 org.kde.Shutdown /Shutdown logout` via `bin_dbus` towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk (unless a `NEXT_SESSION_WRITE_FAILED` line precedes it), so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
+| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted by any of the three writes: validation, crash recovery, switch request. |
 
 ### Game launch (`sdy.py`)
 
@@ -77,7 +77,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | :--- | :--- | :--- | :--- |
 | `CORE` | `SCAN_ERROR: <directory> - <error>` | DEBUG | Couldn't scan a game-profile directory while looking for a header (`STEAM_APPID`/`SDY_ID`) match. |
 | `STEAM` | `BAD_<FIELD>: <value> - <error>` | WARN | A per-game `GAME_WRAPPER` or `GAME_EXTRA_ARGS` had an unbalanced quote; degraded to a naive split and still ran. |
-| `STEAM` | `GAME_LAUNCH: <name> (AppID: <id>)` | INFO | A game is being launched — the name/AppID identify which profile was matched. |
+| `STEAM` | `GAME_LAUNCH: <name> (AppID: <id>)` | INFO | A game is being launched: executable name and `SteamAppId` (the matched profile is not logged). |
 | `STEAM` | `EXECUTION_FAILED: <error>` | ERROR | `execvpe` failed — missing binary, permission denied, or a malformed argv. The game never started. |
 | `STEAM` | `NO_TARGET: sdy invoked with no argv` | ERROR | `sdy.py` was invoked with nothing to launch — almost always a Steam-side invocation problem, not a config issue. |
 
@@ -92,9 +92,9 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
 | `SYSTEM` | `BACKUP_SYMLINK_SCAN_FAIL: <path> - <error>` | WARN | Couldn't scan a directory for symlinks to record in the backup manifest. |
-| `SYSTEM` | `BACKUP_LINK_SKIPPED: <path>` | WARN | A symlink was excluded from the manifest (unsafe path, or contains a tab/newline that would corrupt the manifest format). |
+| `SYSTEM` | `BACKUP_LINK_SKIPPED: <path>` | WARN | A symlink was left out of the manifest because its path or target contains a tab or newline. |
 | `SYSTEM` | `BACKUP_ADD: <path>` | DEBUG | One source path was added to the archive. |
-| `SYSTEM` | `BACKUP_TMP_CLEANUP_FAIL: <error>` | WARN | Couldn't remove a leftover `.tmp` archive from a previous failed/interrupted backup. |
+| `SYSTEM` | `BACKUP_TMP_CLEANUP_FAIL: <error>` | WARN | This backup failed and its own `.tmp` file couldn't be removed. |
 | `SYSTEM` | `BAD_BACKUP_KEEP: <error> - using default` | WARN | The `BACKUP_KEEP` SSoT value was unusable as an integer (e.g. hand-edited to `nan`/`inf`) — pruning used the built-in default (5) instead. |
 | `SYSTEM` | `BACKUP_PRUNED: <archive name>` | INFO | An old archive was deleted during rotation (only the newest `BACKUP_KEEP` are retained). |
 | `SYSTEM` | `BACKUP_PRUNE_FAIL: <archive name> - <error>` | WARN | Couldn't delete an old archive during rotation — it was left in place. |
@@ -105,7 +105,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 
 ### Restore (`restore.py`)
 
-Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejection — by design, one bad or unsafe archive entry is skipped and the rest of the restore continues (see `RESTORE_FATAL` at the bottom for the one case that aborts everything).
+The `RESTORE_REJECTED_*` lines and `RESTORE_WRITE_FAIL`/`RESTORE_CHMOD_FAIL` are **per-member**: one bad or unsafe archive entry is skipped and the rest of the restore continues. `RESTORE_FAILED`, `RESTORE_VERIFY_FAIL`, `RESTORE_EMPTY` and `RESTORE_FATAL` end the restore with exit 1.
 
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
@@ -126,14 +126,14 @@ Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejec
 | `SYSTEM` | `RESTORE_LINKS_DONE` | DEBUG | All manifest symlinks have been processed. |
 | `SYSTEM` | `RESTORE_EMPTY: no member matched the backup mapping` | ERROR | Every single member was rejected — almost always the wrong archive (foreign format, or from an incompatible layout), not a normal partial failure. |
 | `SYSTEM` | `RESTORE_SUCCESS: Environment ready.` | INFO | The restore completed with at least one member restored. |
-| `SYSTEM` | `RESTORE_FATAL: <ExceptionType>: <error>` | ERROR | An archive-level failure (corrupt gzip/tar, or an unexpected `OSError`) — unlike every line above, this aborts the **entire** restore. |
+| `SYSTEM` | `RESTORE_FATAL: <ExceptionType>: <error>` | ERROR | An archive-level failure (corrupt gzip/tar, or an unexpected `OSError`) — this aborts the **entire** restore. |
 
 ### SSoT / config reading (`utils.py`)
 
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
 | `CORE` | `SSOT_READ_ERROR: <error>` | DEBUG | Couldn't read or decode `/etc/default/steamos_diy.conf` — every SSoT lookup degrades to its own built-in default for the rest of the process. |
-| `CORE` | `BAD_SSOT_NUM: <key> - using <default>` | WARN | A numeric SSoT value (a timeout, delay, or count) didn't parse as a valid finite number — the built-in default was used instead. |
+| `CORE` | `BAD_SSOT_NUM: <key> - using <default>` | WARN | A numeric SSoT value (a timeout, delay, or count) isn't a number `float()` accepts — the built-in default was used instead. A missing key falls back silently; `nan`/`inf` and negative values are not rejected. |
 | `CORE` | `BAD_ENV_ENTRY: <name> - <error>` | WARN | An entry from the SSoT or from a YAML `env_vars:` block can't be an environment variable (empty name, a `=` inside the name, a NUL byte) — that one entry was skipped, everything else was applied. Check the named line. |
 | `CORE` | `YAML_LOAD_ERROR: <path> - <error>` | WARN | Couldn't read or decode a YAML config/profile file (also: a value the parser recognises but can't build, such as an unquoted impossible date) — the whole file was ignored. |
 | `CORE` | `YAML_PARSE_ERROR: <path> - <error>` | WARN | The YAML file has a syntax error — the whole file was ignored. Run *Validate Configuration* in the Control Center for the offending line. |
@@ -142,13 +142,13 @@ Every `RESTORE_REJECTED_*`/`RESTORE_*_FAIL` line below is a **per-member** rejec
 | `CORE` | `USER_LOOKUP_ERROR: <error>` | DEBUG | Couldn't resolve the real (non-root) invoking user while running privileged under `pkexec`. |
 | `CORE` | `OWNERSHIP_ERROR: <path> - <error>` | WARN | `chown` failed while restoring ownership of a file/directory to the real user. |
 | `SYSTEM` | `<CALLER>_FAILED: SSoT config not found` | ERROR | A privileged operation (backup/restore) refused to start because the SSoT conf file is missing. |
-| `SYSTEM` | `<fail_tag>: <error>` | ERROR | Archive integrity verification failed (`verify_archive`) — default tag `ARCHIVE_VERIFY_FAIL`, reused by backup/restore/update with a caller-specific prefix. |
+| `SYSTEM` | `<fail_tag>: <error>` | ERROR | Archive integrity verification failed (`verify_archive`) — logged as `BACKUP_VERIFY_FAIL` by backup and `RESTORE_VERIFY_FAIL` by restore (default `ARCHIVE_VERIFY_FAIL`). |
 
 ### Self-update (`utils.py`'s `check_latest_release`/`download_release` path)
 
 | Tag | Message | Level | Meaning |
 | :--- | :--- | :--- | :--- |
-| `SYSTEM` | `<CALLER>_FAILED: non-https URL` | ERROR | A URL used by the update path wasn't `https://` — rejected before ever opening a connection. |
+| `SYSTEM` | `UPDATE_CHECKSUM_FAIL: non-https URL` / `UPDATE_DOWNLOAD_FAIL: non-https URL` | ERROR | A URL used by the update path wasn't `https://` — rejected before opening a connection. Also logged when the release has no `SHA256SUMS` asset (empty URL). |
 | `SYSTEM` | `UPDATE_CHECK_FAIL: malformed API reply` | WARN | GitHub's releases API replied with an unexpected shape (missing `tag_name`, etc). |
 | `SYSTEM` | `UPDATE_CHECK_FAIL: <error>` | WARN | Network or parse error while checking for a new release. |
 | `SYSTEM` | `UPDATE_CHECKSUM_FAIL: <error>` | ERROR | Couldn't fetch the release's `SHA256SUMS` asset. |
@@ -207,7 +207,7 @@ Not reproduced by the project (no record of which hardware showed it); kept as a
 ### Mouse cursor gets "stuck" after closing the Steam overlay (stretched/custom-aspect sessions)
 On a gamescope session running a stretched or non-native aspect ratio (4:3, 16:10, etc. — not a plain 1:1 inner=outer session), closing the Steam Big Picture overlay can fail to re-grab raw mouse input, leaving the in-game camera/aim stuck or pinned to an edge. This is a [known upstream gamescope issue](https://github.com/ValveSoftware/gamescope/issues/2042), not specific to this project.
 
-**Fix:** add `--force-grab-cursor` to the affected game's (or the global) `flags` in `config.yaml` (gamescope: "always use relative mouse mode instead of flipping dependent on cursor visibility"). The project has not reproduced the issue or tested the fix. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
+**Fix:** add `--force-grab-cursor` to `flags` in `config.yaml` (gamescope flags apply to the whole session; per-game profiles can't set them) (gamescope: "always use relative mouse mode instead of flipping dependent on cursor visibility"). The project has not reproduced the issue or tested the fix. Only add it if you actually run a stretched/custom-aspect session and hit this symptom; it's not needed for a native 1:1 session.
 
 ### "Another privileged operation is already running…" won't go away
 Backup and Restore share one lock (they touch the same files). If either times out (after 5 minutes), the lock is deliberately kept: the privileged process it started (`backup.py`, `restore.py`, a `chown -R`) may still be running, and there's no way to confirm it finished. Journal-vacuum has its own lock, which clears on a timeout (usually just a slow password prompt).

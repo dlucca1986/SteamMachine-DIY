@@ -696,8 +696,8 @@ def test_default_games_conf_dir_under_user_config_home(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# fix_ownership — a wedged `chown -R` must time out, be logged and be
-# swallowed, not hang backup/restore indefinitely.
+# fix_ownership — a wedged `chown -R` must time out and be swallowed, not
+# hang backup/restore indefinitely.
 # ---------------------------------------------------------------------------
 
 

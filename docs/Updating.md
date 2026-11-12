@@ -16,7 +16,7 @@ How to move an existing installation to a new release. One procedure — `instal
 
 ## 🔒 Integrity verification
 
-This covers the Control Center's download (step 2); a manual download or `git pull` is yours to verify. Every release from 2.1.8 on publishes a `SHA256SUMS` asset, and the tarball's SHA-256 is checked against it before anything is extracted. **Fail-closed**: if the asset is missing, malformed or doesn't match, nothing is extracted or installed, and the reason is in the Diagnostics logs (`UPDATE_CHECKSUM_FAIL` / `UPDATE_DOWNLOAD_FAIL`).
+This covers the Control Center's download (step 2); a manual download or `git pull` is yours to verify. Every release from 2.1.8 on publishes a `SHA256SUMS` asset, and the tarball's SHA-256 is checked against it before anything is extracted. **Fail-closed**: if the asset is missing, malformed or doesn't match, nothing is extracted or installed, and a line tagged `UPDATE_CHECKSUM_FAIL` or `UPDATE_DOWNLOAD_FAIL` is in the Diagnostics logs.
 
 This catches a corrupted or truncated download. The tarball and the checksum both come from the same GitHub release over HTTPS, so it is no defense against a compromised GitHub account or release (there is no independent signature). A release published without a `SHA256SUMS` asset (only possible before 2.1.8, or if the release process was run incorrectly) simply cannot be installed via the in-app updater; use the manual terminal procedure below instead, after verifying the source yourself.
 
@@ -43,7 +43,7 @@ Same behavior as the Control Center path: non-interactive, ends with the 10-seco
 | Packages | `pacman -Syu --needed` | Same (a full system upgrade) |
 | Reboot | Asks | **Automatic** after a 10s countdown (`CTRL+C` aborts) |
 
-After the reboot, check `steamos_diy.conf.new` if the installer warned about it, and merge any new SSoT keys you care about. A key missing from your SSoT isn't fatal: the code falls back to its built-in default. **Validate Configuration** in the Control Center checks the SSoT's paths and binaries.
+After the reboot, check `steamos_diy.conf.new` if the installer warned about it, and merge any new SSoT keys you care about. A key missing from your SSoT isn't fatal: every key except `user_config` has a built-in default; without `user_config`, `config.yaml` is not loaded. **Validate Configuration** in the Control Center checks the SSoT's paths and binaries.
 
 ## 🧹 4. Uninstall and reinstall
 

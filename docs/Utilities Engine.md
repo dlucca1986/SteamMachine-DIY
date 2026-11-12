@@ -23,17 +23,17 @@ The shared library is loaded via `ctypes` at import time. If `/usr/local/lib/ste
 3. Call `rename()` to atomically replace the target file.
 4. Best-effort `fsync()` the containing directory, so the rename itself survives a power loss right after it.
 
-The target is replaced by a complete file or not at all. Used for the session state file (`next_session`) and Control Center YAML saves. The new file always gets mode `0644` (tmp+rename creates a new inode), fine for both.
+The target is replaced by a complete file or not at all. Used for the session state file (`next_session`) and Control Center YAML saves. The new file is created with mode `0644` minus the process umask (the unit's umask is `0022`, so `0644`).
 
 ### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
 `get_ssot_var(key)` serves values from the `_SSOT_CACHE` dict, filled on the **first call** by parsing `/etc/default/steamos_diy.conf` once (`key=value` lines, surrounding quotes stripped, first occurrence wins). Later calls never re-read the file, even for a missing key. All values are also exported into `os.environ`, so child processes inherit them.
 
-`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`, falling back to `default` and logging a `WARN` if the value is missing or malformed. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising a `ValueError` in the launcher at boot.
+`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `TERM_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`: a missing key gives `default` silently, a value `float()` can't parse gives `default` and a `BAD_SSOT_NUM` warning. `nan`/`inf` and negative values are accepted as numbers. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising a `ValueError` in the launcher at boot.
 
 `clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but the long-lived Control Center must see the *current* file: its **Validate Configuration** check (`health.run_preflight`) and the reload after a restore both clear the cache first.
 
 ### 3. YAML (`load_yaml_safe`, `apply_env_map`)
-`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` on any error (missing file, parse error) and on a valid document whose root is not a mapping — callers do `cfg.get(...)` on the result, so a list/scalar root is degraded to empty and logged as `YAML_NOT_MAPPING` (WARN). Never raises.
+`load_yaml_safe(path)` parses a YAML file and returns a dict. Returns `{}` on any error (missing file, parse error) and on a valid document whose root is not a mapping — callers do `cfg.get(...)` on the result, so a list/scalar root is degraded to empty and logged as `YAML_NOT_MAPPING` (WARN).
 
 `apply_env_map(data_dict)` injects all key/value pairs from a dict into `os.environ`. Non-dict input and `None` values are ignored; an entry the OS refuses as an environment variable (a name with `=`, an empty name, a NUL byte) is skipped with a `BAD_ENV_ENTRY` warning.
 
@@ -64,8 +64,8 @@ Names and paths of the archive format, shared by `backup.py` and `restore.py`:
 
 | Function | Description |
 | :--- | :--- |
-| `check_root()` | Calls `sys.exit(1)` if the effective UID is not 0. |
-| `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current effective UID. |
+| `check_root()` | Calls `sys.exit(1)` if the real UID is not 0. |
+| `get_real_user()` | Returns `(username, home_path)` for the real user behind `sudo` or `pkexec` (via `SUDO_UID` / `PKEXEC_UID`), falling back to the current real UID; returns `("root", Path("/root"))` if the lookup fails. |
 | `fix_ownership(path, user)` | `chown -R user:user path` for directories (via subprocess), `os.chown` for single files. No-op if `user` is empty or `"root"`. |
 | `spawn_native(path, args)` | Detached spawn via `subprocess.Popen(start_new_session=True)`; stdout/stderr redirected to `/dev/null`. Returns the child PID, or `0` on failure. |
 | `verify_archive(path, tag)` | Gzip-tar integrity check: walks every tar member, then reads the gzip stream to its end so the CRC32 in its trailer is actually validated (member iteration alone stops before it and misses content corruption). Logs failure under `tag` and returns `False` on any error. Shared by `backup.py` and `restore.py`. |
@@ -81,7 +81,7 @@ Standard-library code (`urllib` + `tarfile`, no Qt) behind the Control Center's 
 | :--- | :--- |
 | `VERSION` | The project version, compared against the latest release and shown in the Control Center's title. |
 | `check_latest_release()` | Queries the GitHub Releases API (fixed `https` URL, 10s timeout) and returns a `ReleaseInfo(version, is_newer, notes, tarball_url, html_url, checksum_url)` — or `None` when the network or the reply is unusable (logged as `UPDATE_CHECK_FAIL`, never raised). `checksum_url` is the release's `SHA256SUMS` asset URL (`""` if the release has none). Versions compare as integer tuples, so `2.10.0 > 2.9.0`. |
-| `download_release(info, dest_root)` | Requires `info.checksum_url`: fetches and validates the expected SHA-256 (`_fetch_expected_sha256()`), streams the tarball while hashing it (`_download_verified_tarball()`), and aborts — nothing extracted — if the checksum asset is missing, malformed, or doesn't match (`UPDATE_CHECKSUM_FAIL`/`UPDATE_DOWNLOAD_FAIL`). Only after the digest matches does it prune previous `v*` downloads and unpack under `dest_root/v<version>/`. Extraction uses the tarfile `data` filter (rejects absolute paths, traversal and special members) and only accepts `https://` URLs (`_require_https()`, shared with `_fetch_expected_sha256()`). Returns an `ExtractedRelease(dir, install_sh_sha256)` — the inner export directory holding `install.sh` plus that file's own SHA-256 — or `None` on failure. |
+| `download_release(info, dest_root)` | Requires `info.checksum_url`: fetches and validates the expected SHA-256 (`_fetch_expected_sha256()`), streams the tarball while hashing it (`_download_verified_tarball()`), and aborts — nothing extracted — if the checksum asset is missing, malformed, or doesn't match (`UPDATE_CHECKSUM_FAIL`/`UPDATE_DOWNLOAD_FAIL`). Only after the digest matches does it unpack under `dest_root/v<version>/`; older `v*` downloads are pruned once `install.sh` is found in it. Extraction uses the tarfile `data` filter (rejects absolute paths, traversal and special members) and only accepts `https://` URLs (`_require_https()`, shared with `_fetch_expected_sha256()`). Returns an `ExtractedRelease(dir, install_sh_sha256)` — the inner export directory holding `install.sh` plus that file's own SHA-256 — or `None` on failure. |
 | `verify_file_sha256(path, expected)` | Re-hashes a file already on disk and compares it to `expected`. `updater.py::_on_download` calls this on `install.sh` immediately before handing it to `pkexec`, narrowing (not closing) the TOCTOU window between download-time verification and execution — pkexec's password prompt still follows the check, and the other extracted files aren't re-verified. |
 | `_https_open(url, extra_headers=None)` | Shared `Request`/`urlopen(timeout=...)` plumbing behind every GitHub network call above — each caller keeps its own error handling since what's recoverable (and what to log) differs per call. |
 | `UPDATES_DIR_NAME` | `"updates"` — the download folder name under `~/.config/steamos_diy/`, shared with `backup.py` which excludes it from archives. |
@@ -101,9 +101,9 @@ Standard-library code (`urllib` + `tarfile`, no Qt) behind the Control Center's 
 | `updater.py` | `KONSOLE_BIN`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `safe_emit`, `spawn_native`, `verify_file_sha256` |
 | `health.py` | `CORE_LIB_PATH`, `DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `clear_ssot_cache`, `get_ssot_var`, `shlex_split_or_fallback` |
 | `journal.py` | `JOURNALCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `jlog` |
-| Compatibility shims | `run_shim` (which internally calls `jlog`) |
+| Compatibility shims | `run_shim` (which internally calls `jlog`); `steamos-select-branch.py` also `jlog` |
 
-The `DEFAULT_*_BIN` fallbacks for the SSoT `bin_*` keys, `CORE_LIB_PATH`, and `GAMES_CONF_SUBDIR` (with `default_games_conf_dir()`, the `games_conf_dir` fallback shared by `sdy.py` and `control_center.py`) are defined only here; every module imports them. `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` are not SSoT settings, just one shared literal for the modules that call those tools.
+The `DEFAULT_*_BIN` fallbacks for the SSoT `bin_*` keys, `CORE_LIB_PATH`, and `GAMES_CONF_SUBDIR` (with `default_games_conf_dir()`, `sdy.py`'s `games_conf_dir` fallback; `control_center.py` builds the same path from `GAMES_CONF_SUBDIR`) are defined only here; every module imports them. `SYSTEMCTL_BIN`/`JOURNALCTL_BIN` are not SSoT settings, just one shared literal for the modules that call those tools.
 
 ---
 **[⬅️ Back to Home](https://github.com/dlucca1986/SteamMachine-DIY/wiki)**.

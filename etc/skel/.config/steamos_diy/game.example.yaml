@@ -4,7 +4,7 @@
 # DESCRIPTION:  Specific Game Configuration (Overrides Global Defaults)
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
-# PATH:         $HOME/.config/steamos_diy/games.d/game.example.yaml
+# PATH:         $HOME/.config/steamos_diy/game.example.yaml
 # DESTINATION:  Managed by Control Center -> games.d/[GameName].yaml
 # LICENSE:      MIT
 # =============================================================================
@@ -18,7 +18,7 @@ STEAM_APPID: "1091500"
 # --- [ 📘 CONFIGURATION HIERARCHY ] ---
 # 1. INHERIT: Commented keys (#) use global values from config.yaml.
 # 2. OVERRIDE: Defined keys replace global settings.
-# 3. DISABLE: Set to "" to disable a feature for this game.
+# 3. DISABLE: Set GAME_WRAPPER / GAME_EXTRA_ARGS to "" to drop the global one.
 
 # --- [ 🚀 HOW TO ACTIVATE ON STEAM ] ---
 # 1. Open Steam -> Right Click Game -> Properties

@@ -120,7 +120,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   a gamescope session. Same class of variable as the already-ported `SRT_LOG_TO_JOURNAL`.
 - Troubleshooting doc entry for the known upstream cursor-regrab bug on stretched/custom-
   aspect gamescope sessions ([gamescope#2042](https://github.com/ValveSoftware/gamescope/issues/2042)):
-  add `--force-grab-cursor` to the affected game's `flags` — usable today via this project's
+  add `--force-grab-cursor` to `flags` in `config.yaml` (session-wide) — usable today via this project's
   existing flags passthrough, no code change needed.
 
 Both surfaced while researching other gamescope-session forks/projects for portable ideas.
@@ -134,11 +134,11 @@ Both surfaced while researching other gamescope-session forks/projects for porta
 ### Changed
 - `install.sh`/`uninstall.sh`'s terminal output got a small readability pass: a one-time
   header banner (dynamic label — "Installer" / "Updater" / "Uninstaller" — centered in a
-  box sized to fit each), a `stage()` divider before each install/uninstall stage (numbered,
+  fixed-width box), a `stage()` divider before each install/uninstall stage (numbered,
   matching the existing `# --- N. ... ---` comments — 6 for install, 3 for uninstall;
   `finalize_uninstallation` deliberately left unnumbered since it runs as a background
   epilogue *after* the "Uninstallation Complete" message, not as a user-facing stage), and a
-  clearer completion box at the end of each script. Purely cosmetic — same `info`/`success`/
+  completion divider line at the end of each script. Purely cosmetic — same `info`/`success`/
   `warn`/`error` functions and message text as before, no new dependency (plain ANSI codes
   already in use, no `tput`/`figlet`/etc.).
 - The `timeout=10` used by 4 independent `journalctl`/`systemctl` `subprocess.run()` calls
@@ -175,8 +175,7 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   untimed `proc.wait()` holding Popen's internal waitpid lock — the handler's wait could
   never reap the already-exited child and always ran out both 5s `TERM_TIMEOUT` windows.
   The handler now only signals the child and exits; the surrounding `with Popen` block reaps
-  it, and a child ignoring SIGTERM is still killed by the unit's `KillMode=mixed` +
-  `TimeoutStopSec`. Reproduced in a scratch script, regression-tested, and confirmed on real
+  it (what happens to a child that ignores SIGTERM has not been tested). Reproduced in a scratch script, regression-tested, and confirmed on real
   hardware: stop now completes in ~85ms after `SIG_15`, with no timeout entries.
 - Control Center, Game Profiles tab: after a "Scan History", the next Save **silently did
   nothing**. Repopulating the combo only restored its text when it wasn't in the refreshed list,
@@ -256,7 +255,7 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   `NEXT_SESSION_WRITE_FAILED` and `NOFILE_LIMIT_RAISE_FAILED` — found by a new local script
   that cross-checks every static tag against the doc file. `NEXT_SESSION_WRITE_FAILED` is the
   more significant of the two: the code's own comment calls it "the single most important
-  write in the launcher," since a failed write leaves `next_session` pointing at whatever it
+  write in this file," since a failed write leaves `next_session` pointing at whatever it
   already held instead of the safe Desktop fallback.
 - `control_center.py::_run_pkexec`'s busy-guard branch called `self.statusBar().showMessage(...)`
   without accounting for PyQt6's stub typing `statusBar()` as `QStatusBar | None` — found by
@@ -315,8 +314,8 @@ Both surfaced while researching other gamescope-session forks/projects for porta
   surface). Found by a new local dev script that checks every WARN/ERROR `jlog()` call against
   the real regex, not by re-reading the codebase by hand — which had already missed these twice.
 - `helpers/steamos-select-branch.py` left stdout empty on every call, including
-  `steamos-select-branch -c` — which a live support-log export showed Steam actually calls on
-  every normal game launch to populate its own (inapplicable-here) update-channel UI, not just
+  `steamos-select-branch -c` — which a live support-log export showed Steam actually calls at
+  every Game Mode start to populate its own (inapplicable-here) update-channel UI, not just
   on a rarely-visited settings page as originally assumed. `-c`/`-l` now print a fixed `stable`
   to stdout (this project has no real branches to report, so a single coherent value is enough
   to answer both queries); an actual branch-switch request keeps logging only, unchanged.

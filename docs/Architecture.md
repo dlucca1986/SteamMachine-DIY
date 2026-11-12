@@ -34,7 +34,7 @@ The part of the launcher (`_build_gamescope_args()`) that builds the `gamescope`
 A wrapper that identifies games via `SteamAppId` or executable name and applies per-game YAML overrides from `games.d/`.
 
 ### 6. Control Center (`control_center.py`, `editors.py`, `journal.py`, `updater.py`)
-The PyQt6 dashboard that manages YAML configurations using the `ruamel.yaml` library to preserve user comments and formatting. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`. The in-app updater flow (release check, download, installer handoff — `UpdateManager`) lives in `updater.py`.
+The PyQt6 dashboard. Its YAML editors save the text as typed after validating it with `ruamel.yaml`; Beautify re-dumps it through ruamel's round-trip parser, which keeps comments. UI rendering widgets (`YAMLEditor`, `YAMLSyntaxHighlighter`, `LineNumberArea`) are isolated in `editors.py`. Journal parsing and game discovery logic (`get_journal_cmd`, `fetch_tagged_entries`, `fetch_gamescope_logs`, `filter_game_journal_lines`, `parse_game_logs`, `parse_export_format`, `extract_game_metadata`) live in `journal.py`. The in-app updater flow (release check, download, installer handoff — `UpdateManager`) lives in `updater.py`.
 
 ### 7. Health & Preflight (`health.py`)
 A Qt-free backend module — like `journal.py`, testable in isolation — powering the Control Center's diagnostics. `run_preflight()` returns a list of `CheckResult`s that validate the configuration: SSoT presence, binary handlers, SSoT path resolution, YAML syntax, `flags`/`post_start_cmds` types, gamescope flag validity (checked by running the configured flags through gamescope's own argv parser), group membership, C-Core loadability, and session-state writability. `get_service_status()` snapshots `steamos_diy.service` via `systemctl show`. See [Control Center](https://github.com/dlucca1986/SteamMachine-DIY/wiki/SteamMachine-DIY-Control-Center).
@@ -80,7 +80,7 @@ Symbolic links put the project's scripts at the SteamOS paths Steam calls, and i
 | `session_select.py` | `/usr/bin/steamos-session-select` | Switches session: `steamos-session-select desktop` / `steam`. |
 | `sdy.py` | `/usr/local/bin/sdy` | CLI wrapper for game execution using YAML profiles. |
 | `control_center.py` | `/usr/local/bin/sdy-control-center` | CLI entry point for the Dashboard. |
-| `backup.py` | `/usr/local/bin/sdy-backup` | CLI command to create a full system backup. |
+| `backup.py` | `/usr/local/bin/sdy-backup` | Backs up the project's config, code, unit and shim-symlink list (run as root). |
 | `restore.py` | `/usr/local/bin/sdy-restore` | CLI command to restore from a backup archive. |
 
 ---

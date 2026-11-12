@@ -625,8 +625,8 @@ def test_prepare_restore_requests_for_restore_mapping(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _reload_systemd — a wedged `systemctl daemon-reload` must time out, be
-# logged and be swallowed, not hang the restore indefinitely.
+# _reload_systemd — a wedged `systemctl daemon-reload` must time out and be
+# swallowed, not hang the restore indefinitely.
 # ---------------------------------------------------------------------------
 
 

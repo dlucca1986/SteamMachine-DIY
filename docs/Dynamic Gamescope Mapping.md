@@ -36,7 +36,7 @@ Each list item is split like a shell command line and the pieces are passed to g
 What actually breaks:
 * ❌ `- "-F" "fsr"` — two quoted strings in one item is invalid YAML: the **whole file** is ignored (no flags, `env_vars` or `post_start_cmds`), logged as `YAML_PARSE_ERROR`.
 * ❌ A TAB used for indentation — also invalid YAML, same result.
-* ❌ A misspelled flag (`--sharpnes 5`) — gamescope refuses to start and the session falls back to Desktop.
+* ❌ A misspelled flag (`--hide-cursor-dealy 3000`) — gamescope refuses to start and the session falls back to Desktop.
 * ❌ `flags: "-W 1280 -H 720"` — a string instead of a list: all flags are ignored.
 
 **Maintenance → Validate Configuration** in the Control Center reports all four.

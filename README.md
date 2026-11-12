@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/Version-2.1.9-blue.svg)](https://github.com/dlucca1986/SteamMachine-DIY)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Transform your Arch Linux machine into a dedicated gaming console using systemd, supporting AMD, Intel, and NVIDIA hardware.**
+**Transform your Arch Linux machine into a dedicated gaming console using systemd. Tested on AMD and Intel; NVIDIA packages are selected but untested with gamescope.**
 
 > [!IMPORTANT]
 > This framework is designed for **KDE Plasma 6.x (Wayland)**.
@@ -28,13 +28,13 @@
 ## 🛡️ Design Principles
 * **Standard Hierarchy**: The code lives in `/usr/local/lib/steamos_diy/`; everything deployed outside it is listed in the [Installer Workflow](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Installer-Workflow) wiki page.
 * **No hardcoded user**: the installer resolves the installing user's name, UID and home.
-* **Reversible**: An uninstaller removes the project's files and puts getty back on TTY1; it offers to re-enable your display manager.
+* **Reversible**: An uninstaller removes the project's files and puts getty back on TTY1; it offers to re-enable SDDM or plasmalogin.
 
 ## 🛠️ Hardware Support
 * **AMD**: RADV (Mesa).
 * **Intel**: ANV (Mesa).
 * **NVIDIA**:
-    * **Proprietary driver** (`nvidia-open`, `nvidia-open-dkms`): when `nvidia-utils` is installed (all of them depend on it), the installer adds `lib32-nvidia-utils`.
+    * **Proprietary driver** (`nvidia-open`, `nvidia-open-dkms`, `nvidia-open-lts`): when `nvidia-utils` is installed (all of them depend on it), the installer adds `lib32-nvidia-utils`.
     * **Open driver (NVK)**: otherwise it deploys the NVK Vulkan driver, `vulkan-nouveau` + `lib32-vulkan-nouveau`, with Mesa.
     * **Hybrid laptops** (Intel/AMD + NVIDIA) get the packages for both GPUs.
 
@@ -43,7 +43,7 @@ Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a cl
 > [!IMPORTANT]
 > **NVIDIA Proprietary Drivers & Gamescope**:
 > 
-> Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting. Check it with `cat /sys/module/nvidia_drm/parameters/modeset` (it must print `Y`); if not, see the **[Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)**.
+> Per the Arch Wiki, Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting. Check it with `cat /sys/module/nvidia_drm/parameters/modeset` (it must print `Y`); if not, see the **[Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)**.
 > 
 
 ### 📦 Core Dependencies
@@ -90,4 +90,4 @@ sudo ./uninstall.sh
 ```
 
 > [!NOTE]
-> The uninstaller removes every file the project deployed (your user configs only if you confirm), puts getty back on TTY1 and asks whether to re-enable your display manager (if you decline, the system boots to a text console). Installed packages (`steam`, `gamescope`, Mesa…), the `[multilib]` repository and the group memberships added for your user are deliberately **left in place** — they are standard system components, not project files, and removing them could break unrelated software.
+> The uninstaller removes every file the project deployed (your user configs only if you confirm), puts getty back on TTY1 and asks whether to re-enable SDDM or plasmalogin if one is installed (otherwise, or if you decline, the system boots to a text console). Installed packages (`steam`, `gamescope`, Mesa…), the `[multilib]` repository and the group memberships added for your user are deliberately **left in place** — they are standard system components, not project files, and removing them could break unrelated software.

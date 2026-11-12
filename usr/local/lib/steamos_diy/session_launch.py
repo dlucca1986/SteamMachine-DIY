@@ -237,8 +237,7 @@ def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
         proc.wait(timeout=term_timeout)
     except subprocess.TimeoutExpired:
         # Still alive after SIGKILL: stuck in uninterruptible I/O
-        # (D-state). Return instead of blocking; systemd's KillMode=mixed
-        # + TimeoutStopSec still reaps the cgroup.
+        # (D-state). Return instead of blocking.
         jlog(
             "CORE",
             "SIGKILL_TIMEOUT: process still alive (D-state?)",
@@ -362,8 +361,9 @@ def _make_term_handler(
     the stable phase is blocked in _run_session's untimed proc.wait()
     holding Popen's waitpid lock, so a wait from the handler could never
     reap the child. sys.exit() unwinds out of that wait and the
-    `with Popen` block reaps the child; a child ignoring SIGTERM is left
-    to the unit's KillMode=mixed + TimeoutStopSec.
+    `with Popen` block reaps the child. The child lives in the logind
+    session scope, not the unit's cgroup: what happens to one that
+    ignores SIGTERM has not been tested.
 
     Exit code 0 — explicit stop, do NOT trigger a systemd restart.
     """

@@ -33,7 +33,7 @@ env_vars:
 flags:
   - "-W 1280"                # Output width
   - "-H 720"                 # Output height
-  - "-r 60"                  # Refresh rate
+  - "-r 60"                  # Game refresh rate (fps)
   - "-F fsr"                 # Upscaling filter
   - "--sharpness 5"          # Sharpness (Value between 0-20)
   - "--rt"                   # Enable Realtime scheduling

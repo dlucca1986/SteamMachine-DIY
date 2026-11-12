@@ -47,8 +47,9 @@ readonly APP_DIR="/usr/local/share/applications"
 readonly ALPM_HOOKS_DIR="/usr/share/libalpm/hooks"
 readonly USER_CONFIG_REL=".config/steamos_diy"
 
-# --- Cgroup Escape (Survival Mechanism) ---
-# Prevents the script from being killed when steamos_diy.service stops.
+# --- Cgroup Escape ---
+# Meant to keep the script alive when steamos_diy.service stops. The session
+# runs in a logind session scope, so this match may never succeed.
 if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
     warn "Active DIY session detected. Relocating process to safe scope..."
     exec systemd-run --scope --slice=app.slice --unit="sdy-uninstaller-$(date +%s)" bash "$(realpath "$0")" "$@"
@@ -73,7 +74,8 @@ cleanup_services() {
     # Not started at next boot; the running session is stopped at the end.
     systemctl disable steamos_diy.service 2>/dev/null || true
 
-    # Getty back on TTY1 before anything is removed: a login is always there.
+    # Getty re-enabled on TTY1 before anything is removed (started at the end,
+    # or at next boot).
     info "Unmasking and forcing Getty on TTY1 (Emergency Access)..."
     systemctl unmask getty@tty1.service 2>/dev/null || true
     systemctl enable getty@tty1.service 2>/dev/null || true

@@ -1,9 +1,7 @@
-"""Tests for session_select.py: target resolution, dispatch argv, and the
-persist-before-spawn ordering in select().
-
-State (next_session) must be written before the helper is spawned, and
-must stay written even if the spawn fails — a helper crash must not
-strand the system without a target for the next boot."""
+"""Tests for session_select.py: target resolution, dispatch argv, and that
+select() persists the target even when the dispatch fails — a helper
+crash must not strand the system without a target for the next boot.
+The persist-before-spawn order itself is not asserted."""
 
 import subprocess
 import time

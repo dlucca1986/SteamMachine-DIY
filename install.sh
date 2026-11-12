@@ -318,7 +318,7 @@ setup_shim_links() {
     ln -sf "$LIB_DIR/session_select.py"            /usr/bin/steamos-session-select
     ln -sf "$HELPERS_DIR/steamos-select-branch.py" /usr/bin/steamos-select-branch
 
-    # Direct Aliases for Global Visibility (two-hop chain ends in $POLKIT_DIR)
+    # /usr/bin aliases: two hops, via $POLKIT_DIR to $HELPERS_DIR
     for name in jupiter-biosupdate steamos-update steamos-set-timezone; do
         ln -sf "$POLKIT_DIR/$name" "/usr/bin/$name"
     done

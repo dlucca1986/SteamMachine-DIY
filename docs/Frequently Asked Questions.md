@@ -11,13 +11,13 @@ Common questions about the architecture, gaming setup, and maintenance.
 It is a design choice of this project: one systemd service does the display manager's job:
 * `steamos_diy.service` opens the user's session itself via `PAMName=login` — no login prompt, no password at boot. `getty@tty1` is masked.
 * Switching between Steam and Plasma means the running session exits and the service restarts into the other one; the two never run together.
-* No display manager process runs.
+* SDDM and plasmalogin are disabled by the installer.
 
 ### 2. Is NVIDIA supported?
-The installer deploys the packages for both the open driver (**NVK**, `vulkan-nouveau`) and the proprietary one (`nvidia-open`). Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
+With a proprietary NVIDIA driver already installed, the installer adds its 32-bit libraries (`lib32-nvidia-utils`); otherwise it installs the open NVK driver (`vulkan-nouveau`). Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
 
 > [!IMPORTANT]
-> Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting: `cat /sys/module/nvidia_drm/parameters/modeset` must print `Y`. See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
+> Per the Arch Wiki, Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting: `cat /sys/module/nvidia_drm/parameters/modeset` must print `Y`. See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:
@@ -59,20 +59,20 @@ Both save `desktop` as the next session and ask Steam to shut down; the service 
 ## 🔊 Audio & Peripherals
 
 ### 9. Why is there no sound?
-This project expects **PipeWire**. Ensure `pipewire-alsa`, `pipewire-pulse`, and `wireplumber` are installed and running for your user: the Game Mode session plays audio through them.
+The installer does not install an audio stack. The project is used with **PipeWire** (`pipewire-pulse`, `wireplumber`): check that they are installed and running for your user.
 
 ---
 
 ## 🛠️ System & Updates
 
 ### 10. Will a system update (`pacman -Syu`) break the setup?
-The project uses a **non-destructive** approach: it replaces no file owned by a package (gamescope only gets file capabilities, re-applied by a pacman hook after each gamescope update), so `pacman -Syu` has nothing of the project's to overwrite. A new version of gamescope, Steam or Plasma can still change behavior the project relies on.
+The project adds its own files and symlinks; on a stock Arch install it replaces no file owned by a package (gamescope only gets file capabilities, re-applied by a pacman hook after each gamescope update), so `pacman -Syu` has nothing of the project's to overwrite. A new version of gamescope, Steam or Plasma can still change behavior the project relies on.
 
 ### 11. How do I update SteamMachine-DIY itself?
 From the Control Center: **Maintenance → ⬆️ Check for Updates** — it downloads the latest release and runs the installer for you (user configs and the SSoT are preserved; the system reboots when done). Or manually with `sudo ./install.sh --update` on an unpacked release. Full details in [Updating](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Updating).
 
 ### 12. Does `uninstall.sh` restore the system completely?
-It removes every file and symlink the project deployed (libraries, shims, SSoT, service, desktop entries, pacman hook), puts getty back on TTY1, asks whether to re-enable your display manager (if you decline, the system boots to a text console), resets the Gamescope capabilities, and optionally wipes your user configs. Three things are deliberately **left in place**: the installed packages (`steam`, `gamescope`, Mesa drivers, `kate`, `konsole`, `xdg-utils`…), the `[multilib]` repository, and the groups your user was added to — they are standard system components, not project files, and removing them could break software unrelated to the project.
+It removes every file and symlink the project deployed (libraries, shims, SSoT, service, desktop entries, pacman hook), puts getty back on TTY1, asks whether to re-enable SDDM or plasmalogin if one is installed (otherwise, or if you decline, the system boots to a text console), resets the Gamescope capabilities, and optionally wipes your user configs. Three things are deliberately **left in place**: the installed packages (`steam`, `gamescope`, Mesa drivers, `kate`, `konsole`, `xdg-utils`…), the `[multilib]` repository, and the groups your user was added to — they are standard system components, not project files, and removing them could break software unrelated to the project.
 
 ### 13. Where are the configuration files?
 | Level | Path | Purpose |
@@ -90,7 +90,7 @@ Logs go through the **System Journal**. Use the following commands or check the 
 # backup/restore, self-update, and helper shims — this is what you want.
 journalctl -t CORE -t STEAM -t SYSTEM -f
 
-# Systemd's own service lifecycle only (start/stop/restart, exit codes) —
+# Systemd's own lines only (start/stop/restart, exit codes, PAM session open) —
 # NOT the application logs above. PAMName=login moves session_launch.py
 # into its own login-session cgroup, so its jlog() output never lands
 # under this unit filter; see Troubleshooting for why.

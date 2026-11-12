@@ -75,25 +75,25 @@ These don't depend on the display. **Display-dependent** capabilities — VRR (`
 ---
 
 ## ⚙️ Post-Start Hook
-After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **background thread** sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then runs each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by then, in which case the commands are skipped (see Validation Window & Recovery below). This check, not the relation between `POST_START_DELAY` and `VALIDATION_TIMEOUT` (independent settings), is what keeps a failed session from running them.
+After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **background thread** sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then runs each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by then, in which case the commands are skipped (see Validation Window & Recovery below). The check runs once, when the delay ends: a session that crashes after that (between `POST_START_DELAY` and `VALIDATION_TIMEOUT`) has already run them.
 
 This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
 
-* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command fires; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`; skipped entirely after a detected crash, logged as `POST_START_CMDS_SKIPPED` at `DEBUG`.
+* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command is dispatched; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`; skipped entirely after a detected crash, logged as `POST_START_CMDS_SKIPPED` at `DEBUG`.
 
 ---
 
 ## 🛡️ Validation Window & Recovery
 * **Process monitoring**: `proc.wait(timeout=VALIDATION_TIMEOUT)`. If the session exits before `VALIDATION_TIMEOUT` elapses, it is treated as a crash.
 * **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration (default `5.0s`): how long a session must stay up after starting to count as stable.
-* **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. Termination sends `SIGTERM` and waits up to `TERM_TIMEOUT` seconds (SSoT, default `5`); if the process doesn't exit, `SIGKILL` is sent.
+* **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. The session process has already exited at that point, so nothing is signalled (`TERM_TIMEOUT` and the `SIGTERM`→`SIGKILL` escalation in `_terminate_gracefully` are not reached by this path).
 
 ## 🔌 Signal Handling & Exit Codes
 The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit code controls whether `systemd` restarts the service:
 
 | Event | Handler | Exit code | systemd effect |
 | :--- | :--- | :--- | :--- |
-| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — forwards `SIGTERM` to the session and exits. It doesn't wait or escalate itself (the main thread it interrupts is blocked in `proc.wait()`); a session ignoring `SIGTERM` is killed by the unit's `TimeoutStopSec` | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
+| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — forwards `SIGTERM` to the session and exits. It doesn't wait or escalate itself (the main thread it interrupts is blocked in `proc.wait()`); what happens to a session process that ignores `SIGTERM` has not been tested | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
 | Session ended naturally (switch or crash recovery) | `run()` — exits after `NOTIFY_DELAY` pause | `75` (`EX_TEMPFAIL`) | Restart triggered — launcher re-reads `next_session` and spawns the new target |
 
 `NOTIFY_DELAY` (SSoT, default `0.4s`) is a sleep between the TTY transition message and `sys.exit(75)`, so the message stays on screen briefly before the service restarts.
