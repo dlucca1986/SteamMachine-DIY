@@ -200,7 +200,7 @@ These scripts stand in for real `steamos-*`/`jupiter-*` system tools Steam calls
 ## 🩹 4. Known Issues & Fixes
 
 ### Black or corrupted Store / Library pages in Game Mode
-On older or low-power GPUs, Steam's embedded Chromium (CEF) can fail at GPU-accelerated compositing, leaving the **Store** and **Library** pages black, flickering, or visually corrupted while the rest of Game Mode renders fine.
+Not reproduced by the project (no record of which hardware showed it); kept as a pointer. Steam's embedded Chromium (CEF) can fail at GPU-accelerated compositing, leaving the **Store** and **Library** pages black, flickering, or visually corrupted while the rest of Game Mode renders fine.
 
 **Fix:** force CEF to software compositing with the Steam-client flag `-cef-disable-gpu-compositing` (or, for full software rendering, `-cef-disable-gpu`). These are **Steam client** flags, *not* gamescope flags — they go on the Steam invocation in `session_launch.py` (the `-gamepadui -steamos3 -steamdeck` line), **not** in `config.yaml`'s `flags`. Try the minimal `-cef-disable-gpu-compositing` first; fall back to `-cef-disable-gpu` only if the corruption persists.
 
