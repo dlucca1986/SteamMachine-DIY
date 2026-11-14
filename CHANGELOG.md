@@ -26,7 +26,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - the Diagnostics tab's de-duplication and styling of `LAUNCH_ARGS` in gamescope lines
     (`LAUNCH_ARGS` is only logged under the `STEAM` tag, which that code never saw);
   - the Control Center's fallback from Kate to KWrite (KWrite ships in the `kate` package);
-  - `install.sh` checks for files the project always ships, which could never fail.
+  - `install.sh` checks for files the project always ships, which could never fail;
+  - `uninstall.sh`'s "cgroup escape": it re-ran itself outside `steamos_diy.service`'s cgroup,
+    but with `PAMName=login` no process runs in that cgroup (the session is in its logind
+    scope, terminals in `user@UID.service`), so the check could never match.
 
 ### Fixed
 - `install.sh --update` compared the SSoT template with `cmp`, which ships in `diffutils`: not

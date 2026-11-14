@@ -47,14 +47,6 @@ readonly APP_DIR="/usr/local/share/applications"
 readonly ALPM_HOOKS_DIR="/usr/share/libalpm/hooks"
 readonly USER_CONFIG_REL=".config/steamos_diy"
 
-# --- Cgroup Escape ---
-# Meant to keep the script alive when steamos_diy.service stops. The session
-# runs in a logind session scope, so this match may never succeed.
-if grep -q "steamos_diy" /proc/$$/cgroup 2>/dev/null; then
-    warn "Active DIY session detected. Relocating process to safe scope..."
-    exec systemd-run --scope --slice=app.slice --unit="sdy-uninstaller-$(date +%s)" bash "$(realpath "$0")" "$@"
-fi
-
 BANNER_LABEL="SteamMachine-DIY Uninstaller"
 BANNER_WIDTH=41
 BANNER_PAD=$(( (BANNER_WIDTH - ${#BANNER_LABEL}) / 2 ))
