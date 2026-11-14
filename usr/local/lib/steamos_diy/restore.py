@@ -13,7 +13,6 @@
 
 import errno
 import os
-import shlex
 import shutil
 
 # B404: every subprocess call below passes an argv list and never uses
@@ -26,7 +25,6 @@ from pathlib import Path
 
 from utils import (
     BACKUP_MANIFEST_NAME,
-    BACKUP_SCRIPT_NAME,
     SYSTEMCTL_BIN,
     SYSTEMD_CALL_TIMEOUT,
     check_root,
@@ -336,14 +334,14 @@ def _extract_payload(
     """Extract safe members; defer the links entry to _restore_links.
 
     Returns (restored_count, links_member). links_member is the manifest
-    (or legacy restore_links.sh) TarInfo, or None. restored_count == 0
+    TarInfo, or None. restored_count == 0
     means every member was rejected (wrong or foreign archive).
     """
     links_member: tarfile.TarInfo | None = None
     restored = 0
 
     for member in tar.getmembers():
-        if member.name in (BACKUP_MANIFEST_NAME, BACKUP_SCRIPT_NAME):
+        if member.name == BACKUP_MANIFEST_NAME:
             links_member = member
             continue
         if _process_member(
@@ -359,31 +357,12 @@ def _extract_payload(
 # ---------------------------------------------------------------------------
 
 
-def _iter_link_pairs(name: str, text: str):
-    """Yield (link, target) pairs from the links entry, any format.
-
-    New archives embed a data manifest: one "link<TAB>target" row per
-    line. Legacy archives embed restore_links.sh instead — only its
-    "ln -sf <target> <link>" lines are mined for pairs; the script is
-    parsed, never executed.
-    """
-    if name == BACKUP_MANIFEST_NAME:
-        for line in text.splitlines():
-            link, sep, target = line.partition("\t")
-            if sep and link and target:
-                yield link, target
-        return
+def _iter_link_pairs(text: str):
+    """Yield (link, target) from the manifest's "link<TAB>target" rows."""
     for line in text.splitlines():
-        try:
-            # Deliberately skip rather than use shlex_split_or_fallback():
-            # a degraded str.split() here could pair the wrong link/target
-            # and recreate a bogus symlink, which is worse than skipping
-            # one legacy entry outright.
-            tokens = shlex.split(line)
-        except ValueError:
-            continue
-        if len(tokens) == 4 and tokens[:2] == ["ln", "-sf"]:
-            yield tokens[3], tokens[2]
+        link, sep, target = line.partition("\t")
+        if sep and link and target:
+            yield link, target
 
 
 def _restore_link(link: str, target: str, allowed: tuple[str, ...]) -> None:
@@ -424,7 +403,7 @@ def _restore_links(
         return
     with src:
         text = src.read().decode("utf-8", errors="replace")
-    for link, target in _iter_link_pairs(member.name, text):
+    for link, target in _iter_link_pairs(text):
         _restore_link(link, target, allowed)
 
 

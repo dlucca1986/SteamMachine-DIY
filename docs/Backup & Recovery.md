@@ -54,7 +54,7 @@ Only these paths are archived. The mapping is defined once in `utils.get_backup_
 > [!IMPORTANT]
 > **Link Reconstruction**
 >
-> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated atomically (a temporary symlink is created next to the target, then swapped into place with `os.replace`) — the links entry is plain data, not a script. Archives from pre-manifest releases embed `restore_links.sh` instead: restore recognises it and mines its `ln -sf` lines for the same pairs, but the script itself is **never executed**.
+> During backup, the SteamOS-shim symlinks found on the system are recorded in a plain-data manifest (`links.txt`, one `link<TAB>target` row per line) embedded in the archive. During restore, each pair is validated against the same path allow-list used for file extraction and recreated atomically (a temporary symlink is created next to the target, then swapped into place with `os.replace`) — the links entry is plain data, not a script. Archives made before 2.1.4 (which embed `restore_links.sh` instead) are not supported: restore no longer reads that script, so it recreates none of their symlinks.
 
 ---
 
@@ -80,7 +80,7 @@ Checks the restore tool applies to an archive:
 * **Archive content filter**: Hardlinks, symlinks, device nodes, and FIFOs inside the archive are rejected — only regular files and directories are extracted.
 * **Pre-existing symlink guard**: If a symlink already exists at the target path on disk, the write is refused instead of following the link.
 * **Permission mask**: File modes from the archive are applied masked to `0o777` — setuid/setgid/sticky bits in the archive are dropped.
-* **Link manifest validation**: Every `link → target` pair from the manifest (or mined from a legacy script) must resolve inside the allow-list on **both** ends, or it is rejected and logged. Links are created with Python calls, not a shell.
+* **Link manifest validation**: Every `link → target` pair from the manifest must resolve inside the allow-list on **both** ends, or it is rejected and logged. Links are created with Python calls, not a shell.
 * **Atomic extraction**: Each file is written to a temporary sibling and `os.replace()`d into place — an interrupted restore leaves each file either old or new, not truncated (the temporary file is not fsynced, so after a power loss a just-restored file can still be incomplete). Replacing the directory entry instead of truncating the file also avoids `ETXTBSY` on a currently-running binary.
 
 > [!WARNING]

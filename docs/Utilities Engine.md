@@ -45,7 +45,6 @@ Names and paths of the archive format, shared by `backup.py` and `restore.py`:
 
 * `USER_CONFIG_REL` — relative path of the user-config directory (`".config/steamos_diy"`). Also reused by `control_center.py`.
 * `BACKUP_MANIFEST_NAME` — name of the embedded links manifest (`"links.txt"`), a plain-data list of `link<TAB>target` rows.
-* `BACKUP_SCRIPT_NAME` — name of the link-recreation script (`"restore_links.sh"`) embedded by pre-manifest releases. Kept only so restore can recognise the entry in old archives; new backups never write it.
 * `get_backup_mapping(home)` — returns the `{archive_path: filesystem_path}` dict, read by backup (where to read from) and restore (where to write to). Restore matches archive entries against it with its own logic, so a new entry must be exercised on both sides (the tests round-trip every entry).
 
 ---
@@ -96,7 +95,7 @@ Standard-library code (`urllib` + `tarfile`, no Qt) behind the Control Center's 
 | `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `get_ssot_var`, `jlog`, `notify`, `persist_next_session`, `spawn_native` |
 | `sdy.py` | `apply_env_map`, `default_games_conf_dir`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `shlex_split_or_fallback` |
 | `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `require_ssot_conf`, `verify_archive` |
-| `restore.py` | `BACKUP_MANIFEST_NAME`, `BACKUP_SCRIPT_NAME`, `SYSTEMCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `require_ssot_conf`, `verify_archive` |
+| `restore.py` | `BACKUP_MANIFEST_NAME`, `SYSTEMCTL_BIN`, `SYSTEMD_CALL_TIMEOUT`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `jlog`, `require_ssot_conf`, `verify_archive` |
 | `control_center.py` | `CONFIG_FILE_NAME`, `CORE_LIB_DIR`, `GAMES_CONF_SUBDIR`, `JOURNALCTL_BIN`, `KONSOLE_BIN`, `PYTHON3_BIN`, `SSOT_CONF_PATH`, `SYSTEMD_CALL_TIMEOUT`, `USER_CONFIG_REL`, `VERSION`, `clear_ssot_cache`, `get_ssot_var`, `safe_emit`, `spawn_native`, `write_atomic` |
 | `updater.py` | `KONSOLE_BIN`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `VERSION`, `check_latest_release`, `download_release`, `safe_emit`, `spawn_native`, `verify_file_sha256` |
 | `health.py` | `CORE_LIB_PATH`, `DEFAULT_GS_BIN`, `DEFAULT_STEAM_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_DBUS_BIN`, `NEXT_SESSION_PATH`, `SSOT_CONF_PATH`, `SYSTEMCTL_BIN`, `clear_ssot_cache`, `get_ssot_var`, `shlex_split_or_fallback` |

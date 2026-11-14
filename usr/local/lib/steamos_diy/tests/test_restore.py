@@ -321,39 +321,16 @@ def test_ensure_safe_target_accepts_plain_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _iter_link_pairs — new tab-separated manifest vs. legacy restore_links.sh
+# _iter_link_pairs — tab-separated links manifest
 # ---------------------------------------------------------------------------
 
 
 def test_iter_link_pairs_reads_new_manifest_format():
     text = "link1\ttarget1\nlink2\ttarget2\n"
 
-    pairs = list(restore._iter_link_pairs(utils.BACKUP_MANIFEST_NAME, text))
+    pairs = list(restore._iter_link_pairs(text))
 
     assert pairs == [("link1", "target1"), ("link2", "target2")]
-
-
-def test_iter_link_pairs_reads_legacy_script_format():
-    text = (
-        "#!/bin/bash\n"
-        'ln -sf "/real/target" "/etc/shim"\n'
-        "echo not a link line\n"
-    )
-
-    pairs = list(restore._iter_link_pairs("restore_links.sh", text))
-
-    assert pairs == [("/etc/shim", "/real/target")]
-
-
-def test_iter_link_pairs_skips_unbalanced_quote_legacy_line():
-    """A malformed legacy line (unbalanced quote) is skipped outright,
-    never degraded to a naive split — a wrong link/target pairing would
-    recreate a bogus symlink, which is worse than skipping one entry."""
-    text = 'ln -sf "/real/target /etc/shim\n'
-
-    pairs = list(restore._iter_link_pairs("restore_links.sh", text))
-
-    assert not pairs
 
 
 # ---------------------------------------------------------------------------

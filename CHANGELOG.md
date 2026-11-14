@@ -30,6 +30,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `uninstall.sh`'s "cgroup escape": it re-ran itself outside `steamos_diy.service`'s cgroup,
     but with `PAMName=login` no process runs in that cgroup (the session is in its logind
     scope, terminals in `user@UID.service`), so the check could never match.
+- Compatibility with releases older than 2.1.4 and 2.1.6:
+  - restore no longer reads the `restore_links.sh` script embedded by archives made before
+    2.1.4 (it recreates no symlinks from such an archive);
+  - `install.sh` no longer resets the SSoT to mode 644 on every run (the fix for 2.1.5's
+    installer, which left it 0600).
 
 ### Fixed
 - `install.sh` with an AUR legacy NVIDIA driver (`nvidia-580xx`/`nvidia-470xx`, for Maxwell, Pascal,

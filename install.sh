@@ -169,8 +169,6 @@ deploy_files() {
     # install -m 644, not cp: mktemp creates 0600 and cp would keep
     # it, making the SSoT unreadable by the user session.
     if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
-        # Fixes an SSoT left 0600 by the 2.1.5 installer.
-        chmod 644 "$SSOT_CONF"
         # Never overwrite the live SSoT on update. The new template is
         # staged as .new (like pacnew), only when it changed since the
         # last deploy (copy kept in STATE_DIR).
@@ -186,8 +184,6 @@ deploy_files() {
             info "Overwriting SSoT as requested..."
             install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
         else
-            # Same 2.1.5 permission fix as the --update branch.
-            chmod 644 "$SSOT_CONF"
             info "Preserving existing SSoT config."
         fi
     else

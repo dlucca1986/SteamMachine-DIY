@@ -69,10 +69,7 @@ _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 
 # User-side path (relative to home) and embedded archive-entry names.
 # Shared by backup.py and restore.py.
-# BACKUP_SCRIPT_NAME survives only so restore can recognise the legacy
-# entry in old archives; new backups embed the data manifest instead.
 USER_CONFIG_REL: str = ".config/steamos_diy"
-BACKUP_SCRIPT_NAME: str = "restore_links.sh"
 BACKUP_MANIFEST_NAME: str = "links.txt"
 
 # Basename of the global config file under user_config's directory.
