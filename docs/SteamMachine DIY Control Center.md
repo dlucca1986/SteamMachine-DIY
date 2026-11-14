@@ -24,7 +24,7 @@ Buttons in order:
 | Button | Action |
 | :--- | :--- |
 | **Switch to Steam (Game Mode)** | Calls `session_select.py steam` via `spawn_native`. |
-| **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate` (falls back to `kwrite`). |
+| **Edit System Config (SSoT)** | Opens `/etc/default/steamos_diy.conf` in `kate`. |
 | **Validate Configuration** | Runs `health.run_preflight()` off-thread and shows a colour-coded report (config presence, path resolution, YAML syntax, gamescope flag validity, group membership, C-Core, session state). See [Configuration Health](#-configuration-health-healthpy). |
 | **Clean System Logs (Vacuum)** | Runs `pkexec journalctl --rotate --vacuum-time=1s` in a single invocation — this empties the **whole** system journal, not just this project's logs. |
 | **Create Full System Backup** | Runs `pkexec python3 backup.py` in a background thread. |

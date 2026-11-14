@@ -279,7 +279,7 @@ def get_ssot_num(var_name: str, default: float) -> float:
     """
     try:
         return float(get_ssot_var(var_name, str(default)))
-    except (TypeError, ValueError):
+    except ValueError:
         jlog("CORE", f"BAD_SSOT_NUM: {var_name} - using {default}", "WARN")
         return default
 
@@ -449,7 +449,7 @@ def get_real_user() -> tuple[str, Path]:
     try:
         u_info = pwd.getpwuid(int(uid)) if uid else pwd.getpwuid(os.getuid())
         return u_info.pw_name, Path(u_info.pw_dir)
-    except (ValueError, KeyError, TypeError) as err:
+    except (ValueError, KeyError) as err:
         jlog("CORE", f"USER_LOOKUP_ERROR: {err}", level="DEBUG")
         return "root", Path("/root")
 

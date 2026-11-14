@@ -40,10 +40,9 @@ def test_edit_ssot_privileged_uses_spawn_native(monkeypatch):
     """Regression: edit_ssot_privileged called subprocess.Popen directly,
     unlike the other 3 Maintenance-tab buttons (Switch to Steam/Konsole/
     Browse Config) which all route through spawn_native's
-    start_new_session=True detachment. Kate/KWrite stayed attached to
+    start_new_session=True detachment. Kate stayed attached to
     Control Center's own process group instead."""
     calls = []
-    monkeypatch.setattr(control_center.os.path, "exists", lambda _p: False)
     monkeypatch.setattr(
         control_center, "spawn_native", lambda *a: calls.append(a) or 1234
     )
@@ -52,13 +51,12 @@ def test_edit_ssot_privileged_uses_spawn_native(monkeypatch):
     control_center.SDYControlCenter.edit_ssot_privileged(win)
 
     assert calls == [
-        ("/usr/bin/kwrite", ["/usr/bin/kwrite", control_center.SSOT_CONF_PATH])
+        ("/usr/bin/kate", ["/usr/bin/kate", control_center.SSOT_CONF_PATH])
     ]
 
 
 def test_edit_ssot_privileged_reports_spawn_failure(monkeypatch):
     calls = []
-    monkeypatch.setattr(control_center.os.path, "exists", lambda _p: True)
     monkeypatch.setattr(control_center, "spawn_native", lambda *a: 0)
     monkeypatch.setattr(
         control_center, "QMessageBox", _FakeMessageBox(calls)

@@ -554,15 +554,14 @@ class SDYControlCenter(QMainWindow):
             )
 
     def edit_ssot_privileged(self):
-        """Open SSoT in Kate, falling back to KWrite.
+        """Open the SSoT in Kate (install.sh installs it).
 
         Through _launch_or_warn/spawn_native like the other Maintenance-tab
         buttons: the editor runs in its own session, so a signal sent to
         Control Center's process group doesn't reach it.
         """
         kate = "/usr/bin/kate"
-        editor = kate if os.path.exists(kate) else "/usr/bin/kwrite"
-        self._launch_or_warn(editor, [editor, SSOT_CONF_PATH])
+        self._launch_or_warn(kate, [kate, SSOT_CONF_PATH])
 
     def cleanup_logs_privileged(self):
         """Vacuum journal via pkexec; emits process_finished."""
