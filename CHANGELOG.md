@@ -24,9 +24,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     `SIGKILL_TIMEOUT` messages and the `TERM_TIMEOUT` SSoT key. An existing
     `TERM_TIMEOUT` line in your SSoT is simply ignored;
   - the Diagnostics tab's de-duplication and styling of `LAUNCH_ARGS` in gamescope lines
-    (`LAUNCH_ARGS` is only logged under the `STEAM` tag, which that code never saw).
+    (`LAUNCH_ARGS` is only logged under the `STEAM` tag, which that code never saw);
+  - the Control Center's fallback from Kate to KWrite (KWrite ships in the `kate` package);
+  - `install.sh` checks for files the project always ships, which could never fail.
 
 ### Fixed
+- `install.sh --update` compared the SSoT template with `cmp`, which ships in `diffutils`: not
+  part of Arch's `base` and not installed by the installer. Without it every update staged a
+  `steamos_diy.conf.new` and warned that the template had changed. `diffutils` is now in the
+  base packages (reproduced in a clean Arch container).
 - Installer, NVIDIA: the proprietary driver was detected by the `nvidia` package, which Arch
   has replaced with `nvidia-open`, so current proprietary setups took the open-driver path and
   missed `lib32-nvidia-utils`. That open-driver path also installed no Vulkan driver at all
