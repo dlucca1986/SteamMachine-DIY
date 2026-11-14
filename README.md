@@ -53,7 +53,7 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | :--- | :--- |
 | **Execution** | `steam`, `gamescope`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `xorg-xwayland` |
 | **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
-| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc` |
+| **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `diffutils` |
 | **Control Center GUI** | `kate`, `konsole`, `xdg-utils` — used directly by name (SSoT editing, terminal launch, "Browse Config Folder"), independent of your desktop environment |
 | **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `lib32-nvidia-utils` with the proprietary driver, otherwise `vulkan-nouveau` (+ 32-bit) and Mesa; hybrid systems get both GPUs' packages |
 

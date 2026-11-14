@@ -32,7 +32,7 @@ The NVIDIA selection is tested in a clean Arch container (detection, dependency 
 ### 2. Dependency Management & Database Sync
 
 * **Full System Upgrade**: Before installing any package, the installer runs `pacman -Syu` to synchronize the package databases and upgrade all existing packages. Arch does not support partial upgrades, so the new packages are installed in the same transaction as the upgrade.
-* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `kate`, `konsole`, `xdg-utils`. The last three are explicit dependencies — the Control Center's "Edit System Config (SSoT)", "Open Konsole Terminal", and "Browse Config Folder" buttons target these exact binaries by name, independent of whichever desktop environment is actually running.
+* **Core Stack:** Installs `python`, `python-pyqt6`, `python-ruamel-yaml`, `steam`, `gamescope`, `xorg-xwayland`, `mangohud`, `lib32-mangohud`, `gamemode`, `lib32-gamemode`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `diffutils` (for `cmp` in `--update`), `kate`, `konsole`, `xdg-utils`. The last three are explicit dependencies — the Control Center's "Edit System Config (SSoT)", "Open Konsole Terminal", and "Browse Config Folder" buttons target these exact binaries by name, independent of whichever desktop environment is actually running.
 * **Groups:** Adds the user to: `tty`, `video`, `render`, `input`, `audio`, `storage`, `gamemode`, `wheel`, `autologin`, and `systemd-journal`.
 
 ### 3. File Deployment & SSoT Initialization

@@ -128,10 +128,11 @@ install_dependencies() {
         echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
     fi
 
-    # kate/konsole/xdg-utils are listed explicitly, not assumed from Plasma:
+    # diffutils: --update compares the SSoT template with cmp (not in Arch's
+    # base). kate/konsole/xdg-utils are listed explicitly, not assumed from Plasma:
     # Control Center buttons and the updater's terminal handoff call them
     # directly.
-    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc kate konsole xdg-utils"
+    BASE_PKGS="python python-pyqt6 python-ruamel-yaml steam gamescope xorg-xwayland mangohud lib32-mangohud gamemode lib32-gamemode vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools pciutils gcc diffutils kate konsole xdg-utils"
 
     info "Synchronizing package databases and installing core dependencies..."
     # shellcheck disable=SC2086 # intentional word-splitting: BASE_PKGS/DRIVER_PKGS
@@ -154,55 +155,48 @@ deploy_files() {
 
     # Initialize Global SSoT Configuration
     mkdir -p "$(dirname "$SSOT_CONF")"
-    if [ -f etc/default/steamos_diy.conf ]; then
-        RENDERED_SSOT=$(mktemp)
-        cp -f etc/default/steamos_diy.conf "$RENDERED_SSOT"
-        sed -i "s|{{HOME}}|$USER_HOME|g" "$RENDERED_SSOT"
-        # install -m 644, not cp: mktemp creates 0600 and cp would keep
-        # it, making the SSoT unreadable by the user session.
-        if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
-            # Fixes an SSoT left 0600 by the 2.1.5 installer.
-            chmod 644 "$SSOT_CONF"
-            # Never overwrite the live SSoT on update. The new template is
-            # staged as .new (like pacnew), only when it changed since the
-            # last deploy (copy kept in STATE_DIR).
-            if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
-                install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
-                warn "SSoT template changed: review ${SSOT_CONF}.new"
-            fi
-        elif [ -f "$SSOT_CONF" ]; then
-            # Plain run over an existing install: ask, like for the YAMLs.
-            warn "Existing SSoT config found at $SSOT_CONF"
-            read -r -p "Overwrite it with the template? Your customizations will be lost. (y/N): " overwrite_ssot
-            if [[ "$overwrite_ssot" =~ ^[Yy]$ ]]; then
-                info "Overwriting SSoT as requested..."
-                install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
-            else
-                # Same 2.1.5 permission fix as the --update branch.
-                chmod 644 "$SSOT_CONF"
-                info "Preserving existing SSoT config."
-            fi
-        else
-            info "Patching SSoT with User Home: $USER_HOME"
-            install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
+    RENDERED_SSOT=$(mktemp)
+    cp -f etc/default/steamos_diy.conf "$RENDERED_SSOT"
+    sed -i "s|{{HOME}}|$USER_HOME|g" "$RENDERED_SSOT"
+    # install -m 644, not cp: mktemp creates 0600 and cp would keep
+    # it, making the SSoT unreadable by the user session.
+    if $UPDATE_MODE && [ -f "$SSOT_CONF" ]; then
+        # Fixes an SSoT left 0600 by the 2.1.5 installer.
+        chmod 644 "$SSOT_CONF"
+        # Never overwrite the live SSoT on update. The new template is
+        # staged as .new (like pacnew), only when it changed since the
+        # last deploy (copy kept in STATE_DIR).
+        if ! cmp -s "$RENDERED_SSOT" "$STATE_DIR/ssot.template" 2>/dev/null; then
+            install -m 644 "$RENDERED_SSOT" "${SSOT_CONF}.new"
+            warn "SSoT template changed: review ${SSOT_CONF}.new"
         fi
-        mkdir -p "$STATE_DIR"
-        install -m 644 "$RENDERED_SSOT" "$STATE_DIR/ssot.template"
-        rm -f "$RENDERED_SSOT"
+    elif [ -f "$SSOT_CONF" ]; then
+        # Plain run over an existing install: ask, like for the YAMLs.
+        warn "Existing SSoT config found at $SSOT_CONF"
+        read -r -p "Overwrite it with the template? Your customizations will be lost. (y/N): " overwrite_ssot
+        if [[ "$overwrite_ssot" =~ ^[Yy]$ ]]; then
+            info "Overwriting SSoT as requested..."
+            install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
+        else
+            # Same 2.1.5 permission fix as the --update branch.
+            chmod 644 "$SSOT_CONF"
+            info "Preserving existing SSoT config."
+        fi
+    else
+        info "Patching SSoT with User Home: $USER_HOME"
+        install -m 644 "$RENDERED_SSOT" "$SSOT_CONF"
     fi
+    mkdir -p "$STATE_DIR"
+    install -m 644 "$RENDERED_SSOT" "$STATE_DIR/ssot.template"
+    rm -f "$RENDERED_SSOT"
 
-    # --- Deploy User-space Configurations (with Safety Check) ---
+    # --- Deploy User-space Configurations ---
     local CONFIG_DEST="$USER_HOME/$USER_CONFIG_REL"
     local CONFIG_SRC="etc/skel/$USER_CONFIG_REL"
 
-    # Check for YAMLs on both sides BEFORE creating dest dirs. The src check
-    # is the guard that prevents 'cp -f .../*.yaml' from crashing under
-    # `set -e` when CONFIG_SRC exists but is empty (default bash glob does
-    # not expand to nothing — it stays literal and the cp fails).
+    # Checked before mkdir below creates the destination.
     local HAS_EXISTING_YAML=false
-    local HAS_SRC_YAML=false
     compgen -G "$CONFIG_DEST/*.yaml" > /dev/null 2>&1 && HAS_EXISTING_YAML=true
-    compgen -G "$CONFIG_SRC/*.yaml" > /dev/null 2>&1 && HAS_SRC_YAML=true
 
     # This runs as root, and only $CONFIG_DEST is chowned further down: a
     # ~/.config that mkdir -p had to create (a user who has never logged
@@ -212,9 +206,7 @@ deploy_files() {
         || install -d -o "$REAL_USER" -g "$(id -gn "$REAL_USER")" "$(dirname "$CONFIG_DEST")"
     mkdir -p "$CONFIG_DEST/games.d"
 
-    if ! $HAS_SRC_YAML; then
-        info "No template YAML configs to deploy in $CONFIG_SRC; skipping."
-    elif $HAS_EXISTING_YAML; then
+    if $HAS_EXISTING_YAML; then
         if $UPDATE_MODE; then
             info "Update mode: preserving custom settings. Only deploying new configuration files..."
             cp -n "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
@@ -230,7 +222,7 @@ deploy_files() {
             fi
         fi
     else
-        # Fresh installation: no existing user configs, templates available.
+        # Fresh installation: no existing user configs.
         cp -f "$CONFIG_SRC"/*.yaml "$CONFIG_DEST/"
     fi
     chown -R "$REAL_USER:$REAL_USER" "$CONFIG_DEST"
@@ -285,20 +277,19 @@ deploy_files() {
     info "Installing desktop applications entries..."
     mkdir -p "$APP_DIR"
     for f in Control_Center.desktop Game_Mode.desktop; do
-        [ -f "usr/local/share/applications/$f" ] && cp -f "usr/local/share/applications/$f" "$APP_DIR/"
+        cp -f "usr/local/share/applications/$f" "$APP_DIR/"
     done
 
     # --- ALPM Hooks ---
     info "Installing Pacman hooks..."
     mkdir -p "$ALPM_HOOKS_DIR"
-    [ -f usr/share/libalpm/hooks/gamescope-privs.hook ] && cp -f usr/share/libalpm/hooks/gamescope-privs.hook "$ALPM_HOOKS_DIR/"
+    cp -f usr/share/libalpm/hooks/gamescope-privs.hook "$ALPM_HOOKS_DIR/"
 
     # File capabilities for gamescope (it checks CAP_SYS_NICE for realtime
     # scheduling); the pacman hook above re-applies them after its upgrades.
-    if [ -f /usr/bin/gamescope ]; then
-        info "Applying Real-Time capabilities to Gamescope..."
-        setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
-    fi
+    # gamescope is in BASE_PKGS, installed in stage 2.
+    info "Applying Real-Time capabilities to Gamescope..."
+    setcap 'cap_sys_admin,cap_sys_nice,cap_ipc_lock+ep' /usr/bin/gamescope
 }
 
 # --- 4. SteamOS Compatibility Shim Layer ---
@@ -338,11 +329,9 @@ setup_systemd_lockdown() {
     info "Configuring Systemd for Console Lockdown (TTY1)..."
 
     # Deploy and personalize the main service
-    if [ -f etc/systemd/system/steamos_diy.service ]; then
-        cp -f etc/systemd/system/steamos_diy.service "$SERVICE_FILE"
-        sed -i "s|{{USER}}|$REAL_USER|g" "$SERVICE_FILE"
-        sed -i "s|{{UID}}|$REAL_UID|g" "$SERVICE_FILE"
-    fi
+    cp -f etc/systemd/system/steamos_diy.service "$SERVICE_FILE"
+    sed -i "s|{{USER}}|$REAL_USER|g" "$SERVICE_FILE"
+    sed -i "s|{{UID}}|$REAL_UID|g" "$SERVICE_FILE"
 
     # Refresh systemd state and set default target
     systemctl daemon-reload
