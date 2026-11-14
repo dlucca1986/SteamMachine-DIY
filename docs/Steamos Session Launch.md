@@ -93,7 +93,7 @@ The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit 
 
 | Event | Handler | Exit code | systemd effect |
 | :--- | :--- | :--- | :--- |
-| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — forwards `SIGTERM` to the session and exits. It doesn't wait or escalate itself (the main thread it interrupts is blocked in `proc.wait()`); what happens to a session process that ignores `SIGTERM` has not been tested | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
+| `systemctl stop` / `SIGTERM` / `SIGINT` | `_handle_term` — forwards `SIGTERM` to the session and exits (it can't wait itself: the main thread it interrupts is blocked in `proc.wait()`). `_run_session` then gives the session 5 s and sends `SIGKILL` if it is still running (`STOP_TIMEOUT`) | `0` | No restart (`Restart=on-failure` does not trigger on 0) |
 | Session ended naturally (switch or crash recovery) | `run()` — exits after `NOTIFY_DELAY` pause | `75` (`EX_TEMPFAIL`) | Restart triggered — launcher re-reads `next_session` and spawns the new target |
 
 `NOTIFY_DELAY` (SSoT, default `0.4s`) is a sleep between the TTY transition message and `sys.exit(75)`, so the message stays on screen briefly before the service restarts.

@@ -125,12 +125,12 @@ _LOG_TIMESTAMP_RE = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+(.*)")
 
 # Message-content highlighting, layered on top of the identifier colour
 # (CORE:/STEAM:/SYSTEM:): a line can be both "from CORE" and "an error".
-# Pattern-based: error/failure tags end in _ERROR:/_FAIL:/_FAILED: or
-# start with BAD_/RESTORE_REJECTED_ by convention, so new
+# Pattern-based: error/failure tags end in _ERROR:/_FAIL:/_FAILED:/
+# _TIMEOUT: or start with BAD_/RESTORE_REJECTED_ by convention, so new
 # tags following it need no change here. The literal names on the last
 # two lines are the tags that don't follow it.
 _LOG_ERROR_MARKER = re.compile(
-    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL):"
+    r"\b[A-Z][A-Z0-9_]*_(?:ERROR|FAILED|FAIL|TIMEOUT):"
     r"|\bBAD_[A-Z0-9_]*:"
     r"|\bRESTORE_REJECTED_[A-Z_]*:"
     r"|EARLY_EXIT_RECOVERY:|RESTORE_FATAL:|NO_TARGET:|BINARY_NOT_FOUND:"

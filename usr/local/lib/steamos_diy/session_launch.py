@@ -98,6 +98,10 @@ GAME_MODE_ENV: dict[str, str] = {
 # or asset I/O can exhaust systemd's default soft limit of 1024 files.
 GAME_MODE_NOFILE_TARGET: int = 524288
 
+# On a stop, seconds the session gets to exit after SIGTERM before SIGKILL.
+# Below the unit's TimeoutStopSec=10, so the launcher still exits by itself.
+STOP_GRACE_SECONDS: float = 5.0
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -222,6 +226,22 @@ def _monitor_process(
         return True  # Still running — stable
 
 
+def _kill_after_grace(proc: subprocess.Popen[Any]) -> None:
+    """On a stop, give the session STOP_GRACE_SECONDS, then SIGKILL it.
+
+    Needed because the session runs in the logind session scope, not in
+    the unit's cgroup: systemd's own SIGKILL at TimeoutStopSec reaches
+    only this launcher, and a session ignoring SIGTERM was left running
+    (checked with a transient unit with this unit's PAMName/KillMode).
+    """
+    try:
+        proc.wait(timeout=STOP_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        jlog("CORE", "STOP_TIMEOUT: session ignored SIGTERM, killing", "WARN")
+        proc.kill()
+        proc.wait()
+
+
 def _build_command_for(target: str, cfg: dict) -> list[str]:
     """Resolve argv: "steam" → gamescope+Steam, else → the desktop
     session (bin_plasma)."""
@@ -302,10 +322,16 @@ def _run_session(
                     args=(post_start_cmds, delay, crashed),
                     daemon=True,
                 ).start()
-            if not _monitor_process(proc, v_timeout, next_path, target):
-                crashed.set()
-                target = _handle_recovery(next_path)
-            proc.wait()
+            try:
+                if not _monitor_process(proc, v_timeout, next_path, target):
+                    crashed.set()
+                    target = _handle_recovery(next_path)
+                proc.wait()
+            except SystemExit:
+                # Raised by _make_term_handler. Leaving the `with` block
+                # waits on the child with no limit: bound that wait first.
+                _kill_after_grace(proc)
+                raise
             ret_code = proc.returncode
     except FileNotFoundError as err:
         jlog("CORE", f"BINARY_NOT_FOUND: {cmd[0]} - {err}", level="ERROR")
@@ -335,13 +361,11 @@ def _make_term_handler(
     """Build the SIGTERM/SIGINT handler bound to run()'s proc_holder cell.
 
     The handler only signals the child and exits — it must NOT wait on it.
-    It runs on the main thread, which in
-    the stable phase is blocked in _run_session's untimed proc.wait()
-    holding Popen's waitpid lock, so a wait from the handler could never
-    reap the child. sys.exit() unwinds out of that wait and the
-    `with Popen` block reaps the child. The child lives in the logind
-    session scope, not the unit's cgroup: what happens to one that
-    ignores SIGTERM has not been tested.
+    It runs on the main thread, which in the stable phase is blocked in
+    _run_session's untimed proc.wait() holding Popen's waitpid lock, so a
+    wait from the handler could never reap the child. sys.exit() unwinds
+    out of that wait; _run_session then waits for the child, killing it
+    if it ignores SIGTERM (_kill_after_grace).
 
     Exit code 0 — explicit stop, do NOT trigger a systemd restart.
     """

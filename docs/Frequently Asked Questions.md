@@ -19,7 +19,7 @@ Untested on real hardware. Install the proprietary driver for your GPU first (th
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:
 * Press `Ctrl + Alt + F2` to switch to **TTY2**.
-* Login and run: `steamos-session-select desktop`, then return to TTY1 (`Ctrl + Alt + F1`). Tested from TTY2 on a running Game Mode. If a frozen Steam doesn't respond, the Desktop target is already saved, so `sudo systemctl restart steamos_diy.service` should start the Desktop (follows from the code; not tested on a frozen session).
+* Login and run: `steamos-session-select desktop`, then return to TTY1 (`Ctrl + Alt + F1`). Tested from TTY2 on a running Game Mode. If a frozen Steam doesn't respond, the Desktop target is already saved, so `sudo systemctl restart steamos_diy.service` should start the Desktop. Tested: on a stop, a gamescope that doesn't react to `SIGTERM` is killed after 5 s, and the process it runs exits with it (checked with a test program, not with Steam). Not tested: the restart into Desktop after that, and a gamescope stuck in the kernel (D-state), which not even `SIGKILL` can end.
 
 ---
 

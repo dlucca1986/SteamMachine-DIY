@@ -328,6 +328,59 @@ def test_term_handler_stops_stable_session_promptly(tmp_path):
     assert proc_holder[0] is None
 
 
+def test_term_handler_kills_a_session_that_ignores_sigterm(
+    tmp_path, monkeypatch
+):
+    """Regression: on a stop, leaving _run_session's `with Popen` block
+    waited on the child with no limit, so a session ignoring SIGTERM kept
+    the launcher hung until systemd's TimeoutStopSec, and then survived it
+    (it lives in the logind session scope, not the unit's cgroup). Found
+    with a transient unit using this unit's PAMName/KillMode. The child
+    must now be killed after STOP_GRACE_SECONDS. A watchdog kills it after
+    5s so the old code fails instead of hanging the suite."""
+    monkeypatch.setattr(session_launch, "STOP_GRACE_SECONDS", 0.3)
+    started = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        # Closed by _run_session's own `with` block.
+        # pylint: disable-next=consider-using-with
+        proc = real_popen(*args, **kwargs)
+        started.append(proc)
+        return proc
+
+    monkeypatch.setattr(session_launch.subprocess, "Popen", recording_popen)
+    proc_holder = [None]
+    previous = signal.signal(
+        signal.SIGTERM, session_launch._make_term_handler(proc_holder)
+    )
+    timer = threading.Timer(0.6, os.kill, (os.getpid(), signal.SIGTERM))
+    watchdog = threading.Timer(
+        5.0, lambda: started and started[0].kill()
+    )
+    start = time.monotonic()
+    try:
+        timer.start()
+        watchdog.start()
+        with pytest.raises(SystemExit) as exc:
+            session_launch._run_session(
+                ["/bin/sh", "-c", "trap '' TERM; exec sleep 30"],
+                str(tmp_path / "next_session"),
+                "steam",
+                0.1,
+                proc_holder,
+                [],
+            )
+    finally:
+        timer.cancel()
+        watchdog.cancel()
+        signal.signal(signal.SIGTERM, previous)
+
+    assert exc.value.code == 0
+    assert time.monotonic() - start < 3.0
+    assert started[0].returncode == -signal.SIGKILL
+
+
 # ---------------------------------------------------------------------------
 # _run_session — end-to-end crash-recovery integration
 # ---------------------------------------------------------------------------
