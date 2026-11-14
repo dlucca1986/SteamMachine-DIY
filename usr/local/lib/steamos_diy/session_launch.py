@@ -222,29 +222,6 @@ def _monitor_process(
         return True  # Still running — stable
 
 
-def _terminate_gracefully(proc: subprocess.Popen[Any]) -> None:
-    """SIGTERM → wait → SIGKILL if ignored within TERM_TIMEOUT."""
-    if proc.returncode is None:
-        proc.terminate()
-    term_timeout = get_ssot_num("TERM_TIMEOUT", 5.0)
-    try:
-        proc.wait(timeout=term_timeout)
-        return
-    except subprocess.TimeoutExpired:
-        jlog("CORE", "SIGTERM_TIMEOUT: escalating to SIGKILL", level="WARN")
-        proc.kill()
-    try:
-        proc.wait(timeout=term_timeout)
-    except subprocess.TimeoutExpired:
-        # Still alive after SIGKILL: stuck in uninterruptible I/O
-        # (D-state). Return instead of blocking.
-        jlog(
-            "CORE",
-            "SIGKILL_TIMEOUT: process still alive (D-state?)",
-            level="ERROR",
-        )
-
-
 def _build_command_for(target: str, cfg: dict) -> list[str]:
     """Resolve argv: "steam" → gamescope+Steam, else → the desktop
     session (bin_plasma)."""
@@ -253,13 +230,15 @@ def _build_command_for(target: str, cfg: dict) -> list[str]:
     return [get_ssot_var("bin_plasma", DEFAULT_PLASMA_BIN)]
 
 
-def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
-    """Recover to desktop after an early exit: persist target, notify, kill.
+def _handle_recovery(next_path: str) -> str:
+    """Recover to desktop after an early exit: persist target, notify.
 
     Deliberate fail-safe: any exit within the validation window (a crash,
     or a switch request that raced the launch) forces "desktop", never
     "steam", so a broken config lands where the user can fix it instead
-    of looping back into a session that may not even start.
+    of looping back into a session that may not even start. The process
+    has already exited (that is how the exit was detected), so there is
+    nothing to signal.
 
     Returns:
         Always ``"desktop"`` — drives caller's next-target logic.
@@ -278,7 +257,6 @@ def _handle_recovery(proc: subprocess.Popen[Any], next_path: str) -> str:
     # this whole function exists to guarantee — hence the ERROR-level log
     # persist_next_session emits on failure.
     persist_next_session(next_path, target)
-    _terminate_gracefully(proc)
     return target
 
 
@@ -326,7 +304,7 @@ def _run_session(
                 ).start()
             if not _monitor_process(proc, v_timeout, next_path, target):
                 crashed.set()
-                target = _handle_recovery(proc, next_path)
+                target = _handle_recovery(next_path)
             proc.wait()
             ret_code = proc.returncode
     except FileNotFoundError as err:
@@ -356,8 +334,8 @@ def _make_term_handler(
 ) -> Callable[[int, Any], None]:
     """Build the SIGTERM/SIGINT handler bound to run()'s proc_holder cell.
 
-    The handler only signals the child and exits — it must NOT wait on it
-    (no _terminate_gracefully here). It runs on the main thread, which in
+    The handler only signals the child and exits — it must NOT wait on it.
+    It runs on the main thread, which in
     the stable phase is blocked in _run_session's untimed proc.wait()
     holding Popen's waitpid lock, so a wait from the handler could never
     reap the child. sys.exit() unwinds out of that wait and the

@@ -60,8 +60,6 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command was dispatched (a `SPAWN_ERROR` just before it means it could not be started). |
 | `STEAM` | `POST_START_CMDS_FAILED: <error>` | ERROR | The entire post-start daemon thread crashed unexpectedly (not a single bad command — something broke the loop itself). |
 | `CORE` | `VALIDATED_<TARGET>_STABLE` | DEBUG | The session survived the validation window and was declared stable. |
-| `CORE` | `SIGTERM_TIMEOUT: escalating to SIGKILL` | WARN | Not reachable in the current code: crash recovery only runs after the session process has already exited. |
-| `CORE` | `SIGKILL_TIMEOUT: process still alive (D-state?)` | ERROR | Not reachable in the current code (see the row above). |
 | `CORE` | `EARLY_EXIT_RECOVERY: process exited during the validation window...` | ERROR | A crash (or a switch request that raced the launch) was detected — forcing a fallback to Desktop. |
 | `CORE` | `BINARY_NOT_FOUND: <path> - <error>` | ERROR | The configured session binary (gamescope/Steam/Plasma) doesn't exist at that path — check the relevant `bin_*` SSoT key. |
 | `CORE` | `OS_ERROR: <error>` | ERROR | A generic OS-level failure spawning the session (permissions, resource limits, etc). |

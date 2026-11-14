@@ -86,7 +86,7 @@ This mechanism is designed for runtime calls that require the Gamescope socket t
 ## 🛡️ Validation Window & Recovery
 * **Process monitoring**: `proc.wait(timeout=VALIDATION_TIMEOUT)`. If the session exits before `VALIDATION_TIMEOUT` elapses, it is treated as a crash.
 * **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration (default `5.0s`): how long a session must stay up after starting to count as stable.
-* **Emergency Recovery**: If a crash occurs within the validation window, the supervisor writes `desktop` to the state file atomically and terminates the process. The session process has already exited at that point, so nothing is signalled (`TERM_TIMEOUT` and the `SIGTERM`→`SIGKILL` escalation in `_terminate_gracefully` are not reached by this path).
+* **Emergency Recovery**: If a crash occurs within the validation window, the launcher writes `desktop` to the state file atomically. The session process has already exited at that point, so nothing is signalled.
 
 ## 🔌 Signal Handling & Exit Codes
 The launcher registers handlers for `SIGTERM` and `SIGINT` at startup. The exit code controls whether `systemd` restarts the service:

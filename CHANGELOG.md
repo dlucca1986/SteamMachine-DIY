@@ -17,6 +17,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   wiki) reviewed against what the code actually does: inaccurate statements corrected, overlong
   ones shortened. No behavior change.
 
+### Removed
+- Code that could never run:
+  - the SIGTERM → SIGKILL escalation the launcher ran after a crash in the validation window
+    (the session process had always already exited by then), with its `SIGTERM_TIMEOUT`/
+    `SIGKILL_TIMEOUT` messages and the `TERM_TIMEOUT` SSoT key. An existing
+    `TERM_TIMEOUT` line in your SSoT is simply ignored;
+  - the Diagnostics tab's de-duplication and styling of `LAUNCH_ARGS` in gamescope lines
+    (`LAUNCH_ARGS` is only logged under the `STEAM` tag, which that code never saw).
+
 ### Fixed
 - Installer, NVIDIA: the proprietary driver was detected by the `nvidia` package, which Arch
   has replaced with `nvidia-open`, so current proprietary setups took the open-driver path and

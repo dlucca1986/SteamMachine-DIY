@@ -27,8 +27,8 @@ def test_get_ssot_num_returns_default_when_key_missing():
 
 
 def test_get_ssot_num_parses_valid_value(set_ssot):
-    set_ssot(TERM_TIMEOUT="7.5")
-    assert utils.get_ssot_num("TERM_TIMEOUT", 5.0) == 7.5
+    set_ssot(VALIDATION_TIMEOUT="7.5")
+    assert utils.get_ssot_num("VALIDATION_TIMEOUT", 5.0) == 7.5
 
 
 def test_get_ssot_num_falls_back_on_malformed_value(set_ssot):
@@ -55,12 +55,14 @@ def test_get_ssot_var_survives_a_line_the_os_rejects(tmp_path, monkeypatch):
     included: one stray character crash-looped the session at boot.
     The rest of the file must still load."""
     conf_path = tmp_path / "steamos_diy.conf"
-    conf_path.write_text("=oops\nbin_gs=/usr/bin/a\x00b\nTERM_TIMEOUT=7.5\n")
+    conf_path.write_text(
+        "=oops\nbin_gs=/usr/bin/a\x00b\nVALIDATION_TIMEOUT=7.5\n"
+    )
     monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
     utils.clear_ssot_cache()
 
-    assert utils.get_ssot_var("TERM_TIMEOUT", "5.0") == "7.5"
-    assert os.environ["TERM_TIMEOUT"] == "7.5"
+    assert utils.get_ssot_var("VALIDATION_TIMEOUT", "5.0") == "7.5"
+    assert os.environ["VALIDATION_TIMEOUT"] == "7.5"
 
 
 def test_apply_env_map_skips_entries_the_os_rejects(monkeypatch):
@@ -99,7 +101,7 @@ def test_get_ssot_var_survives_non_utf8_conf_file(tmp_path, monkeypatch):
     monkeypatch.setattr(utils, "SSOT_CONF_PATH", str(conf_path))
     utils.clear_ssot_cache()
 
-    assert utils.get_ssot_var("TERM_TIMEOUT", "5.0") == "5.0"
+    assert utils.get_ssot_var("VALIDATION_TIMEOUT", "5.0") == "5.0"
 
 
 # ---------------------------------------------------------------------------

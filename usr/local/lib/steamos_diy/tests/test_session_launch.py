@@ -6,8 +6,8 @@ once raised ValueError out of run(): the session crashed until systemd's
 restart limit failed the unit. The parsing tests pin the
 degrade-gracefully behavior.
 
-The crash-recovery tests drive `_monitor_process`/`_terminate_gracefully`/
-`_run_session` with real short-lived subprocesses, unmocked: this is what
+The crash-recovery tests drive `_monitor_process`/`_run_session` with
+real short-lived subprocesses, unmocked: this is what
 decides whether a crash lands on Desktop or on a black screen."""
 
 import os
@@ -292,67 +292,14 @@ def test_monitor_process_logs_when_write_atomic_fails(
     )
 
 
-# ---------------------------------------------------------------------------
-# _terminate_gracefully — SIGTERM, then SIGKILL escalation on timeout
-# ---------------------------------------------------------------------------
-
-
-def test_terminate_gracefully_stops_a_responsive_process(set_ssot):
-    set_ssot(TERM_TIMEOUT="2.0")
-    with subprocess.Popen(["/bin/sleep", "10"]) as proc:
-        session_launch._terminate_gracefully(proc)
-
-        assert proc.returncode is not None
-
-
-def test_terminate_gracefully_escalates_to_sigkill(set_ssot):
-    # Ignores SIGTERM outright, forcing the SIGKILL escalation path.
-    # TERM_TIMEOUT shrunk so the test doesn't wait out a real 5s default.
-    set_ssot(TERM_TIMEOUT="0.2")
-    with subprocess.Popen(
-        ["/bin/sh", "-c", "trap '' TERM; sleep 5"]
-    ) as proc:
-        session_launch._terminate_gracefully(proc)
-
-        assert proc.returncode is not None
-
-
-def test_terminate_gracefully_returns_even_if_still_alive_after_sigkill(
-    set_ssot,
-):
-    """Regression: a process stuck in uninterruptible I/O (D-state) can
-    outlive even SIGKILL. The final proc.wait() must be bounded so this
-    function returns instead of blocking forever."""
-    set_ssot(TERM_TIMEOUT="0.05")
-    calls = {"kill": 0}
-
-    class _StuckProc:
-        returncode = None
-
-        def terminate(self):
-            pass
-
-        def kill(self):
-            calls["kill"] += 1
-
-        def wait(self, timeout=None):  # pylint: disable=unused-argument
-            raise subprocess.TimeoutExpired(cmd="stuck", timeout=timeout)
-
-    # Must return promptly (not hang) even though wait() never succeeds.
-    session_launch._terminate_gracefully(_StuckProc())
-
-    assert calls["kill"] == 1
-
-
-def test_term_handler_stops_stable_session_promptly(tmp_path, set_ssot):
-    """Regression: the SIGTERM handler used to call _terminate_gracefully,
-    whose proc.wait() can never reap the child while the interrupted main
+def test_term_handler_stops_stable_session_promptly(tmp_path):
+    """Regression: the SIGTERM handler used to call a helper whose
+    proc.wait() can never reap the child while the interrupted main
     thread is itself blocked in _run_session's untimed stable-phase
     proc.wait() (Popen's waitpid lock is held) — every stop ran out both
-    TERM_TIMEOUT windows and logged a false SIGTERM_TIMEOUT/SIGKILL_TIMEOUT
-    pair. Runs on pytest's main thread because Python only delivers
-    signals there, exactly like the real launcher."""
-    set_ssot(TERM_TIMEOUT="2.0")
+    5s wait windows and logged false SIGTERM/SIGKILL timeout lines.
+    Runs on pytest's main thread because Python only delivers signals
+    there, exactly like the real launcher."""
     proc_holder = [None]
     previous = signal.signal(
         signal.SIGTERM, session_launch._make_term_handler(proc_holder)
@@ -376,7 +323,7 @@ def test_term_handler_stops_stable_session_promptly(tmp_path, set_ssot):
         signal.signal(signal.SIGTERM, previous)
 
     assert exc.value.code == 0
-    # Old code: >= 2 x TERM_TIMEOUT (4s). Fixed: child reaped right away.
+    # Old code: two full wait windows. Fixed: child reaped right away.
     assert time.monotonic() - start < 2.0
     assert proc_holder[0] is None
 
@@ -386,8 +333,7 @@ def test_term_handler_stops_stable_session_promptly(tmp_path, set_ssot):
 # ---------------------------------------------------------------------------
 
 
-def test_run_session_crash_recovers_to_desktop(tmp_path, set_ssot):
-    set_ssot(TERM_TIMEOUT="1.0")
+def test_run_session_crash_recovers_to_desktop(tmp_path):
     proc_holder = [None]
 
     target, ret_code = session_launch._run_session(
@@ -404,12 +350,11 @@ def test_run_session_crash_recovers_to_desktop(tmp_path, set_ssot):
     assert proc_holder[0] is None  # cleared in the finally block
 
 
-def test_handle_recovery_logs_when_write_atomic_fails(set_ssot, monkeypatch):
+def test_handle_recovery_logs_when_write_atomic_fails(monkeypatch):
     """Regression: this write persists the Desktop fallback after a crash;
     if it fails silently, the next boot re-reads whatever next_session
     held, possibly the target that just crashed. Must be logged. Patched
     at the utils level (utils.persist_next_session)."""
-    set_ssot(TERM_TIMEOUT="1.0")
     monkeypatch.setattr(utils, "write_atomic", lambda *a: False)
     logged = []
     monkeypatch.setattr(
@@ -417,9 +362,7 @@ def test_handle_recovery_logs_when_write_atomic_fails(set_ssot, monkeypatch):
         "jlog",
         lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
     )
-    with subprocess.Popen(["/bin/true"]) as proc:
-        proc.wait()
-        session_launch._handle_recovery(proc, "/tmp/does-not-matter")
+    session_launch._handle_recovery("/tmp/does-not-matter")
 
     assert any(
         "NEXT_SESSION_WRITE_FAILED" in msg and level == "ERROR"
@@ -434,7 +377,7 @@ def test_run_session_skips_post_start_cmds_after_crash(
     session outcome -- it fired its configured commands even after
     _monitor_process detected an early crash and _handle_recovery had
     already switched to desktop."""
-    set_ssot(TERM_TIMEOUT="1.0", POST_START_DELAY="0.05")
+    set_ssot(POST_START_DELAY="0.05")
     spawned = []
     monkeypatch.setattr(
         session_launch,
@@ -457,8 +400,7 @@ def test_run_session_skips_post_start_cmds_after_crash(
     assert not spawned
 
 
-def test_run_session_stable_process_keeps_target(tmp_path, set_ssot):
-    set_ssot(TERM_TIMEOUT="1.0")
+def test_run_session_stable_process_keeps_target(tmp_path):
     proc_holder = [None]
 
     target, ret_code = session_launch._run_session(

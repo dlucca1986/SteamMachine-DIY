@@ -103,18 +103,6 @@ def test_apply_log_style_colours_bad_family():
     assert "BAD_FLAG_ENTRY:" in styled
 
 
-def test_apply_log_style_colours_timeout_suffix():
-    """SIGTERM_TIMEOUT:/SIGKILL_TIMEOUT: — matched by the TIMEOUT suffix."""
-    win = _FakeLogWindow()
-
-    styled = win._apply_log_style(
-        "[10:00:00] CORE: SIGTERM_TIMEOUT: escalating"
-    )
-
-    assert "#e74c3c" in styled
-    assert "SIGTERM_TIMEOUT:" in styled
-
-
 def test_apply_log_style_colours_standalone_error_literals():
     """These tags follow no naming convention, so they're matched as
     explicit literals, like EARLY_EXIT_RECOVERY:."""
