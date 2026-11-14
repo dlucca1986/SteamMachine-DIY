@@ -11,9 +11,8 @@ System requirements, main features, and the packages involved.
 * **Graphics Stack**:
     * **AMD**: RADV
     * **Intel**: ANV
-    * **NVIDIA (NVK)**: open Vulkan driver `vulkan-nouveau`, deployed when no proprietary driver is installed
-    * **NVIDIA (Proprietary)**: with `nvidia-open`/`nvidia-open-dkms`/`nvidia-open-lts` installed (detected through their `nvidia-utils` dependency), `lib32-nvidia-utils` is added
-    * Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
+    * **NVIDIA**: install the proprietary driver for your GPU first (the installer doesn't); without one it deploys NVK. Details and limits in the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support).
+    * Tested on Intel and AMD hardware; NVIDIA only in a container, gamescope never run on an NVIDIA card by the project.
 * **Display Manager**: **None**. The system manages session handovers via a `systemd` service on TTY1.
 * **Desktop Environment**: **KDE Plasma 6.x** (Wayland).
 

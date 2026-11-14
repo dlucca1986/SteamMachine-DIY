@@ -22,12 +22,14 @@ The installer identifies the GPU via `lspci` (scanning both `VGA compatible cont
 
 * **Intel (ANV):** Installs `vulkan-intel`, `lib32-vulkan-intel`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `intel-media-driver`, `libva-intel-driver`, `lib32-libva-intel-driver`, `mesa`, `lib32-mesa`. `intel-media-driver` (iHD) and `libva-intel-driver` (i965) are the two VA-API drivers; Arch has no 32-bit package of the former, so `lib32-libva-intel-driver` is the only 32-bit one.
 * **AMD (RADV):** Installs `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `mesa`, `lib32-mesa` (VAAPI comes with `mesa`).
-* **NVIDIA (Proprietary):** If `nvidia-utils` is installed — every Arch proprietary driver package (`nvidia-open`, `nvidia-open-dkms`, `nvidia-open-lts`) depends on it — installs `nvidia-utils`, `lib32-nvidia-utils`.
-* **NVIDIA (NVK):** Otherwise, installs the open Vulkan driver `vulkan-nouveau`, `lib32-vulkan-nouveau`, plus `mesa`, `lib32-mesa`.
+* **NVIDIA:** the kernel driver is never installed here. `pacman -Qq nvidia-utils` (which resolves provides) tells the cases apart:
+    * prints `nvidia-utils` (repo driver: `nvidia-open`, `-lts`, `-dkms`) → installs `lib32-nvidia-utils`;
+    * prints another name (AUR `nvidia-580xx-utils`/`nvidia-470xx-utils`, which conflict with the repo package) → installs nothing, warns if `lib32-<that name>` is missing;
+    * nothing → installs the NVK Vulkan driver `vulkan-nouveau`, `lib32-vulkan-nouveau`, plus `mesa`, `lib32-mesa`.
 * **Hybrid laptops:** each vendor is checked separately, so an Intel or AMD GPU next to an NVIDIA one gets both sets.
 * **Unrecognized GPU:** If no known vendor is detected, driver-specific packages are skipped and a warning is printed. The base stack is still installed.
 
-The NVIDIA selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope has not been run on an NVIDIA card by the project.
+The three NVIDIA cases are tested in a clean Arch container (the AUR one with a stand-in package carrying the same provides/conflicts); gamescope has not been run on an NVIDIA card by the project. See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for the driver per GPU generation.
 
 ### 2. Dependency Management & Database Sync
 

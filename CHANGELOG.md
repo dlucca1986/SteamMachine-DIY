@@ -32,6 +32,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     scope, terminals in `user@UID.service`), so the check could never match.
 
 ### Fixed
+- `install.sh` with an AUR legacy NVIDIA driver (`nvidia-580xx`/`nvidia-470xx`, for Maxwell, Pascal,
+  Volta and Kepler GPUs) asked pacman to install the repo `nvidia-utils` + `lib32-nvidia-utils`,
+  which conflict with it: the install stopped at stage 2. It now adds `lib32-nvidia-utils` only
+  for the repo driver and leaves an AUR driver alone, warning if its `lib32-` package is missing.
+  Reproduced and verified in a clean Arch container with a stand-in package carrying the AUR
+  package's provides/conflicts. NVIDIA docs rewritten against the Arch Wiki.
 - `install.sh --update` compared the SSoT template with `cmp`, which ships in `diffutils`: not
   part of Arch's `base` and not installed by the installer. Without it every update staged a
   `steamos_diy.conf.new` and warned that the template had changed. `diffutils` is now in the
@@ -40,7 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   has replaced with `nvidia-open`, so current proprietary setups took the open-driver path and
   missed `lib32-nvidia-utils`. That open-driver path also installed no Vulkan driver at all
   (Mesa's NVK driver is the separate `vulkan-nouveau` package). The installer now checks for
-  `nvidia-utils` (every Arch proprietary driver depends on it), installs `vulkan-nouveau` +
+  `nvidia-utils` (the repo drivers depend on it; AUR ones: see the entry above), installs `vulkan-nouveau` +
   `lib32-vulkan-nouveau` for NVK, and gives hybrid laptops the packages for both GPUs.
   Tested in a clean Arch container: detection for every case, dependency resolution, and a
   real install of both NVIDIA paths; not yet run on an NVIDIA card.

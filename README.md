@@ -33,18 +33,16 @@
 ## 🛠️ Hardware Support
 * **AMD**: RADV (Mesa).
 * **Intel**: ANV (Mesa).
-* **NVIDIA**:
-    * **Proprietary driver** (`nvidia-open`, `nvidia-open-dkms`, `nvidia-open-lts`): when `nvidia-utils` is installed (all of them depend on it), the installer adds `lib32-nvidia-utils`.
-    * **Open driver (NVK)**: otherwise it deploys the NVK Vulkan driver, `vulkan-nouveau` + `lib32-vulkan-nouveau`, with Mesa.
+* **NVIDIA**: the installer does not install the NVIDIA kernel driver; install the one for your GPU first, following the **[Arch Wiki: NVIDIA](https://wiki.archlinux.org/title/NVIDIA#Installation)**. Then:
+    * **Turing and newer, repo driver** (`nvidia-open`, `nvidia-open-lts`, `nvidia-open-dkms`, all depending on `nvidia-utils`): the installer adds `lib32-nvidia-utils`.
+    * **Maxwell / Pascal / Volta (AUR `nvidia-580xx-dkms`) or Kepler (AUR `nvidia-470xx-dkms`)**: these provide `nvidia-utils` under another name and conflict with the repo package, so the installer leaves them alone and only warns if their `lib32-` package (also AUR) is missing. Per the Arch Wiki, gamescope needs driver 515.43.04 or newer, which rules out `470xx`.
+    * **No proprietary driver**: the installer deploys the NVK Vulkan driver (`vulkan-nouveau` + `lib32-vulkan-nouveau`, with Mesa). The Arch Wiki calls NVK a work in progress and advises against it when gaming matters.
     * **Hybrid laptops** (Intel/AMD + NVIDIA) get the packages for both GPUs.
 
-Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
+Tested on Intel and AMD hardware. The three NVIDIA cases are tested in a clean Arch container (detection and installation; the AUR driver with a stand-in package carrying the same provides/conflicts); gamescope itself has not been run on an NVIDIA card by the project.
 
 > [!IMPORTANT]
-> **NVIDIA Proprietary Drivers & Gamescope**:
-> 
-> Per the Arch Wiki, Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting. Check it with `cat /sys/module/nvidia_drm/parameters/modeset` (it must print `Y`); if not, see the **[Arch Wiki: NVIDIA DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)**.
-> 
+> **NVIDIA & Gamescope**: gamescope needs the driver's DRM kernel mode setting, enabled by default since `nvidia-utils` 560.35.03-5 (Arch Wiki). Check that `cat /sys/module/nvidia_drm/parameters/modeset` prints `Y`; if not, see **[Arch Wiki: DRM kernel mode setting](https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting)**.
 
 ### 📦 Core Dependencies
 The `install.sh` script automatically enables the **[multilib]** repository and installs:
@@ -55,7 +53,7 @@ The `install.sh` script automatically enables the **[multilib]** repository and 
 | **Python Stack** | `python`, `python-pyqt6`, `python-ruamel-yaml` |
 | **System Tools** | `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-tools`, `pciutils`, `gcc`, `diffutils` |
 | **Control Center GUI** | `kate`, `konsole`, `xdg-utils` — used directly by name (SSoT editing, terminal launch, "Browse Config Folder"), independent of your desktop environment |
-| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `lib32-nvidia-utils` with the proprietary driver, otherwise `vulkan-nouveau` (+ 32-bit) and Mesa; hybrid systems get both GPUs' packages |
+| **Drivers (Auto)** | `vulkan-radeon`, `vulkan-intel` (+ Mesa layers; Intel also gets VAAPI via `intel-media-driver` + `libva-intel-driver`); NVIDIA: `lib32-nvidia-utils` with the repo proprietary driver, nothing with an AUR one, otherwise `vulkan-nouveau` (+ 32-bit) and Mesa; hybrid systems get both GPUs' packages |
 
 ## 🤝 Acknowledgments
 Special thanks to the Linux gaming community:

@@ -14,10 +14,7 @@ It is a design choice of this project: one systemd service does the display mana
 * SDDM and plasmalogin are disabled by the installer.
 
 ### 2. Is NVIDIA supported?
-With a proprietary NVIDIA driver already installed, the installer adds its 32-bit libraries (`lib32-nvidia-utils`); otherwise it installs the open NVK driver (`vulkan-nouveau`). Tested on Intel and AMD hardware. The NVIDIA package selection is tested in a clean Arch container (detection, dependency resolution, installation); gamescope itself has not been run on an NVIDIA card by the project.
-
-> [!IMPORTANT]
-> Per the Arch Wiki, Gamescope needs the NVIDIA driver's DRM Kernel Mode Setting: `cat /sys/module/nvidia_drm/parameters/modeset` must print `Y`. See the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support) for details.
+Untested on real hardware. Install the proprietary driver for your GPU first (the installer doesn't install kernel drivers): with the repo driver it adds `lib32-nvidia-utils`, with an AUR legacy driver (`nvidia-580xx`/`470xx`) it changes nothing, with none it deploys NVK, which the Arch Wiki doesn't recommend for gaming. Details, the gamescope driver requirement and the KMS check are in the [README](https://github.com/dlucca1986/SteamMachine-DIY#️-hardware-support).
 
 ### 3. How do I access the terminal if the UI is frozen?
 Since there is no Desktop Environment behind Steam Mode, use the Linux Virtual Terminals:

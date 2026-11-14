@@ -96,11 +96,19 @@ check_gpu_and_drivers() {
 
     # Each vendor is checked separately: a hybrid laptop has two GPUs.
     if echo "$GPU_INFO" | grep -iq "nvidia"; then
-        # Arch's proprietary drivers (nvidia-open, nvidia-open-dkms) all
-        # depend on nvidia-utils; without it the GPU runs on nouveau/NVK.
-        if pacman -Qq nvidia-utils &>/dev/null; then
+        # Every proprietary driver depends on nvidia-utils or on a package
+        # that provides it (AUR nvidia-580xx-utils / nvidia-470xx-utils, for
+        # pre-Turing GPUs, which conflict with the repo one). pacman -Qq
+        # resolves provides and prints the real package name.
+        local nv_utils
+        nv_utils=$(pacman -Qq nvidia-utils 2>/dev/null || true)
+        if [ "$nv_utils" = "nvidia-utils" ]; then
             info "Nvidia GPU detected, proprietary driver installed — adding its 32-bit libraries..."
-            DRIVER_PKGS+=" nvidia-utils lib32-nvidia-utils"
+            DRIVER_PKGS+=" lib32-nvidia-utils"
+        elif [ -n "$nv_utils" ]; then
+            info "Nvidia GPU detected, driver from $nv_utils (not in the Arch repos): leaving it alone."
+            pacman -Qq lib32-nvidia-utils &>/dev/null \
+                || warn "No 32-bit NVIDIA libraries: install lib32-$nv_utils from the AUR for 32-bit games."
         else
             info "Nvidia GPU detected, no proprietary driver — preparing the NVK Vulkan driver..."
             DRIVER_PKGS+=" vulkan-nouveau lib32-vulkan-nouveau mesa lib32-mesa"
@@ -114,7 +122,7 @@ check_gpu_and_drivers() {
         info "Intel GPU detected. Preparing ANV and Mesa layers..."
         DRIVER_PKGS+=" vulkan-intel lib32-vulkan-intel vulkan-mesa-layers lib32-vulkan-mesa-layers intel-media-driver libva-intel-driver lib32-libva-intel-driver mesa lib32-mesa"
     fi
-    if [ -z "$DRIVER_PKGS" ]; then
+    if ! echo "$GPU_INFO" | grep -iqE "nvidia|amd|intel"; then
         warn "GPU not recognized. Skipping driver-specific packages."
     fi
 }
