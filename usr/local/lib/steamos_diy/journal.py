@@ -167,14 +167,11 @@ def parse_game_logs(res: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def parse_export_format(
-    stdout: str, launches: set[str]
-) -> list[tuple[datetime, str]]:
+def parse_export_format(stdout: str) -> list[tuple[datetime, str]]:
     """Parse ``journalctl -o export`` into (timestamp, line) tuples.
 
     Args:
         stdout: Raw export-format journalctl output.
-        launches: Mutated in place — LAUNCH_ARGS added for dedup.
 
     Returns:
         (datetime, formatted_line) list in arrival order.
@@ -182,7 +179,7 @@ def parse_export_format(
     ents: list[tuple[datetime, str]] = []
     cur: dict[str, Any] = {}
     for line in stdout.splitlines():
-        entry = _consume_export_line(line, cur, launches)
+        entry = _consume_export_line(line, cur)
         if entry is not None:
             ents.append(entry)
             cur = {}
@@ -190,16 +187,13 @@ def parse_export_format(
 
 
 def _consume_export_line(
-    line: str,
-    cur: dict[str, Any],
-    launches: set[str],
+    line: str, cur: dict[str, Any]
 ) -> tuple[datetime, str] | None:
     """Accumulate one export-format field; return entry on MESSAGE=.
 
     Args:
         line: Single export-format line.
         cur: Accumulator dict for the current record (mutated in place).
-        launches: Mutated — LAUNCH_ARGS strings added as a side effect.
 
     Returns:
         (datetime, formatted_line) on MESSAGE= terminator, else None.
@@ -219,24 +213,20 @@ def _consume_export_line(
         cur["id"] = line.split("=", 1)[1]
         return None
     if line.startswith("MESSAGE="):
-        return _finalize_export_entry(line, cur, launches)
+        return _finalize_export_entry(line, cur)
     return None
 
 
 def _finalize_export_entry(
-    line: str, cur: dict[str, Any], launches: set[str]
+    line: str, cur: dict[str, Any]
 ) -> tuple[datetime, str]:
     msg = line.split("=", 1)[1]
     ident = cur.get("id", "SYSTEM")
     ts = cur.get("ts", datetime.now().astimezone())
-    if ident == "STEAM" and "LAUNCH_ARGS" in msg:
-        launches.add(msg.split("LAUNCH_ARGS:", 1)[-1].strip())
     return (ts, f"[{ts.strftime('%H:%M:%S')}] {ident}: {msg}")
 
 
-def fetch_tagged_entries(
-    tag: str, launches: set[str]
-) -> list[tuple[datetime, str]]:
+def fetch_tagged_entries(tag: str) -> list[tuple[datetime, str]]:
     """Run journalctl for *tag* and parse into (timestamp, line) entries.
 
     Shared by the Diagnostics view and the support-report export. Raises
@@ -256,7 +246,7 @@ def fetch_tagged_entries(
         check=True,
         timeout=SYSTEMD_CALL_TIMEOUT,
     )
-    return parse_export_format(res.stdout, launches)
+    return parse_export_format(res.stdout)
 
 
 # ---------------------------------------------------------------------------
@@ -264,11 +254,8 @@ def fetch_tagged_entries(
 # ---------------------------------------------------------------------------
 
 
-def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
-    """Pull gamescope journal lines, skipping echoes of known *launches*.
-
-    Args:
-        launches: LAUNCH_ARGS already emitted — prevents duplicate display.
+def fetch_gamescope_logs() -> list[tuple[datetime, str]]:
+    """Pull the last hour of gamescope journal lines.
 
     Returns:
         (datetime, formatted_line) list ready for merge-sort.
@@ -281,7 +268,7 @@ def fetch_gamescope_logs(launches: set[str]) -> list[tuple[datetime, str]]:
     for line in stdout.splitlines():
         if not _GAMESCOPE_PAYLOAD.search(line):
             continue
-        entry = _parse_gamescope_line(line, launches)
+        entry = _parse_gamescope_line(line)
         if entry is not None:
             ents.append(entry)
     return ents
@@ -326,16 +313,12 @@ def _run_journalctl_iso() -> str:
         return ""
 
 
-def _parse_gamescope_line(
-    line: str, launches: set[str]
-) -> tuple[datetime, str] | None:
-    """Parse one gamescope line; return None if duplicate or malformed."""
+def _parse_gamescope_line(line: str) -> tuple[datetime, str] | None:
+    """Parse one gamescope line; return None if malformed."""
     parsed = _split_gamescope_line(line)
     if parsed is None:
         return None
     ts, msg = parsed
-    if _is_duplicate_launch(msg, launches):
-        return None
     d_msg = msg if "[gamescope]" in msg else f"[gamescope] {msg}"
     return (ts, f"[{ts.strftime('%H:%M:%S')}] {d_msg}")
 
@@ -355,10 +338,3 @@ def _split_gamescope_line(line: str) -> tuple[datetime, str] | None:
         return ts, msg
     except (IndexError, ValueError):
         return None
-
-
-def _is_duplicate_launch(msg: str, launches: set[str]) -> bool:
-    if "LAUNCH_ARGS" not in msg:
-        return False
-    arg = msg.split("LAUNCH_ARGS:", 1)[-1].strip()
-    return arg in launches

@@ -171,10 +171,9 @@ yaml_parser.width = _YAML_WIDTH
 
 def _fetch_support_logs() -> list[str]:
     """Raw ALL-tag log lines (+ gamescope) for the report; never raises."""
-    launches: set[str] = set()
     try:
-        ents = fetch_tagged_entries("ALL", launches)
-        ents.extend(fetch_gamescope_logs(launches))
+        ents = fetch_tagged_entries("ALL")
+        ents.extend(fetch_gamescope_logs())
     except (subprocess.SubprocessError, OSError) as err:
         return [f"(log retrieval failed: {err})"]
     if not ents:
@@ -1216,11 +1215,10 @@ class SDYControlCenter(QMainWindow):
         self.tag_filter.setEnabled(False)
 
         def worker() -> None:
-            launches: set[str] = set()
             try:
-                ents = fetch_tagged_entries(tag, launches)
+                ents = fetch_tagged_entries(tag)
                 if tag in ("ALL", "STEAM"):
-                    ents.extend(fetch_gamescope_logs(launches))
+                    ents.extend(fetch_gamescope_logs())
                 ents.sort(key=lambda x: x[0])
                 safe_emit(self.logs_ready, ents, tag)
             except (subprocess.SubprocessError, OSError) as err:
@@ -1299,11 +1297,6 @@ class SDYControlCenter(QMainWindow):
                     lvl,
                     f"<span style='color:{col};'>{ico} {lvl}</span>",
                 )
-        if "LAUNCH_ARGS" in line:
-            line = line.replace(
-                "LAUNCH_ARGS",
-                "🚀 <b style='color:#2ecc71;'>LAUNCH_ARGS</b>",
-            )
         return line
 
     def _display_colored_logs(self, logs):

@@ -15,7 +15,7 @@ import journal
 def test_consume_export_line_malformed_timestamp_does_not_raise():
     cur = {}
     result = journal._consume_export_line(
-        "__REALTIME_TIMESTAMP=not-a-number", cur, set()
+        "__REALTIME_TIMESTAMP=not-a-number", cur
     )
     assert result is None
     assert "ts" not in cur
@@ -23,7 +23,7 @@ def test_consume_export_line_malformed_timestamp_does_not_raise():
 
 def test_finalize_export_entry_falls_back_to_now_on_missing_ts():
     cur = {"id": "SYSTEM"}
-    ts, line = journal._finalize_export_entry("MESSAGE=hello", cur, set())
+    ts, line = journal._finalize_export_entry("MESSAGE=hello", cur)
     assert isinstance(ts, datetime)
     assert "hello" in line
 
@@ -134,7 +134,7 @@ def test_parse_export_format_survives_garbled_timestamp_line():
         "MESSAGE=second entry"
     )
 
-    entries = journal.parse_export_format(stdout, set())
+    entries = journal.parse_export_format(stdout)
 
     assert len(entries) == 2
     assert "first entry" in entries[0][1]
@@ -150,7 +150,7 @@ def test_fetch_tagged_entries_decodes_with_replace(monkeypatch):
 
     monkeypatch.setattr(journal.subprocess, "run", fake_run)
 
-    journal.fetch_tagged_entries("ALL", set())
+    journal.fetch_tagged_entries("ALL")
 
     assert captured.get("errors") == "replace"
 
@@ -170,7 +170,7 @@ def test_fetch_tagged_entries_passes_a_timeout(monkeypatch):
 
     monkeypatch.setattr(journal.subprocess, "run", fake_run)
 
-    journal.fetch_tagged_entries("ALL", set())
+    journal.fetch_tagged_entries("ALL")
 
     assert captured.get("timeout") is not None
 
@@ -186,7 +186,7 @@ def test_fetch_tagged_entries_propagates_timeout_to_caller(monkeypatch):
     monkeypatch.setattr(journal.subprocess, "run", fake_run)
 
     try:
-        journal.fetch_tagged_entries("ALL", set())
+        journal.fetch_tagged_entries("ALL")
         assert False, "expected TimeoutExpired to propagate"
     except subprocess.TimeoutExpired:
         pass
@@ -226,12 +226,11 @@ def test_gamescope_and_export_entries_sort_together_without_raising():
         "SYSLOG_IDENTIFIER=STEAM\n"
         "MESSAGE=LAUNCH_ARGS: /usr/bin/gamescope --foo"
     )
-    export_entries = journal.parse_export_format(export_stdout, set())
+    export_entries = journal.parse_export_format(export_stdout)
     gamescope_entries = [
         journal._parse_gamescope_line(
             "2026-08-27T21:40:00+02:00 host python3[5496]: "
-            "[gamescope] [Info]  console: gamescope version 3.16.25",
-            set(),
+            "[gamescope] [Info]  console: gamescope version 3.16.25"
         )
     ]
     merged = export_entries + gamescope_entries
