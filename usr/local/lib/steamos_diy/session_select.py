@@ -33,10 +33,8 @@ from utils import (
 # Keywords that map argv[1] to the desktop target.
 _DESKTOP_KEYWORDS: frozenset[str] = frozenset({"plasma", "desktop", "kde"})
 
-# How long to watch the spawned helper for an immediate failure. A helper
-# that rejects its arguments or can't reach its target (a renamed
-# compositor action, no D-Bus session) exits within milliseconds; one
-# that is working either exits 0 or is still running when this expires.
+# How long to watch the spawned helper for an immediate failure (bad
+# arguments, no D-Bus session): a working one exits 0 or is still running.
 _HELPER_CHECK_SECONDS: float = 1.0
 
 

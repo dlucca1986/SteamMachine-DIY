@@ -42,14 +42,13 @@ _GENERIC_STEMS: frozenset[str] = frozenset(
     }
 )
 
-# Bytes read from the head of each YAML file when scanning for an AppID:
-# an ID declared further down is not found.
+# Characters (text mode) read from the head of each YAML file when
+# scanning for an AppID: an ID declared further down is not found.
 _HEADER_READ_BYTES: int = 1024
 
-# ID declaration line in a profile header (value optionally quoted,
-# inline comment tolerated). Anchored to end-of-line so an AppID can
-# never prefix-match a longer one (searching 220 must not hit
-# "SDY_ID: 2201290").
+# ID declaration line (value optionally quoted, inline comment allowed).
+# Anchored at end of line so 220 never matches "SDY_ID: 2201290"; not at
+# the start, so the Control Center scaffold's "# SDY_ID: <id>" matches too.
 _ID_LINE = re.compile(
     r"(?:STEAM_APPID|SDY_ID):\s*[\"']?(\d+)[\"']?\s*(?:#.*)?$",
     re.MULTILINE,
@@ -75,10 +74,8 @@ def _iter_yaml_files(directory: str):
     """Yield DirEntry for every *.yaml in *directory*; a scan error is
     logged at DEBUG."""
     try:
-        # `with`: _find_profile_by_id returns on the first match, leaving
-        # this generator suspended mid-scan; closing it then runs the
-        # context exit instead of leaving the iterator to be reclaimed
-        # by GC.
+        # `with`: the caller stops at the first match; closing the
+        # generator then closes the scandir iterator too.
         with os.scandir(directory) as it:
             for entry in it:
                 if entry.is_file() and entry.name.endswith(".yaml"):
@@ -157,8 +154,7 @@ def _get_profile_path(
 def _safe_split(field: str, value: str) -> list[str]:
     """shlex.split *value*; on an unbalanced quote, fall back to str.split().
 
-    A malformed per-game override must not stop the game from launching —
-    same fallback health.py's preflight already uses for gamescope flags.
+    A malformed per-game override must not stop the game from launching.
     """
     tokens, err = shlex_split_or_fallback(value)
     if err is not None:
@@ -207,9 +203,8 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
     """
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")
-        # full_cmd comes from the user's own local YAML config (wrapper/
-        # extra args), not from network or other-user input — same trust
-        # level as a shell alias the user wrote for themselves.
+        # full_cmd comes from the user's own YAML (wrapper, extra args):
+        # the same trust as a shell alias they wrote themselves.
         os.execvpe(full_cmd[0], full_cmd, os.environ)  # nosec B606
     except (OSError, ValueError) as err:
         jlog("STEAM", f"EXECUTION_FAILED: {err}", level="ERROR")
@@ -222,7 +217,7 @@ def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
 
 
 def run() -> None:
-    """Resolve profile and exec the game zero-fork.
+    """Resolve the profile and exec the game in place of this process.
 
     Flow: SSoT → argv → AppID/name lookup → env layering → execvpe.
     Exits with 1 on failure; never returns on success.
@@ -249,7 +244,7 @@ def run() -> None:
     apply_env_map(profile_data.get("env_vars"))
 
     full_cmd = _build_command(raw_args, profile_data)
-    _exec_game(full_cmd, stem, steam_id)  # execvpe — replaces this process
+    _exec_game(full_cmd, stem, steam_id)
 
 
 if __name__ == "__main__":

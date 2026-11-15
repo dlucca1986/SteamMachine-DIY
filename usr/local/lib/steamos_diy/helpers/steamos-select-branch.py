@@ -23,15 +23,12 @@ sys.path.insert(
 try:
     from utils import jlog, run_shim
 except (ImportError, SystemExit):
-    # No utils available (missing module, or utils.py's own C-Core load
-    # failure raising SystemExit): simulate success so Steam doesn't
-    # stall on the UI.
+    # utils unavailable (module missing, or its C-Core failed to load):
+    # still give Steam the exit code it expects.
     sys.exit(0)
 
-# There are no real OS branches here: one fixed value answers Steam's
-# -c (current branch) and -l (branch list) queries instead of empty stdout,
-# which its update-channel UI reads. Steam runs -c at every Game Mode
-# start, not only when its settings page is opened.
+# No real OS branches here: Steam's -c (current) and -l (list) queries
+# get one fixed answer. Steam runs -c at every Game Mode start (journal).
 _FAKE_BRANCH = "stable"
 
 if __name__ == "__main__":
