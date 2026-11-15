@@ -15,9 +15,7 @@ import errno
 import os
 import shutil
 
-# B404: every subprocess call below passes an argv list and never uses
-# shell=True, so no value (even one from the user's config) is parsed by
-# a shell.
+# B404: subprocess is only called with argv lists, never shell=True.
 import subprocess  # nosec B404
 import sys
 import tarfile
@@ -222,18 +220,15 @@ def _write_member(
         return True
 
     tmp = f"{target}.sdy_restore_tmp"
-    # _ensure_safe_target only checks target itself — this sibling path
-    # is where the write actually lands, so it needs the same guard.
-    # O_NOFOLLOW refuses a symlink planted here by another process
-    # running as this same user, instead of writing through it as root.
+    # The write lands on this sibling, not on target: O_NOFOLLOW refuses a
+    # symlink planted here by same-user code instead of following it as root.
     try:
         fd = os.open(
             tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
         )
     except OSError as err:
-        # ELOOP is what O_NOFOLLOW raises on a symlink. Anything else (a
-        # name too long, a full disk, a permission error) is an ordinary
-        # write failure, not a planted symlink.
+        # ELOOP is O_NOFOLLOW refusing a symlink; anything else is an
+        # ordinary write failure.
         tag = (
             "RESTORE_REJECTED_TMP_SYMLINK"
             if err.errno == errno.ELOOP
@@ -448,9 +443,8 @@ def _prepare_restore(
         sys.exit(1)
 
     user, home = get_real_user()
-    # Two forms intentionally: home_str (unresolved) keeps the mapping in
-    # lockstep with the paths backup.py wrote; home_real (symlink-resolved)
-    # is what the security allow-list must check against. Not redundant.
+    # home_str (unresolved) matches the paths backup.py wrote; home_real
+    # (symlinks resolved) is what the allow-list checks against.
     home_str = str(home)
     home_real = str(home.resolve())
     mapping = get_backup_mapping(home_str, for_restore=True)

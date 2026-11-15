@@ -34,8 +34,7 @@ _yaml_reader = _YAML(typ="safe")
 # C-Core integration — mandatory at import time.
 # ---------------------------------------------------------------------------
 
-# Public so health.py's C-Core preflight check can report the same path
-# it's actually loaded from here, instead of re-deriving its own copy.
+# Public: health.py's C-Core check reports this same path.
 CORE_LIB_PATH: str = "/usr/local/lib/steamos_diy/libcore.so"
 
 try:
@@ -70,47 +69,35 @@ _SERVICE_PATH: str = "/etc/systemd/system/steamos_diy.service"
 USER_CONFIG_REL: str = ".config/steamos_diy"
 BACKUP_MANIFEST_NAME: str = "links.txt"
 
-# Basename of the global config file under user_config's directory.
-# Shared by get_backup_mapping (below) and control_center.py's
-# _resolve_config_paths so the two can't independently drift on what a
-# relocated user_config's directory is computed relative to.
+# Basename of the global config file under user_config's directory
+# (get_backup_mapping and control_center.py's _resolve_config_paths).
 CONFIG_FILE_NAME: str = "config.yaml"
 
 # Where downloaded release tarballs are unpacked, relative to the user
 # config dir. Shared with backup.py, which must exclude it from archives.
 UPDATES_DIR_NAME: str = "updates"
 
-# Session binary fallbacks, used when the matching SSoT bin_* key is
-# unset. Single source of truth for session_launch.py, session_select.py
-# and health.py's preflight, so they can't drift apart if a distro ever
-# relocates one of these.
+# Fallbacks when the matching SSoT bin_* key is unset (session_launch,
+# session_select, health).
 DEFAULT_GS_BIN: str = "/usr/bin/gamescope"
 DEFAULT_STEAM_BIN: str = "/usr/bin/steam"
 DEFAULT_PLASMA_BIN: str = "/usr/bin/startplasma-wayland"
 DEFAULT_DBUS_BIN: str = "/usr/bin/qdbus6"
 
-# Fixed tool paths, not SSoT-backed (unlike the DEFAULT_*_BIN group above):
-# systemctl/journalctl/python3 live here on Arch, and
-# konsole is installed by install.sh. Centralized so callers don't each
-# re-declare their own literal.
+# Fixed tool paths, not SSoT-backed: systemctl/journalctl/python3 live here
+# on Arch; install.sh installs konsole.
 SYSTEMCTL_BIN: str = "/usr/bin/systemctl"
 JOURNALCTL_BIN: str = "/usr/bin/journalctl"
 PYTHON3_BIN: str = "/usr/bin/python3"
 KONSOLE_BIN: str = "/usr/bin/konsole"
 
-# Shared timeout for short-lived systemctl/journalctl calls (journal
-# reads, `daemon-reload`) in journal.py, restore.py and control_center.py.
-# Not SSoT-backed: nobody needs to tune it at runtime, it's centralized so
-# a future edit can't update some call sites and not others.
-# health.py's `systemctl show` deliberately keeps its own 5s: that value
-# is coupled to control_center.py's 4s poll interval (see the
-# _service_status_busy comment there), not to this one.
+# Timeout for short systemctl/journalctl calls (journal, restore, Control
+# Center). health.py's `systemctl show` keeps its own 5 s, tied to the
+# Control Center's 4 s status poll.
 SYSTEMD_CALL_TIMEOUT: int = 10
 
-# In-process cache for SSoT values, filled by one full parse on first
-# access — a missing key then costs a dict miss, not a disk re-read.
-# The loaded flag lives in a mutable cell so clear_ssot_cache can reset
-# it without a `global` statement (same idiom as run()'s proc_holder).
+# SSoT cache, filled by one full parse on first access. The loaded flag
+# is a mutable cell so clear_ssot_cache can reset it without `global`.
 _SSOT_CACHE: dict[str, str] = {}
 _SSOT_LOADED: list[bool] = [False]
 
@@ -297,10 +284,8 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = _yaml_reader.load(fh)
-    # WARN, not DEBUG: the file exists and its whole content is being
-    # dropped — at the default LOG_LEVEL=INFO a DEBUG line would leave a
-    # broken config.yaml with no trace, while the milder wrong-shape case
-    # below already warns.
+    # WARN, not DEBUG: the whole file is dropped, and at the default
+    # LOG_LEVEL=INFO a DEBUG line would leave no trace.
     except (OSError, ValueError) as err:
         jlog("CORE", f"YAML_LOAD_ERROR: {path} - {err}", level="WARN")
         return {}
@@ -310,9 +295,8 @@ def load_yaml_safe(path: str | Path | None) -> dict[str, Any]:
     if isinstance(data, dict):
         return data
     if data is not None:
-        # Valid YAML but wrong shape (list/scalar root): callers do
-        # cfg.get(...) on the result, so returning it as-is would crash
-        # the session at boot. Degrade to {} and warn loudly.
+        # Valid YAML but not a mapping: callers do cfg.get(...), so
+        # returning it would crash the session at boot.
         jlog("CORE", f"YAML_NOT_MAPPING: {path}", level="WARN")
     return {}
 
@@ -475,9 +459,8 @@ def fix_ownership(target_path: str | Path, user_name: str) -> None:
         else:
             os.chown(target, u_info.pw_uid, u_info.pw_gid)
     except (OSError, KeyError, subprocess.SubprocessError) as err:
-        # WARN, not DEBUG: a failed/timed-out chown leaves target_path
-        # owned by root after a backup/restore ran as the privileged
-        # user, which the user needs to notice and fix manually.
+        # WARN, not DEBUG: target_path stays owned by root, which the
+        # user has to notice and fix.
         jlog("CORE", f"OWNERSHIP_ERROR: {target_path} - {err}", level="WARN")
 
 
@@ -512,12 +495,8 @@ def get_backup_mapping(
     that entry's own comment below for why restore can't use the same
     "only if it needs one" optimization backup does.
     """
-    # user_config is SSoT-relocatable to a different *directory* (the
-    # basename always stays CONFIG_FILE_NAME, by design: renaming the file
-    # itself isn't a supported setup). Without
-    # resolving it the same way control_center.py's _resolve_config_paths
-    # does, a relocated config would silently back up the wrong (default)
-    # directory instead of the live one.
+    # user_config can move to another directory (the file name stays
+    # CONFIG_FILE_NAME): back up the directory it is really in.
     default_conf_dir = os.path.join(home, USER_CONFIG_REL)
     conf_dir = os.path.dirname(
         get_ssot_var(
@@ -537,12 +516,8 @@ def get_backup_mapping(
         "source/steamos_diy": CORE_LIB_DIR,
         "user/config": conf_dir,
     }
-    # A games_conf_dir is backed up recursively for free only when it's
-    # actually nested under the (possibly relocated) user/config entry
-    # above - otherwise, whether relocated itself or just left at its own
-    # default while user_config moved elsewhere, it needs its own entry or
-    # it silently drops out of every backup, and restore has no key to put
-    # it back even if it had been captured.
+    # games_conf_dir needs its own entry unless it is inside the user/config
+    # directory above, or it drops out of every backup.
     default_games_dir = os.path.join(
         home, USER_CONFIG_REL, GAMES_CONF_SUBDIR
     )
@@ -550,15 +525,9 @@ def get_backup_mapping(
     games_real = os.path.realpath(games_dir) + os.sep
     conf_real = os.path.realpath(conf_dir) + os.sep
     nested = games_real.startswith(conf_real)
-    # On restore, the archive's member names were fixed by whatever this
-    # same nesting check evaluated to AT BACKUP TIME on a possibly
-    # different system state (e.g. a from-scratch reinstall after a
-    # system failure, restoring onto a fresh default SSoT from an
-    # archive made while games_conf_dir was relocated to an SD card) -
-    # this process has no way to know that before opening the tar, so
-    # the entry is included unconditionally here; it only ever matches
-    # archive members that actually exist under that prefix, so it's a
-    # harmless no-op for an archive where nesting still holds.
+    # Restore always includes it: the archive was made under the nesting
+    # of backup time (e.g. games_conf_dir on an SD card, restored onto a
+    # fresh default SSoT). It only matches members that exist.
     if for_restore or not nested:
         mapping["user/games_conf_dir"] = games_dir
     return mapping
@@ -568,10 +537,8 @@ def verify_archive(
     path: str | Path, fail_tag: str = "ARCHIVE_VERIFY_FAIL"
 ) -> bool:
     """Verify a .tar.gz end-to-end: tar structure AND gzip checksum."""
-    # Deferred imports: only backup.py/restore.py's verification and
-    # download_release() need these (~15ms load cost) — every other
-    # importer of this module, session_launch.py included, would
-    # otherwise pay it on every session boot/switch for nothing.
+    # Deferred imports (~15 ms): only backup, restore and the updater need
+    # them, not session_launch on every boot/switch.
     # pylint: disable=import-outside-toplevel
     import gzip
     import tarfile
@@ -583,11 +550,8 @@ def verify_archive(
         ) as tar:
             for _ in tar:
                 pass
-            # Walking the members is not enough: tarfile stops at the
-            # end-of-archive marker and never reaches the gzip trailer,
-            # so the stream's CRC32 would never be checked and corrupted
-            # content would pass as verified. Reading to EOF makes gzip
-            # validate it.
+            # tarfile stops at the end-of-archive marker, before the gzip
+            # trailer: read to EOF so gzip checks the CRC32.
             while gz.read(65536):
                 pass
         return True
@@ -755,9 +719,7 @@ def _prune_downloads(root: Path, keep: Path | None = None) -> None:
     if given, is skipped — used to protect a just-verified new download
     from being pruned as if it were a stale previous one.
     """
-    # Deferred import: shutil is only needed by this self-update-only
-    # helper (~15ms load cost) — every other importer of this module,
-    # session_launch.py included, would otherwise pay it for nothing.
+    # Deferred import — see verify_archive.
     # pylint: disable=import-outside-toplevel
     import shutil
 
@@ -873,17 +835,14 @@ def download_release(
     The returned hash lets updater.py re-check install.sh right before
     pkexec, since the directory stays user-writable after extraction.
     """
-    # Deferred import — see verify_archive()'s own comment on why tarfile
-    # isn't a top-level import in this module.
+    # Deferred import — see verify_archive.
     # pylint: disable=import-outside-toplevel
     import tarfile
 
     if not _require_https(info.tarball_url, "UPDATE_DOWNLOAD_FAIL"):
         return None
 
-    # _fetch_expected_sha256 already logs the specific reason (non-https,
-    # network error, or malformed digest) before returning None here —
-    # no second, generic log line needed for the same event.
+    # _fetch_expected_sha256 has already logged why.
     expected = _fetch_expected_sha256(info.checksum_url)
     if expected is None:
         return None
