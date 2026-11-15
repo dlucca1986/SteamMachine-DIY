@@ -71,7 +71,7 @@ The **🩺 Validate Configuration** button (Maintenance tab) runs `run_preflight
 | **`user_config` / `games_conf_dir`** | the declared SSoT path actually exists — a typo is flagged, not silently skipped. Only ever surfaces as its own *failing* row (unset key or missing path); when the path resolves, that outcome folds into the YAML row below instead of a separate passing row |
 | **YAML** | the global config and every `games.d/*.yaml` parse, reporting the offending line on failure |
 | **config root** | the global config's YAML root is a mapping — a list/scalar root is valid YAML (so the syntax check passes) but the launcher degrades it to an empty config at boot |
-| **`config flags` / `post_start_cmds`** | if present, are lists — the launcher silently ignores any other type (no flags / no commands at all) |
+| **`config flags`** | if present, is a list — the launcher silently ignores any other type (no flags at all) |
 | **Gamescope flags** | the configured `flags` are run through the installed gamescope's own argv parser (`gamescope <flags> --help`), checking its error output for an unrecognised option — an unknown or mistyped flag makes gamescope exit at launch, and the session falls back to Desktop. `getopt_long` stops at the first bad option, so only one is ever reported per run. Skipped if gamescope can't be run |
 | **User groups** | the user belongs to `tty` / `video` / `render` / `input` |
 | **C-Core** | `libcore.so` is loadable |

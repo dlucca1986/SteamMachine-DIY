@@ -23,6 +23,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ones shortened. No behavior change.
 
 ### Removed
+- `post_start_cmds` (commands run 2 s after gamescope starts) with its `POST_START_DELAY` SSoT
+  key, its `POST_START_CMD*` log lines and its preflight check. Its only documented use was
+  `gamescopectl adaptive_sync_ignore_overlay 1`, whose effect was never measured (gamescope's
+  own description: "whether or not to ignore overlay planes for pushing commits with adaptive
+  sync"; off by default), and each command it started stayed a zombie process for the whole
+  session. A `post_start_cmds:` block left in your `config.yaml` is ignored.
 - Code that could never run:
   - the SIGTERM → SIGKILL escalation the launcher ran after a crash in the validation window
     (the session process had always already exited by then), with its `SIGTERM_TIMEOUT`/

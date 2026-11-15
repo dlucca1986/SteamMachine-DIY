@@ -73,15 +73,6 @@ These don't depend on the display. **Display-dependent** capabilities — VRR (`
 
 ---
 
-## ⚙️ Post-Start Hook
-After Gamescope is spawned, the launcher checks `post_start_cmds` from `config.yaml`. If the list is non-empty, a **background thread** sleeps `POST_START_DELAY` seconds (SSoT, default `2.0s`) and then runs each command via `spawn_native` (detached, `start_new_session=True`) — unless the session was already detected as crashed by then, in which case the commands are skipped (see Validation Window & Recovery below). The check runs once, when the delay ends: a session that crashes after that (between `POST_START_DELAY` and `VALIDATION_TIMEOUT`) has already run them.
-
-This mechanism is designed for runtime calls that require the Gamescope socket to be open (e.g. `gamescopectl`). Commands are only dispatched for the `steam` session target — the Plasma desktop session does not trigger this hook.
-
-* **Tags used by this module**: `STEAM` — `POST_START_CMD: <cmd>` logged at INFO after each command is dispatched; a malformed entry (unbalanced quote) falls back to a plain whitespace split and still runs, logged as `BAD_POST_START_CMD` at `WARN`; skipped entirely after a detected crash, logged as `POST_START_CMDS_SKIPPED` at `DEBUG`.
-
----
-
 ## 🛡️ Validation Window & Recovery
 * **Process monitoring**: `proc.wait(timeout=VALIDATION_TIMEOUT)`. If the session exits before `VALIDATION_TIMEOUT` elapses, it is treated as a crash.
 * **Validation Window**: Governed by `VALIDATION_TIMEOUT` in the SSoT configuration (default `5.0s`): how long a session must stay up after starting to count as stable.

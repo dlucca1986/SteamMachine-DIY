@@ -1,7 +1,7 @@
 """Tests for session_launch.py: shlex parsing of user config, and the
 crash-detection / recovery-to-Desktop mechanism.
 
-An unbalanced quote in a hand-edited `flags:`/`post_start_cmds:` entry
+An unbalanced quote in a hand-edited `flags:` entry
 once raised ValueError out of run(): the session crashed until systemd's
 restart limit failed the unit. The parsing tests pin the
 degrade-gracefully behavior.
@@ -153,91 +153,6 @@ def test_raise_nofile_limit_survives_setrlimit_failure(monkeypatch):
     session_launch._raise_nofile_limit(524288)  # must not raise
 
 
-def test_get_post_start_cmds_returns_empty_for_non_list(set_ssot):
-    """Same class of bug as the flags test above, for post_start_cmds:
-    a truthy non-list value (e.g. `post_start_cmds: 1`) made the list
-    comprehension raise TypeError uncaught."""
-    set_ssot()
-
-    assert session_launch._get_post_start_cmds({"post_start_cmds": 1}) == []
-    assert (
-        session_launch._get_post_start_cmds({"post_start_cmds": "notify"})
-        == []
-    )
-
-
-def test_schedule_post_start_cmds_survives_malformed_entry(monkeypatch):
-    """Matches _build_gamescope_args's degrade-via-str.split() behavior
-    for the same kind of hand-edited field, instead of silently skipping
-    the malformed command outright."""
-    monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
-    spawned = []
-    monkeypatch.setattr(
-        session_launch,
-        "spawn_native",
-        lambda path, args: spawned.append(args),
-    )
-
-    session_launch._schedule_post_start_cmds(
-        ['echo "unterminated', "notify-send hello"], 0.0, threading.Event()
-    )
-
-    # First entry degrades via str.split() and still runs; second is
-    # well-formed and unaffected.
-    assert spawned == [
-        ["echo", '"unterminated'],
-        ["notify-send", "hello"],
-    ]
-
-
-def test_schedule_post_start_cmds_clamps_negative_delay(monkeypatch):
-    """A negative POST_START_DELAY (a plausible SSoT typo) used to reach
-    time.sleep() raw, raising ValueError uncaught in this daemon thread
-    -- silently dropping every post_start_cmds. Must clamp to 0 instead
-    of skipping the commands."""
-    slept = []
-    monkeypatch.setattr(session_launch.time, "sleep", slept.append)
-    spawned = []
-    monkeypatch.setattr(
-        session_launch,
-        "spawn_native",
-        lambda path, args: spawned.append(args),
-    )
-
-    session_launch._schedule_post_start_cmds(
-        ["notify-send hi"], -1.0, threading.Event()
-    )
-
-    assert slept == [0]
-    assert spawned == [["notify-send", "hi"]]
-
-
-def test_schedule_post_start_cmds_survives_unexpected_exception(
-    monkeypatch,
-):
-    """Regression: an unexpected exception in this daemon thread (e.g.
-    spawn_native raising) ended it with no project log line at all; it
-    must be caught and logged."""
-    monkeypatch.setattr(session_launch.time, "sleep", lambda *_: None)
-
-    def raising_spawn(*_a, **_k):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(session_launch, "spawn_native", raising_spawn)
-    logged = []
-    monkeypatch.setattr(
-        session_launch,
-        "jlog",
-        lambda tag, msg, level="INFO": logged.append((tag, msg, level)),
-    )
-
-    session_launch._schedule_post_start_cmds(
-        ["notify-send hi"], 0.0, threading.Event()
-    )
-
-    assert ("STEAM", "POST_START_CMDS_FAILED: boom", "ERROR") in logged
-
-
 # ---------------------------------------------------------------------------
 # _monitor_process — crash vs. stable detection (real subprocesses)
 # ---------------------------------------------------------------------------
@@ -315,7 +230,6 @@ def test_term_handler_stops_stable_session_promptly(tmp_path):
                 "steam",
                 0.1,
                 proc_holder,
-                [],
             )
     finally:
         timer.cancel()
@@ -368,7 +282,6 @@ def test_term_handler_kills_a_session_that_ignores_sigterm(
                 "steam",
                 0.1,
                 proc_holder,
-                [],
             )
     finally:
         timer.cancel()
@@ -394,7 +307,6 @@ def test_run_session_crash_recovers_to_desktop(tmp_path):
         "steam",
         1.0,
         proc_holder,
-        [],
     )
 
     assert target == "desktop"
@@ -422,36 +334,6 @@ def test_handle_recovery_logs_when_write_atomic_fails(monkeypatch):
     )
 
 
-def test_run_session_skips_post_start_cmds_after_crash(
-    tmp_path, set_ssot, monkeypatch
-):
-    """Regression: the post_start_cmds daemon thread had no link to
-    session outcome -- it fired its configured commands even after
-    _monitor_process detected an early crash and _handle_recovery had
-    already switched to desktop."""
-    set_ssot(POST_START_DELAY="0.05")
-    spawned = []
-    monkeypatch.setattr(
-        session_launch,
-        "spawn_native",
-        lambda path, args: spawned.append(args),
-    )
-    proc_holder = [None]
-
-    target, _ret_code = session_launch._run_session(
-        ["/bin/true"],
-        str(tmp_path / "next_session"),
-        "steam",
-        1.0,
-        proc_holder,
-        ["notify-send should-not-run"],
-    )
-    time.sleep(0.2)  # let the daemon thread's POST_START_DELAY elapse
-
-    assert target == "desktop"
-    assert not spawned
-
-
 def test_run_session_stable_process_keeps_target(tmp_path):
     proc_holder = [None]
 
@@ -461,7 +343,6 @@ def test_run_session_stable_process_keeps_target(tmp_path):
         "steam",
         0.1,
         proc_holder,
-        [],
     )
 
     assert target == "steam"
@@ -477,7 +358,6 @@ def test_run_session_missing_binary_keeps_initial_target(tmp_path):
         "steam",
         1.0,
         proc_holder,
-        [],
     )
 
     assert target == "steam"
@@ -505,7 +385,6 @@ def test_run_session_survives_embedded_null_byte_in_argv(
         "steam",
         1.0,
         proc_holder,
-        [],
     )
 
     assert target == "steam"

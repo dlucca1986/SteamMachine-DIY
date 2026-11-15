@@ -19,7 +19,6 @@ import signal
 # a shell.
 import subprocess  # nosec B404
 import sys
-import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -39,7 +38,6 @@ from utils import (
     read_session_target,
     sd_notify_ready,
     shlex_split_or_fallback,
-    spawn_native,
 )
 
 # ---------------------------------------------------------------------------
@@ -151,56 +149,6 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
     return gs_args
 
 
-def _get_post_start_cmds(cfg: dict) -> list[str]:
-    """Return post_start_cmds from user config; [] if absent or invalid."""
-    cmds = cfg.get("post_start_cmds")
-    return [str(c) for c in cmds if c] if isinstance(cmds, list) else []
-
-
-def _schedule_post_start_cmds(
-    cmds: list[str], delay: float, crashed: threading.Event
-) -> None:
-    """Sleep *delay* seconds, then fire each cmd via spawn_native.
-
-    An unbalanced quote degrades to str.split() (shlex_split_or_fallback),
-    so a malformed command still runs instead of being skipped.
-
-    *crashed* is set by _run_session when the session dies early, and is
-    checked once after the sleep, so the commands don't fire for a session
-    that has already fallen back to desktop.
-
-    Accepted gap: a crash between *delay* and VALIDATION_TIMEOUT (2s-5s
-    with the shipped defaults) still fires the commands. Waiting the full
-    validation window would delay every healthy launch to avoid a harmless
-    edge case.
-    """
-    try:
-        time.sleep(max(delay, 0))
-        if crashed.is_set():
-            jlog(
-                "STEAM",
-                "POST_START_CMDS_SKIPPED: session crashed before delay "
-                "elapsed",
-                level="DEBUG",
-            )
-            return
-        for cmd_str in cmds:
-            parts, err = shlex_split_or_fallback(cmd_str)
-            if err is not None:
-                jlog(
-                    "STEAM",
-                    f"BAD_POST_START_CMD: {cmd_str!r} - {err}",
-                    level="WARN",
-                )
-            if parts:
-                spawn_native(parts[0], parts)
-                jlog("STEAM", f"POST_START_CMD: {cmd_str}")
-    # Logged via jlog rather than left to the default traceback, so the
-    # failure carries the project's tag and shows in the Diagnostics tab.
-    except Exception as err:  # pylint: disable=broad-except  # noqa: BLE001
-        jlog("STEAM", f"POST_START_CMDS_FAILED: {err}", level="ERROR")
-
-
 def _monitor_process(
     proc: subprocess.Popen[Any],
     timeout: float,
@@ -284,16 +232,12 @@ def _post_session_message(target: str, ret_code: int) -> str:
     return f"Ended (Code: {ret_code})"
 
 
-# 6 logical inputs (cmd, next_path, target, timeout, proc_holder,
-# post_start_cmds) — all independently needed by the caller, no subset.
-# pylint: disable=too-many-arguments,too-many-positional-arguments
 def _run_session(
     cmd: list[str],
     next_path: str,
     target: str,
     v_timeout: float,
     proc_holder: list[subprocess.Popen[Any] | None],
-    post_start_cmds: list[str],
 ) -> tuple[str, int]:
     """Spawn cmd, validate stability, recover on crash; return (target, code).
 
@@ -311,17 +255,8 @@ def _run_session(
             cmd, stdout=sys.stdout, stderr=sys.stderr
         ) as proc:
             proc_holder[0] = proc
-            crashed = threading.Event()
-            if post_start_cmds:
-                delay = get_ssot_num("POST_START_DELAY", 2.0)
-                threading.Thread(
-                    target=_schedule_post_start_cmds,
-                    args=(post_start_cmds, delay, crashed),
-                    daemon=True,
-                ).start()
             try:
                 if not _monitor_process(proc, v_timeout, next_path, target):
-                    crashed.set()
                     target = _handle_recovery(next_path)
                 proc.wait()
             except SystemExit:
@@ -391,7 +326,6 @@ def run() -> None:
 
     cfg = load_yaml_safe(get_ssot_var("user_config"))
     cmd = _build_command_for(target, cfg)
-    post_start_cmds = _get_post_start_cmds(cfg) if target == "steam" else []
 
     # Mutable closure cell for the signal handler. Wrapped in a list so
     # the inner function can rebind without needing `nonlocal` (and
@@ -405,7 +339,7 @@ def run() -> None:
     v_timeout = get_ssot_num("VALIDATION_TIMEOUT", 5.0)
 
     target, ret_code = _run_session(
-        cmd, next_path, target, v_timeout, proc_holder, post_start_cmds
+        cmd, next_path, target, v_timeout, proc_holder
     )
 
     notify(_post_session_message(target, ret_code))

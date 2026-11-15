@@ -28,7 +28,7 @@ The target is replaced by a complete file or not at all. Used for the session st
 ### 2. Configuration Management (`get_ssot_var`, `get_ssot_num`, `clear_ssot_cache`)
 `get_ssot_var(key)` serves values from the `_SSOT_CACHE` dict, filled on the **first call** by parsing `/etc/default/steamos_diy.conf` once (`key=value` lines, surrounding quotes stripped, first occurrence wins). Later calls never re-read the file, even for a missing key. All values are also exported into `os.environ`, so child processes inherit them.
 
-`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `POST_START_DELAY`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`: a missing key gives `default` silently, a value `float()` can't parse gives `default` and a `BAD_SSOT_NUM` warning. `nan`/`inf` and negative values are accepted as numbers. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising a `ValueError` in the launcher at boot.
+`get_ssot_num(key, default)` wraps `get_ssot_var` for the numeric parameters (the timings `VALIDATION_TIMEOUT`, `NOTIFY_DELAY`, plus `BACKUP_KEEP`). It returns a `float`: a missing key gives `default` silently, a value `float()` can't parse gives `default` and a `BAD_SSOT_NUM` warning. `nan`/`inf` and negative values are accepted as numbers. Since the SSoT file is hand-editable, this keeps a typo (e.g. `5s`, a stray comma) from raising a `ValueError` in the launcher at boot.
 
 `clear_ssot_cache()` empties `_SSOT_CACHE` so the next read hits disk. The session launcher reads config once at boot and benefits from the cache, but the long-lived Control Center must see the *current* file: its **Validate Configuration** check (`health.run_preflight`) and the reload after a restore both clear the cache first.
 
@@ -91,7 +91,7 @@ Standard-library code (`urllib` + `tarfile`, no Qt) behind the Control Center's 
 
 | Component | `utils` imports used |
 | :--- | :--- |
-| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `apply_env_map`, `get_ssot_num`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `notify`, `persist_next_session`, `read_session_target`, `sd_notify_ready`, `shlex_split_or_fallback`, `spawn_native` |
+| `session_launch.py` | `DEFAULT_GS_BIN`, `DEFAULT_PLASMA_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `apply_env_map`, `get_ssot_num`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `notify`, `persist_next_session`, `read_session_target`, `sd_notify_ready`, `shlex_split_or_fallback` |
 | `session_select.py` | `DEFAULT_DBUS_BIN`, `DEFAULT_STEAM_BIN`, `NEXT_SESSION_PATH`, `get_ssot_var`, `jlog`, `notify`, `persist_next_session`, `spawn_native` |
 | `sdy.py` | `apply_env_map`, `default_games_conf_dir`, `get_ssot_var`, `jlog`, `load_yaml_safe`, `shlex_split_or_fallback` |
 | `backup.py` | `BACKUP_MANIFEST_NAME`, `CORE_LIB_DIR`, `UPDATES_DIR_NAME`, `USER_CONFIG_REL`, `check_root`, `fix_ownership`, `get_backup_mapping`, `get_real_user`, `get_ssot_num`, `jlog`, `require_ssot_conf`, `verify_archive` |

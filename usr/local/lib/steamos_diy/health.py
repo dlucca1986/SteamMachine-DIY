@@ -55,11 +55,6 @@ _BINARY_KEYS: tuple[tuple[str, str], ...] = (
 # there for notify()'s write to /dev/tty1.
 _CRITICAL_GROUPS: tuple[str, ...] = ("tty", "video", "render", "input")
 
-# Global-config fields that must be lists: the session launcher silently
-# ignores any other type (no flags / no post-start commands at all), so a
-# string written instead of a list is worth catching before boot.
-_LIST_FIELDS: tuple[str, ...] = ("flags", "post_start_cmds")
-
 _SERVICE_UNIT: str = "steamos_diy.service"
 
 # gamescope's own getopt_long error, both forms it actually emits:
@@ -194,25 +189,18 @@ def _check_config_root(data: object) -> list[CheckResult]:
 
 
 def _check_config_types(data: object) -> list[CheckResult]:
-    """Flag list-typed global-config fields mistyped as a scalar.
+    """Flag a global-config `flags` that is present but not a list.
 
-    Presence and syntax are already covered by _check_user_config; this only
-    inspects the parsed structure. A field that is absent or null is fine
-    (runtime treats it as empty), so only a present, non-list value fails.
+    The launcher silently ignores any other type (no flags at all), so a
+    string written instead of a list is worth catching before boot. Absent
+    or null is fine (no flags).
     """
-    if not isinstance(data, dict):
+    flags = data.get("flags") if isinstance(data, dict) else None
+    if flags is None:
         return []
-
-    results: list[CheckResult] = []
-    for field in _LIST_FIELDS:
-        value = data.get(field)
-        if value is None:
-            continue
-        ok = isinstance(value, list)
-        kind = type(value).__name__
-        detail = "list" if ok else f"must be a list, got {kind}"
-        results.append(CheckResult(f"config {field}", ok, detail))
-    return results
+    ok = isinstance(flags, list)
+    detail = "list" if ok else f"must be a list, got {type(flags).__name__}"
+    return [CheckResult("config flags", ok, detail)]
 
 
 def _check_gamescope_flags(data: object) -> CheckResult:

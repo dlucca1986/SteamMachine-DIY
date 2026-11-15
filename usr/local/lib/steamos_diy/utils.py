@@ -131,10 +131,10 @@ _LEVELS_NUM: dict[str, int] = {
 _DEFAULT_LEVEL_NUM: int = 20  # INFO
 _DEFAULT_LEVEL_C: int = 6  # INFO
 
-# Recursion guard — thread-local so the post_start_cmds thread and the
-# main thread each track their own jlog re-entry independently. A shared
-# flag would let one thread's log bypass the LOG_LEVEL threshold while
-# another holds the guard.
+# Recursion guard — thread-local so the Control Center's worker threads
+# and its main thread each track their own jlog re-entry independently.
+# A shared flag would let one thread's log bypass the LOG_LEVEL threshold
+# while another holds the guard.
 _JLOG_REENTRY = threading.local()
 
 

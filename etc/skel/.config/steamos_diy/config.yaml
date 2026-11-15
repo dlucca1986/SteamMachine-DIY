@@ -1,7 +1,7 @@
 # =============================================================================
 # PROJECT:      SteamMachine-DIY - Global User Configuration
 # VERSION:      2.1.9
-# DESCRIPTION:  Global env vars, gamescope flags and post-start commands.
+# DESCRIPTION:  Global env vars and gamescope flags.
 # PHILOSOPHY:   KISS (Keep It Simple, Stupid)
 # REPOSITORY:   https://github.com/dlucca1986/SteamMachine-DIY
 # PATH:         $HOME/.config/steamos_diy/config.yaml
@@ -14,4 +14,3 @@ env_vars:
 flags:
   - "--hide-cursor-delay 3000"
   - "--xwayland-count 2"
-post_start_cmds:

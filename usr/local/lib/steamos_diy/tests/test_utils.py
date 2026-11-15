@@ -43,8 +43,8 @@ def test_get_ssot_num_falls_back_on_empty_value(set_ssot):
 
 def test_get_ssot_num_falls_back_on_stray_comma(set_ssot):
     """A decimal comma is a realistic hand-edit mistake (locale habit)."""
-    set_ssot(POST_START_DELAY="2,0")
-    assert utils.get_ssot_num("POST_START_DELAY", 2.0) == 2.0
+    set_ssot(NOTIFY_DELAY="0,4")
+    assert utils.get_ssot_num("NOTIFY_DELAY", 0.4) == 0.4
 
 
 def test_get_ssot_var_survives_a_line_the_os_rejects(tmp_path, monkeypatch):

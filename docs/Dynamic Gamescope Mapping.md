@@ -8,7 +8,7 @@ How YAML configuration becomes Gamescope arguments: global config, per-game over
 ## 🌎 Global System Config
 **Path:** `~/.config/steamos_diy/config.yaml`
 
-This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of three sections: `env_vars`, `flags`, and `post_start_cmds`.
+This file defines the system-wide environment and the default behavior of the **Gamescope** compositor. It consists of two sections: `env_vars` and `flags`.
 
 ### 1. Execution Control & Environment Variables (`env_vars`)
 The system manages two types of configuration inputs:
@@ -34,24 +34,12 @@ This is a **YAML List** that defines how Gamescope should render the session.
 Each list item is split like a shell command line and the pieces are passed to gamescope in order. Writing a flag and its value in one item (`- "-F fsr"`) is the clearest form, but `- -F fsr` (no quotes), `- "-Ffsr"`, `- "--sharpness=5"` and `"-F"`/`"fsr"` as two separate items work too.
 
 What actually breaks:
-* ❌ `- "-F" "fsr"` — two quoted strings in one item is invalid YAML: the **whole file** is ignored (no flags, `env_vars` or `post_start_cmds`), logged as `YAML_PARSE_ERROR`.
+* ❌ `- "-F" "fsr"` — two quoted strings in one item is invalid YAML: the **whole file** is ignored (no flags or `env_vars`), logged as `YAML_PARSE_ERROR`.
 * ❌ A TAB used for indentation — also invalid YAML, same result.
 * ❌ A misspelled flag (`--hide-cursor-dealy 3000`) — gamescope refuses to start and the session falls back to Desktop.
 * ❌ `flags: "-W 1280 -H 720"` — a string instead of a list: all flags are ignored.
 
 **Maintenance → Validate Configuration** in the Control Center reports all four.
-
-### 3. Post-Start Commands (`post_start_cmds`)
-This is a **YAML List** of commands run once after Gamescope has started, in a background thread. Each is split like a shell command line, but no shell runs it: pipes, redirects and `$VARIABLES` don't work. This is the correct place for runtime configuration that requires the Gamescope socket to be available — commands that cannot be passed as flags at launch time.
-
-Each command is run via `spawn_native` (detached, fire-and-forget) after `POST_START_DELAY` seconds (configured in `steamos_diy.conf`, default: `2.0s`). The delay gives Gamescope time to open its socket; it is a fixed wait, not a readiness check. Commands are only fired for the `steam` session target, never for the Plasma desktop session.
-
-**Example — adaptive sync with the `--mangoapp` overlay:**
-gamescope's `adaptive_sync_ignore_overlay` setting is, in its own words, "whether or not to ignore overlay planes for pushing commits with adaptive sync" — useful with the `--mangoapp` overlay:
-```yaml
-post_start_cmds:
-  - "gamescopectl adaptive_sync_ignore_overlay 1"
-```
 
 ---
 
@@ -89,10 +77,6 @@ flags:
   - "--xwayland-count 2"
   - "--adaptive-sync"
   - "--mangoapp"
-
-# --- POST-START COMMANDS ---
-post_start_cmds:
-  - "gamescopectl adaptive_sync_ignore_overlay 1"
 ```
 
 ### Game Profile Template (`game.example.yaml`)

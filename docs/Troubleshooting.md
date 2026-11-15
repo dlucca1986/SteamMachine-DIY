@@ -13,7 +13,7 @@ Every project log line carries one of three journal tags:
 | Tag | Origin | Diagnostic Value |
 | :--- | :--- | :--- |
 | `CORE` | `session_launch`, `session_select`, `sdy`, `utils` | Crash recovery, session switch requests, binary not found errors, SSoT/config read failures. |
-| `STEAM` | `session_launch`, `sdy` | Gamescope launch args, game launch and execution failures, post-start hook commands. |
+| `STEAM` | `session_launch`, `sdy` | Gamescope launch args, game launch and execution failures. |
 | `SYSTEM` | `backup`, `restore`, `journal`, `utils`, `helpers/*` | Backup/restore operations, self-update checks, and SteamOS shim intercepts. |
 
 `control_center.py` (the GUI) never logs to the journal directly — failures there show as an on-screen message box or status-bar text instead, not a `journalctl` entry.
@@ -55,10 +55,6 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `STEAM` | `BAD_FLAG_ENTRY: <flag> - <error>` | WARN | A `flags:` entry had an unbalanced quote; degraded to a naive whitespace split and still ran. |
 | `STEAM` | `NOFILE_LIMIT_RAISE_FAILED: <error>` | WARN | Couldn't raise the process's open-file-descriptor limit before launch — the session still starts, just with whatever limit it already had. |
 | `STEAM` | `LAUNCH_ARGS: <full gamescope+Steam argv>` | INFO | The exact command line used to launch this session — first place to look for a wrong flag. |
-| `STEAM` | `POST_START_CMDS_SKIPPED: session crashed before delay elapsed` | DEBUG | `post_start_cmds` were **not** run because the session was already detected as crashed by the time the delay elapsed. |
-| `STEAM` | `BAD_POST_START_CMD: <cmd> - <error>` | WARN | A `post_start_cmds` entry had an unbalanced quote; degraded to a naive split and still ran. |
-| `STEAM` | `POST_START_CMD: <cmd>` | INFO | A post-start command was dispatched (a `SPAWN_ERROR` just before it means it could not be started). |
-| `STEAM` | `POST_START_CMDS_FAILED: <error>` | ERROR | The entire post-start daemon thread crashed unexpectedly (not a single bad command — something broke the loop itself). |
 | `CORE` | `VALIDATED_<TARGET>_STABLE` | DEBUG | The session survived the validation window and was declared stable. |
 | `CORE` | `EARLY_EXIT_RECOVERY: process exited during the validation window...` | ERROR | A crash (or a switch request that raced the launch) was detected — forcing a fallback to Desktop. |
 | `CORE` | `BINARY_NOT_FOUND: <path> - <error>` | ERROR | The configured session binary (gamescope/Steam/Plasma) doesn't exist at that path — check the relevant `bin_*` SSoT key. |
@@ -137,7 +133,7 @@ The `RESTORE_REJECTED_*` lines and `RESTORE_WRITE_FAIL`/`RESTORE_CHMOD_FAIL` are
 | `CORE` | `YAML_LOAD_ERROR: <path> - <error>` | WARN | Couldn't read or decode a YAML config/profile file (also: a value the parser recognises but can't build, such as an unquoted impossible date) — the whole file was ignored. |
 | `CORE` | `YAML_PARSE_ERROR: <path> - <error>` | WARN | The YAML file has a syntax error — the whole file was ignored. Run *Validate Configuration* in the Control Center for the offending line. |
 | `CORE` | `YAML_NOT_MAPPING: <path>` | WARN | The YAML file parsed successfully but its root isn't a `key: value` mapping (e.g. a bare list) — treated as empty. |
-| `CORE` | `SPAWN_ERROR: <path> - <error>` | WARN | A detached process (Control Center's Maintenance-tab buttons, `post_start_cmds`) failed to launch. |
+| `CORE` | `SPAWN_ERROR: <path> - <error>` | WARN | A detached process (Control Center's Maintenance-tab buttons, the session switch helper) failed to launch. |
 | `CORE` | `USER_LOOKUP_ERROR: <error>` | DEBUG | Couldn't resolve the real (non-root) invoking user while running privileged under `pkexec`. |
 | `CORE` | `OWNERSHIP_ERROR: <path> - <error>` | WARN | `chown` failed while restoring ownership of a file/directory to the real user. |
 | `SYSTEM` | `<CALLER>_FAILED: SSoT config not found` | ERROR | A privileged operation (backup/restore) refused to start because the SSoT conf file is missing. |
