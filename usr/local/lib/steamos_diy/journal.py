@@ -15,9 +15,7 @@
 import os
 import re
 
-# B404: every subprocess call below passes an argv list and never uses
-# shell=True, so no value (even one from the user's config) is parsed by
-# a shell.
+# B404: subprocess is only called with argv lists, never shell=True.
 import subprocess  # nosec B404
 from datetime import datetime
 from typing import Any
@@ -38,10 +36,8 @@ _GAME_LOG_NOISE = re.compile(r"GpuTopology|steamui|/steamapps/common$|bin/")
 # attribute a NAME/ID pair to the process that actually logged it.
 _PID_FROM_LINE = re.compile(r"\[(\d+)\]:")
 
-# Allow-list for genuine gamescope log payloads (upstream output format).
-# Excludes false positives where "gamescope" appears only as a substring
-# inside file paths (e.g. Dolphin/kio copying gamescope.example.yaml) or
-# inside steam wrapper noise (steam.sh boot messages).
+# gamescope's own line formats; keeps out lines that merely contain the word
+# (a file manager copying gamescope.example.yaml, steam.sh boot messages).
 _GAMESCOPE_PAYLOAD = re.compile(
     r"\[(?:Info|Warn|Error|Gamescope WSI)\]|/usr/bin/gamescope:"
 )
@@ -120,9 +116,7 @@ def extract_game_metadata(line: str) -> tuple[str | None, str | None]:
 
 def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
     """Return last _GAME_LOG_TAIL game-launch lines from journalctl output."""
-    # Trailing "/" so a chdir into another user's home ("/home/deck2/...")
-    # can't false-positive-match this user's home ("/home/deck") — same
-    # boundary reasoning as restore.py::_allowed_prefixes.
+    # Trailing "/" so "/home/deck2/..." doesn't match the home "/home/deck".
     chdir_marker = f'chdir "{home}/'
     matched = [
         line

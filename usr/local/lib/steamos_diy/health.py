@@ -17,9 +17,7 @@ import grp
 import os
 import re
 
-# B404: every subprocess call below passes an argv list and never uses
-# shell=True, so no value (even one from the user's config) is parsed by
-# a shell.
+# B404: subprocess is only called with argv lists, never shell=True.
 import subprocess  # nosec B404
 from pathlib import Path
 from typing import NamedTuple
@@ -100,13 +98,9 @@ def _check_yaml(path: str) -> CheckResult:
         with open(path, "r", encoding="utf-8") as fh:
             _yaml_probe.load(fh)
         return CheckResult(name, True, "valid")
-    # ValueError covers two "bad config" cases that are not YAMLError but
-    # must surface as a failed check the same way: UnicodeDecodeError,
-    # raised by the text-mode read itself on a non-UTF-8 file, and
-    # ruamel's own plain ValueError for a scalar it recognises by shape
-    # and then fails to build (an unquoted impossible date such as
-    # 2026-02-30) — uncaught, it would abort the whole preflight with no
-    # file name at all.
+    # ValueError: UnicodeDecodeError on a non-UTF-8 file, or ruamel failing
+    # to build a scalar (an unquoted 2026-02-30). Uncaught, either would
+    # abort the whole preflight.
     except (OSError, YAMLError, ValueError) as err:
         mark = getattr(err, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark else ""
@@ -245,9 +239,7 @@ def _check_binaries() -> list[CheckResult]:
     results: list[CheckResult] = []
     for key, default in _BINARY_KEYS:
         path = get_ssot_var(key, default)
-        # os.access(X_OK) alone is true for a traversable directory, not
-        # just an executable file -- a SSoT key mistakenly pointed at a
-        # directory would otherwise pass this preflight as "OK".
+        # X_OK alone is also true for a directory.
         ok = bool(path) and os.path.isfile(path) and os.access(path, os.X_OK)
         detail = path if ok else f"not executable: {path}"
         results.append(CheckResult(f"Binary {key}", ok, detail))
@@ -265,9 +257,7 @@ def _check_groups() -> CheckResult:
         try:
             current.add(grp.getgrgid(gid).gr_name)
         except KeyError:
-            # Stale/deleted group entry for this gid — not one of the
-            # critical groups we care about either way, so it must not
-            # blank out every group already resolved successfully.
+            # A gid with no group entry: skip it, keep the others.
             continue
     missing = [g for g in _CRITICAL_GROUPS if g not in current]
     ok = not missing

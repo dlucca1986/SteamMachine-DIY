@@ -17,9 +17,7 @@ import html
 import os
 import re
 
-# B404: every subprocess call below passes an argv list and never uses
-# shell=True, so no value (even one from the user's config) is parsed by
-# a shell.
+# B404: subprocess is only called with argv lists, never shell=True.
 import subprocess  # nosec B404
 import sys
 import threading

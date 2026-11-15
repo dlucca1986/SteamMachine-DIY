@@ -14,9 +14,7 @@
 import resource
 import signal
 
-# B404: every subprocess call below passes an argv list and never uses
-# shell=True, so no value (even one from the user's config) is parsed by
-# a shell.
+# B404: subprocess is only called with argv lists, never shell=True.
 import subprocess  # nosec B404
 import sys
 import time
@@ -67,13 +65,12 @@ GAME_MODE_ENV: dict[str, str] = {
     "WINEDLLOVERRIDES": "dxgi=n",
 }
 
-# Deliberately NOT ported from Valve's gamescope-session: QT_IM_MODULE=steam,
-# GTK_IM_MODULE=Steam and XCURSOR_THEME=steam point at a "steam" input
-# module/cursor theme that ships only in the SteamOS image (absent here and
-# not bundled with the Steam client), so they would have no effect.
+# Not ported from Valve's session: QT_IM_MODULE / GTK_IM_MODULE /
+# XCURSOR_THEME=steam need a module or theme that exists only in SteamOS.
 
-# Same value SteamOS's gamescope-session sets: games with heavy shader-cache
-# or asset I/O can exhaust systemd's default soft limit of 1024 files.
+# Per ChimeraOS's gamescope-session (ulimit -n 524288). The service starts
+# with a soft limit of 1024, and gamescope hands Steam the limit it
+# inherited (RestoreFdLimit before spawning).
 GAME_MODE_NOFILE_TARGET: int = 524288
 
 # On a stop, seconds the session gets to exit after SIGTERM before SIGKILL.
@@ -119,9 +116,7 @@ def _build_gamescope_args(cfg: dict) -> list[str]:
     for flag in flags if isinstance(flags, list) else []:
         tokens, err = shlex_split_or_fallback(str(flag))
         if err is not None:
-            # Unbalanced quote in a hand-edited flag: don't crash the whole
-            # session over one bad entry — same fallback health.py's
-            # preflight already uses for this exact field.
+            # Unbalanced quote in a hand-edited flag: degrade, don't crash.
             jlog("STEAM", f"BAD_FLAG_ENTRY: {flag!r} - {err}", level="WARN")
         gs_args.extend(tokens)
 
@@ -199,11 +194,8 @@ def _handle_recovery(next_path: str) -> str:
     )
     target = "desktop"
     notify("Recovery: Starting Desktop...")
-    # The single most important write in this file: if it doesn't land,
-    # the next boot re-reads whatever next_session already held (possibly
-    # the same target that just crashed) instead of the desktop fallback
-    # this whole function exists to guarantee — hence the ERROR-level log
-    # persist_next_session emits on failure.
+    # If this write fails, the next start may retry the session that just
+    # crashed; persist_next_session logs that at ERROR.
     persist_next_session(next_path, target)
     return target
 
@@ -304,9 +296,7 @@ def run() -> None:
     cfg = load_yaml_safe(get_ssot_var("user_config"))
     cmd = _build_command_for(target, cfg)
 
-    # Mutable closure cell for the signal handler. Wrapped in a list so
-    # the inner function can rebind without needing `nonlocal` (and
-    # without flake8 F824 false-positives).
+    # Mutable cell shared with the signal handler (a list avoids `nonlocal`).
     proc_holder: list[subprocess.Popen[Any] | None] = [None]
 
     _handle_term = _make_term_handler(proc_holder)
@@ -328,11 +318,9 @@ def run() -> None:
     )
     time.sleep(get_ssot_num("NOTIFY_DELAY", 0.4))
 
-    # The child ended on its own: a session switch, or a crash already
-    # routed to "desktop" by _handle_recovery. The new target is on disk;
-    # exit non-zero so `Restart=on-failure` restarts the service, which
-    # then launches it. A `systemctl stop` exits 0 instead (see
-    # _make_term_handler), so it doesn't trigger a restart.
+    # The session ended by itself (switch or crash recovery) and the next
+    # target is on disk: exit non-zero so Restart=on-failure starts it.
+    # A `systemctl stop` exits 0 instead (_make_term_handler).
     sys.exit(75)  # EX_TEMPFAIL — semantically "transient, retry"
 
 

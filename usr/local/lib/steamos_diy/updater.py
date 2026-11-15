@@ -175,13 +175,11 @@ class UpdateManager(QObject):
             "The installer will now run in a terminal window.\n"
             "The system reboots automatically when it completes.",
         )
-        # Re-verify after the dialog above, which can stay open for any
-        # length of time while src_dir (in the user's home) is writable by
-        # any same-user process. This narrows the TOCTOU window but does
-        # not close it: pkexec's password prompt still comes before bash
-        # reads install.sh, and the other files it copies as root are not
-        # re-checked. A full fix needs a root-side verify — not worth it
-        # against a same-user attacker, who could fake the prompt anyway.
+        # Re-verify after the dialog: src_dir is in the user's home, writable
+        # by any same-user process. This narrows the TOCTOU window, it doesn't
+        # close it (the password prompt comes before bash reads install.sh,
+        # and the other files aren't re-checked). Accepted: a same-user
+        # attacker could fake the prompt anyway.
         install_sh = src_dir / "install.sh"
         try:
             verified = verify_file_sha256(install_sh, expected_sha256)

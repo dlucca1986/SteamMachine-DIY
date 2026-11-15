@@ -44,7 +44,7 @@ _SYMLINK_SEARCH_PATHS: tuple[str, ...] = (
     "/usr/bin/steamos-polkit-helpers",
 )
 
-# Markers in symlink targets that qualify them for inclusion in the recap
+# Markers in symlink targets that qualify them for the links manifest
 _SYMLINK_TARGET_MARKERS: tuple[str, ...] = (
     CORE_LIB_DIR,
     "steamos-polkit-helpers",
