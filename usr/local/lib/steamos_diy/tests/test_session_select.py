@@ -110,8 +110,8 @@ def test_select_persists_state_even_when_dispatch_fails(
 
 def test_select_logs_when_write_atomic_fails(monkeypatch, tmp_path):
     """Regression: a failed persist (refused tmp path, failed rename) must
-    log NEXT_SESSION_WRITE_FAILED, or DISPATCH_FAILED's "state persisted"
-    would be false. Patched at the utils level, but run through select()
+    log NEXT_SESSION_WRITE_FAILED, or nothing would say the next-boot target
+    wasn't saved. Patched at the utils level, but run through select()
     -> the real utils.persist_next_session() -> the failure log."""
     monkeypatch.setattr(
         session_select.sys, "argv", ["session_select.py", "steam"]

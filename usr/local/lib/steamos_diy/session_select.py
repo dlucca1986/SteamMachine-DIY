@@ -52,8 +52,6 @@ def _resolve_target(arg: str) -> str:
     switching to Game Mode is by far the common trigger, and the desktop
     keywords are matched explicitly.
     """
-    if not arg:
-        return "steam"
     return "desktop" if arg.strip().lower() in _DESKTOP_KEYWORDS else "steam"
 
 
@@ -120,10 +118,6 @@ def select() -> None:
     target = _resolve_target(sys.argv[1])
 
     next_session_path = get_ssot_var("next_session", NEXT_SESSION_PATH)
-    # DISPATCH_FAILED's "state persisted" message below would be a lie if
-    # this didn't actually land — persist_next_session logs the failure
-    # separately so the two failure modes (persist vs. dispatch) aren't
-    # conflated in the log.
     persist_next_session(next_session_path, target)
     jlog("CORE", f"SWITCH_REQUEST: {target}")
     notify(f"Switching to {target.capitalize()}...")
@@ -131,8 +125,7 @@ def select() -> None:
     if not _dispatch_switch(target):
         jlog(
             "CORE",
-            f"DISPATCH_FAILED: target={target} — state persisted, "
-            "switch will apply on next session",
+            f"DISPATCH_FAILED: target={target}",
             level="WARN",
         )
 
