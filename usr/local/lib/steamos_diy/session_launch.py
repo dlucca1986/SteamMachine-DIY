@@ -57,7 +57,8 @@ STATUS_MAP: dict[str, str] = {
 # and vk_xwayland_wait_ready (src/main.cpp UpdateCompatEnvVars; checked with
 # `gamescope -e` in an empty environment). Never set them again here.
 GAME_MODE_ENV: dict[str, str] = {
-    # steam-runtime-tools' logger writes Steam's logs to the journal.
+    # Read by Steam's srt-logger (journal logging). Not tested whether
+    # Steam's journal lines depend on it.
     "SRT_LOG_TO_JOURNAL": "1",
     # Per ChimeraOS's gamescope-session: "workaround older versions of
     # vkd3d-proton setting this too low".

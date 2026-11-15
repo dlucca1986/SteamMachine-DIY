@@ -56,7 +56,7 @@ Before the user's `env_vars`, the launcher sets only the variables gamescope doe
 
 | Variable | Purpose |
 | :--- | :--- |
-| `SRT_LOG_TO_JOURNAL=1` | Steam's `steam-runtime-tools` logger writes to the journal (checked: Steam's lines appear under `-t steam`) |
+| `SRT_LOG_TO_JOURNAL=1` | Read by Steam's `srt-logger` (journal logging). Steam's lines do appear under `-t steam`; not tested whether they depend on this variable |
 | `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3` | Per ChimeraOS's gamescope-session: "workaround older versions of vkd3d-proton setting this too low" |
 | `WINEDLLOVERRIDES=dxgi=n` | Per ChimeraOS's gamescope-session: "to expose vram info from radv" (AMD) |
 
