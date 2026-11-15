@@ -149,7 +149,7 @@ def _monitor_process(
     except subprocess.TimeoutExpired:
         jlog("CORE", f"VALIDATED_{target.upper()}_STABLE", level="DEBUG")
         persist_next_session(next_path, target)
-        notify("Stable", clear_after=True)
+        notify("", clear=True)
         sd_notify_ready()
         return True  # Still running — stable
 
@@ -288,7 +288,8 @@ def _make_term_handler(
     def _handle_term(signum: int, _frame: Any) -> None:
         jlog("CORE", f"SIG_{signum}: Shutting down...")
         live_proc = proc_holder[0]
-        if live_proc is not None and live_proc.returncode is None:
+        if live_proc is not None:
+            # A no-op if it has already exited (Popen polls first).
             live_proc.terminate()
         sys.exit(0)
 

@@ -188,9 +188,10 @@ def jlog(tag: str, message: str, level: str = "INFO") -> None:
         _JLOG_REENTRY.active = False
 
 
-def notify(status: str, clear_after: bool = False) -> None:
-    """Write *status* to /dev/tty1 via C-Core, bypassing Python buffering."""
-    _LIB.c_notify(status.encode("utf-8"), 1 if clear_after else 0)
+def notify(status: str, clear: bool = False) -> None:
+    """Write *status* to /dev/tty1 via C-Core; clear=True only clears the
+    screen (status is then ignored)."""
+    _LIB.c_notify(status.encode("utf-8"), 1 if clear else 0)
 
 
 def sd_notify_ready() -> None:

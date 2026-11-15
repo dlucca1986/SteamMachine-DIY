@@ -32,8 +32,7 @@ void c_jlog(const char *tag, const char *msg, int priority) {
 // 2. TTY NOTIFICATION (O_NOCTTY: tty1 never becomes our controlling tty)
 __attribute__((visibility("default")))
 void c_notify(const char *status, int clear) {
-    // O_CLOEXEC: a child forked from another thread mid-call must not
-    // inherit this tty fd (ctypes releases the GIL during the C call).
+    // O_CLOEXEC: no child process ever inherits this tty fd.
     int fd = open("/dev/tty1", O_WRONLY | O_NOCTTY | O_CLOEXEC);
     if (fd < 0) return;
     if (clear) {

@@ -54,7 +54,7 @@ Names and paths of the archive format, shared by `backup.py` and `restore.py`:
 | Function | Output target | Notes |
 | :--- | :--- | :--- |
 | `jlog(tag, msg, level)` | `systemd-journal` via `syslog()` | Filtered against `LOG_LEVEL` from the SSoT before any C call. A re-entry guard (`_JLOG_REENTRY`) prevents recursion if the SSoT lookup itself triggers a log call. |
-| `notify(status, clear_after)` | `/dev/tty1` | Opened with `O_NOCTTY`, so tty1 doesn't become the process's controlling terminal. |
+| `notify(status, clear)` | `/dev/tty1` | Writes the status line, or with `clear=True` only clears the screen. Opened with `O_NOCTTY`, so tty1 doesn't become the process's controlling terminal. |
 | `sd_notify_ready()` | `NOTIFY_SOCKET` | Sends `READY=1` to systemd after session validation succeeds. Supports the `@` prefix for abstract Unix sockets. |
 
 ---
