@@ -47,11 +47,8 @@ _RELEASES_URL: str = (
 class UpdateManager(QObject):
     """Qt side of the in-app updater, mounted by the Maintenance tab.
 
-    Owns its button (repurposed as a progress indicator while workers
-    run) and drives the whole flow: release check → offer dialog →
-    tarball download → installer handoff to a visible Konsole window.
-    The no-Qt plumbing (API query, download, extraction) lives in
-    utils.py; only presentation and threading glue live here.
+    Drives check -> offer -> download -> installer in Konsole, using its
+    button as the progress indicator; network and extraction are in utils.
     """
 
     _check_ready = pyqtSignal(object)  # ReleaseInfo | None

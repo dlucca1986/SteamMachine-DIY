@@ -84,12 +84,10 @@ STOP_GRACE_SECONDS: float = 5.0
 
 
 def _raise_nofile_limit(target: int = GAME_MODE_NOFILE_TARGET) -> None:
-    """Raise this process's open-file soft limit toward *target*, inherited
-    by the gamescope/Steam child spawned right after.
+    """Raise the open-file soft limit toward *target* for the session.
 
-    Only raises, never lowers; stays within the hard limit (raising that
-    needs privileges); a failure is logged, never fatal — a low limit
-    degrades heavy I/O, it doesn't stop the launch.
+    Never lowers it and stays within the hard limit; a failure is logged,
+    not fatal.
     """
     try:
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -174,17 +172,12 @@ def _build_command_for(target: str, cfg: dict) -> list[str]:
 
 
 def _handle_recovery(next_path: str) -> str:
-    """Recover to desktop after an early exit: persist target, notify.
+    """Recover to Desktop after an exit inside the validation window.
 
-    Deliberate fail-safe: any exit within the validation window (a crash,
-    or a switch request that raced the launch) forces "desktop", never
-    "steam", so a broken config lands where the user can fix it instead
-    of looping back into a session that may not even start. The process
-    has already exited (that is how the exit was detected), so there is
-    nothing to signal.
-
-    Returns:
-        Always ``"desktop"`` — drives caller's next-target logic.
+    Any early exit (a crash, or a switch that raced the launch) forces
+    "desktop", where a broken config can be fixed, instead of retrying a
+    session that may never start. The process has already exited, so there
+    is nothing to signal. Returns "desktop".
     """
     jlog(
         "CORE",
@@ -207,12 +200,10 @@ def _run_session(
     v_timeout: float,
     proc_holder: list[subprocess.Popen[Any] | None],
 ) -> tuple[str, int]:
-    """Spawn cmd, validate stability, recover on crash; return (target, code).
+    """Spawn cmd, validate it, recover on crash; return (target, code).
 
-    proc_holder is the run()'s mutable cell shared with the SIGTERM handler.
-    It is set to the live Popen during the session and reset to None on exit
-    so the handler never operates on a closed process. On spawn failure,
-    target is returned unchanged to preserve the caller's original intent.
+    proc_holder, shared with the SIGTERM handler, holds the live Popen and
+    is reset to None afterwards. On a spawn failure target is unchanged.
     """
     initial_target = target
     ret_code = 0

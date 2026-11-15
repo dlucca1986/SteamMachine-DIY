@@ -118,12 +118,10 @@ def _collect_symlinks(search_path: str) -> list[tuple[str, str]]:
 
 
 def _generate_links_manifest() -> bytes:
-    """Build the links manifest as UTF-8 bytes: one "link<TAB>target" row.
+    """Build the links manifest as UTF-8: one "link<TAB>target" row each.
 
-    Plain data instead of an executable script: restore recreates the
-    links itself and validates each pair against its allow-list, so the
-    archive never carries code. A path holding a tab or newline cannot
-    be represented in the row format — skipped with a warning.
+    Plain data, not a script: restore recreates and validates each pair.
+    A path with a tab or newline can't be represented: skipped, warned.
     """
     rows: list[str] = []
     for s_path in _SYMLINK_SEARCH_PATHS:

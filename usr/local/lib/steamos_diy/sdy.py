@@ -101,13 +101,10 @@ def _find_profile_by_id(directory: str, appid: str) -> str | None:
 
 
 def _resolve_effective_name(raw_args: list[str]) -> tuple[str, str]:
-    """Derive (stem, effective_name) from the rightmost absolute path in argv.
-
-    When the stem is generic (start, launcher, run…), substitutes the parent
-    directory name — /opt/MyGame/start.sh resolves to "MyGame", not "start".
-    Rightmost, not first: a wrapper (mangohud, gamemoderun) usually comes
-    first, the game binary later. isfile (not just exists) skips a trailing
-    directory argument such as --workshop-dir /path/to/workshop.
+    """Derive (stem, effective_name) from the rightmost absolute file path
+    in argv (rightmost: a wrapper like mangohud comes first; a file, so a
+    trailing directory argument is skipped). A generic stem (start, run…)
+    becomes the parent directory name: /opt/MyGame/start.sh -> "MyGame".
     """
     target_path = next(
         (
@@ -194,12 +191,10 @@ def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
 
 
 def _exec_game(full_cmd: list[str], stem: str, steam_id: str | None) -> None:
-    """execvpe the game, replacing this process. Never returns on success.
+    """execvpe the game in place of this process; never returns on success.
 
-    Exits with 1 on binary-not-found, permission denied, OS failure, or a
-    malformed argv (os.execvpe raises ValueError, not OSError, for an
-    embedded null byte — e.g. from a hand-edited GAME_WRAPPER/
-    GAME_EXTRA_ARGS entry).
+    Exits 1 on failure, including the ValueError (not OSError) os.execvpe
+    raises for a NUL byte in a hand-edited GAME_WRAPPER/GAME_EXTRA_ARGS.
     """
     try:
         jlog("STEAM", f"GAME_LAUNCH: {stem} (AppID: {steam_id or 'N/A'})")

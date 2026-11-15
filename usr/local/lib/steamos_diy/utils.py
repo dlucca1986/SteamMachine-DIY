@@ -129,18 +129,12 @@ _JLOG_REENTRY = threading.local()
 
 
 def jlog(tag: str, message: str, level: str = "INFO") -> None:
-    """Send a log entry to the systemd journal (via syslog), gated by the
-    SSoT LOG_LEVEL.
+    """Log *message* to the journal via syslog if *level* passes LOG_LEVEL.
 
-    Filters in Python before any C call to skip suppressed levels cheaply.
-    _JLOG_REENTRY prevents infinite recursion when get_ssot_var itself
-    triggers a log call (e.g. a decode error while reading LOG_LEVEL).
-
-    The message is encoded with backslashreplace, never strictly: a path
-    Python decoded from non-UTF-8 bytes (a file name from argv or
-    scandir) carries lone surrogates, and a strict encode would raise
-    UnicodeEncodeError out of the *caller* — e.g. stop sdy from launching
-    a game over its own GAME_LAUNCH log line.
+    _JLOG_REENTRY stops the recursion when reading LOG_LEVEL logs itself.
+    Encoded with backslashreplace: a file name decoded from non-UTF-8 bytes
+    carries surrogates, and a strict encode would raise in the caller (e.g.
+    stop sdy launching a game over its own log line).
     """
     if getattr(_JLOG_REENTRY, "active", False):
         # Already inside jlog: skip threshold lookup and emit directly
@@ -198,13 +192,10 @@ def _strip_quotes(value: str) -> str:
 
 
 def _load_ssot_cache() -> None:
-    """Parse the whole SSoT file into the cache in a single disk read.
+    """Parse the whole SSoT into the cache in one read; first key wins.
 
-    First occurrence wins on duplicate keys. The loaded flag is set before
-    parsing so a read failure is cached too instead of being retried on
-    every later lookup. Resolved
-    values are exported to os.environ so spawned subprocesses inherit
-    them without re-reading the config.
+    The loaded flag is set first, so a failed read isn't retried. Values are
+    also exported to os.environ for child processes.
     """
     _SSOT_LOADED[0] = True
     try:
@@ -305,26 +296,14 @@ GAMES_CONF_SUBDIR: str = "games.d"
 
 
 def default_games_conf_dir() -> Path:
-    """Fallback games_conf_dir when the SSoT key is unset.
-
-    ~/.config/steamos_diy/games.d — the same default the SSoT template
-    itself ships (etc/default/steamos_diy.conf). Single source of truth
-    for sdy.py and control_center.py so they can't silently disagree on
-    where per-game profiles live if the SSoT key is ever missing.
-    """
+    """~/.config/steamos_diy/games.d: sdy.py's fallback when the SSoT has
+    no games_conf_dir (the template's own default)."""
     return Path.home() / USER_CONFIG_REL / GAMES_CONF_SUBDIR
 
 
 def shlex_split_or_fallback(value: str) -> tuple[list[str], ValueError | None]:
-    """shlex.split *value*; on an unbalanced quote, also return str.split().
-
-    Shared by every hand-edited shell-like field (game flags, wrapper,
-    extra args, gamescope preflight) so a malformed entry degrades instead
-    of crashing the session. The second return value is the caught error,
-    or None on a clean parse — callers that want to warn about the
-    fallback log it themselves, since the tag/field name differs per call
-    site.
-    """
+    """shlex.split *value*; on an unbalanced quote return str.split() and
+    the error (None on a clean parse). Callers log it with their own tag."""
     try:
         return shlex.split(value), None
     except ValueError as err:
@@ -343,13 +322,8 @@ def write_atomic(path: str | Path, val: str) -> bool:
 
 
 def persist_next_session(path: str | Path, target: str) -> bool:
-    """write_atomic() for the next-boot session target, logging the
-    shared NEXT_SESSION_WRITE_FAILED tag on failure.
-
-    One place for that tag (documented in Troubleshooting.md and matched
-    by the Diagnostics tab). Why a failed write matters differs per call
-    site, so that explanation stays at each call site.
-    """
+    """write_atomic() for next_session, logging NEXT_SESSION_WRITE_FAILED
+    on failure; why a failed write matters is noted at each call site."""
     if write_atomic(path, target):
         return True
     jlog("CORE", f"NEXT_SESSION_WRITE_FAILED: {path}", level="ERROR")
@@ -362,13 +336,11 @@ def persist_next_session(path: str | Path, target: str) -> bool:
 
 
 def apply_env_map(data_dict: dict[str, Any] | None) -> None:
-    """Inject *data_dict* into os.environ; skips None values.
+    """Set each *data_dict* entry in os.environ, skipping None values.
 
-    An entry the OS can't take as an environment variable — an empty
-    name, a name containing "=", a NUL byte in either part — is skipped
-    with a warning instead of raising: the input is hand-edited config
-    (the SSoT, a YAML env_vars block) read on the session boot path and
-    on every game launch, where one bad line must not take down the rest.
+    An entry the OS refuses (empty name, "=" in the name, a NUL byte) is
+    skipped with a warning: one bad line of hand-edited config must not
+    stop a session start or a game launch.
     """
     if not isinstance(data_dict, dict):
         return
@@ -484,16 +456,9 @@ def require_ssot_conf(tag: str) -> None:
 def get_backup_mapping(
     home: str, *, for_restore: bool = False
 ) -> dict[str, str]:
-    """Archive-path → filesystem-path map. Single source of truth for the
-    backup format used by both backup.py and restore.py.
+    """Archive path -> filesystem path, used by backup and restore alike.
 
-    Adding a new entry here propagates to both sides: backup picks it up
-    when adding members, restore picks it up when mapping them back.
-    Order is preserved (3.7+ dict insertion order).
-
-    for_restore always includes the "user/games_conf_dir" entry - see
-    that entry's own comment below for why restore can't use the same
-    "only if it needs one" optimization backup does.
+    for_restore always includes "user/games_conf_dir" (see below).
     """
     # user_config can move to another directory (the file name stays
     # CONFIG_FILE_NAME): back up the directory it is really in.
@@ -595,14 +560,9 @@ class ReleaseInfo(NamedTuple):
 
 
 class ExtractedRelease(NamedTuple):
-    """download_release()'s success result: extracted dir + install.sh hash.
-
-    install_sh_sha256 lets the caller re-verify install.sh's integrity
-    immediately before executing it via pkexec, narrowing the TOCTOU
-    window between this checksum-verified extraction and actual root
-    execution — the extracted directory lives under the user's own home,
-    writable by that same user.
-    """
+    """download_release()'s result: extracted dir + install.sh's SHA-256,
+    which updater.py re-checks right before pkexec (the dir stays
+    user-writable)."""
 
     dir: Path
     install_sh_sha256: str
@@ -687,13 +647,8 @@ def _release_from_api(data: Any) -> ReleaseInfo | None:
 
 
 def check_latest_release() -> ReleaseInfo | None:
-    """Query GitHub for the latest published release.
-
-    Returns None when the network or the API reply is unusable — the
-    caller renders that as "could not check", never as a crash. Fixed
-    https URL and a short timeout: a dead network degrades to a quick
-    "unknown" instead of hanging the worker thread.
-    """
+    """Query GitHub for the latest release; None if the network or the
+    reply is unusable (fixed https URL, _HTTP_TIMEOUT)."""
     # Deferred import — see _https_open.
     # pylint: disable=import-outside-toplevel
     import json
@@ -712,13 +667,8 @@ def check_latest_release() -> ReleaseInfo | None:
 
 
 def _prune_downloads(root: Path, keep: Path | None = None) -> None:
-    """Drop previous release downloads (v<digit>… dirs) under *root*.
-
-    Only version-named directories are touched, so anything the user
-    parked in the updates folder by hand survives the cleanup. *keep*,
-    if given, is skipped — used to protect a just-verified new download
-    from being pruned as if it were a stale previous one.
-    """
+    """Delete previous release downloads (v<digit>… dirs) under *root*,
+    except *keep*; anything else in the folder is left alone."""
     # Deferred import — see verify_archive.
     # pylint: disable=import-outside-toplevel
     import shutil
@@ -809,13 +759,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def verify_file_sha256(path: Path, expected_sha256: str) -> bool:
-    """True if *path* exists and its SHA-256 matches *expected_sha256*.
-
-    Used to re-verify a previously-hashed file (e.g. install.sh, right
-    before a pkexec execution) so a tamper window between an earlier
-    verification and actual privileged use is caught rather than trusted
-    blindly.
-    """
+    """True if *path* is a file whose SHA-256 is *expected_sha256*."""
     if not path.is_file():
         return False
     return _sha256_file(path) == expected_sha256
@@ -824,16 +768,12 @@ def verify_file_sha256(path: Path, expected_sha256: str) -> bool:
 def download_release(
     info: ReleaseInfo, dest_root: str | Path
 ) -> ExtractedRelease | None:
-    """Download, checksum-verify, and unpack *info*'s source tarball.
+    """Download, checksum-verify and unpack *info*'s source tarball.
 
-    Layout: <dest_root>/v<version>/<github-export-dir>/. Returns an
-    ExtractedRelease (that directory + install.sh's SHA-256) or None.
-    Fail-closed: no SHA256SUMS asset, or a mismatch, means nothing is
-    extracted — install.sh later runs as root. Older downloads are pruned
-    only once the new one is verified, extracted and has install.sh. The
-    "data" filter rejects absolute paths, traversal and special files.
-    The returned hash lets updater.py re-check install.sh right before
-    pkexec, since the directory stays user-writable after extraction.
+    Returns ExtractedRelease(<dest_root>/v<version>/<export dir>, install.sh
+    hash) or None. Fail-closed: no SHA256SUMS asset, or a mismatch, means
+    nothing is extracted. The "data" filter rejects absolute paths,
+    traversal and special files. Older downloads are pruned only on success.
     """
     # Deferred import — see verify_archive.
     # pylint: disable=import-outside-toplevel

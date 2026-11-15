@@ -210,12 +210,11 @@ def _build_support_report() -> str:
 def _resolve_config_paths(default_root: Path) -> tuple[Path, Path]:
     """Resolve (conf_root, games_conf_dir) from the SSoT.
 
-    Follows the SSoT's user_config/games_conf_dir like sdy.py and
-    health.py do, so the GUI never edits a file the session no longer
-    reads; falls back to default_root/"config.yaml" and
-    default_root/GAMES_CONF_SUBDIR (the same subdir sdy.py uses) when
-    they are unset. Takes *default_root* instead of calling Path.home()
-    so tests don't touch the real home.
+    Falls back to default_root/"config.yaml" and default_root/
+    GAMES_CONF_SUBDIR when the keys are unset (default_root is a parameter
+    so tests don't touch the real home). Only games_conf_dir has the same
+    fallback in sdy.py: with user_config unset, the launcher and sdy load
+    no global config.
     """
     conf_root = Path(
         get_ssot_var("user_config", str(default_root / CONFIG_FILE_NAME))
@@ -894,11 +893,9 @@ class SDYControlCenter(QMainWindow):
     def load_global_file(self):
         """Load the selected global YAML file into the editor.
 
-        The combo and the editor must never disagree, since Save writes
-        the editor to whatever the combo names: a declined discard or an
-        unreadable file puts the combo back, and a file that doesn't
-        exist yet starts empty instead of keeping the previous file's
-        text on screen under the new name.
+        Save writes the editor to the file the combo names, so the two must
+        agree: a declined discard or an unreadable file puts the combo back,
+        and a file that doesn't exist yet starts empty.
         """
         state = self.view_states["global"]
         name = self.combo_global_files.currentText()
@@ -1115,14 +1112,9 @@ class SDYControlCenter(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _update_game_combo_ui(self, detected):
-        """Repopulate combo from detected games + on-disk profiles.
-
-        Args:
-            detected: {name: appid_or_name} from the journal scan (empty
-                if nothing was found or the journal couldn't be read). Saved
-                games.d profiles are merged in either way, so
-                _GAME_COMBO_EMPTY shows only when both yield nothing.
-        """
+        """Repopulate the combo from *detected* ({name: appid_or_name}, maybe
+        empty) plus the saved games.d profiles; _GAME_COMBO_EMPTY only when
+        both are empty."""
         # clear() also empties the line edit: put back what the combo showed
         # (Save targets currentText()). With nothing to restore, leave index -1
         # rather than addItems()' first entry, which the editor doesn't hold.
@@ -1295,10 +1287,8 @@ class SDYControlCenter(QMainWindow):
     def export_support_log(self):
         """Save a full support report (service, preflight, raw logs).
 
-        Unlike the clipboard copy, this does not export the on-screen
-        view: the report is rebuilt from scratch in a worker thread so
-        it is complete regardless of the active filter. Skips the export
-        if one is already in flight (see _export_busy's own comment).
+        Rebuilt in a worker thread, independent of the on-screen filter; one
+        export at a time (_export_busy).
         """
         if self._export_busy:
             return
@@ -1352,13 +1342,9 @@ class SDYControlCenter(QMainWindow):
     def _reload_clean_editors(self):
         """Re-read from disk each editor that holds nothing unsaved.
 
-        A restore replaces the config files themselves, not just the
-        SSoT: without this the editors would keep the pre-restore text,
-        and the next Save would write it back over the restored file.
-        An editor with unsaved edits is left alone (reloading would drop
-        them without asking), and so is a template preview. Runs for
-        every successful operation, like the SSoT re-read above — for a
-        backup or vacuum it just re-reads unchanged files.
+        After a restore the config files changed: a stale editor would write
+        the old text back on the next Save. Editors with unsaved edits, and
+        template previews, are left alone.
         """
         state = self.view_states["global"]
         if (
@@ -1427,17 +1413,10 @@ class SDYControlCenter(QMainWindow):
     ) -> None:
         """Run *cmd* under pkexec in a daemon thread; emit process_finished.
 
-        Single entry point for every privileged operation in the UI —
-        journal vacuum, backup, and restore all route through here. Guarded
-        by _pkexec_busy[lock_key] so two privileged operations that target
-        the same files (Backup and Restore, both lock_key="files") can
-        never run concurrently — but an operation that shares no files with
-        either (journal vacuum, lock_key="vacuum") never blocks or is
-        blocked by them. The 300s timeout budget includes however long the
-        user takes at the polkit password prompt, not just cmd's own
-        runtime — for Backup/Restore that time is deliberately left "stuck"
-        on timeout (see sticky_on_timeout below), since the underlying
-        script may genuinely still be writing files.
+        The single path for privileged operations. _pkexec_busy[lock_key]
+        keeps Backup and Restore ("files") apart; the vacuum ("vacuum") is
+        independent. The 300 s timeout includes the password prompt; with
+        sticky_on_timeout the lock stays held, as the script may still write.
         """
         if self._pkexec_busy.get(lock_key):
             # QMainWindow.statusBar() is never None at runtime (Optional in the

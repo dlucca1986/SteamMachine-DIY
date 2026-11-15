@@ -130,15 +130,9 @@ def filter_game_journal_lines(stdout: str, home: str) -> list[str]:
 def parse_game_logs(res: str) -> dict[str, str]:
     """Extract {name: appid_or_name} pairs from filtered journal text.
 
-    Tracks the last-seen NAME per source pid, so interleaved lines from
-    two processes (two games launched close together) can't attribute one
-    game's AppID to the other's name. A line without a [pid]: suffix is
-    never correlated: its NAME is still recorded (mapped to itself), but a
-    pid-less ID line is attributed to no name.
-
-    No minimum length on the ID: it is only matched after a literal
-    "gameID"/"AppID = " token, and some real AppIDs have 1-2 digits
-    (10 = Counter-Strike, 70 = Half-Life).
+    The last NAME is tracked per pid, so two games launched close together
+    can't swap AppIDs; a line without "[pid]:" records its NAME but gets no
+    ID. No minimum ID length: some AppIDs have 2 digits (10 = Counter-Strike).
     """
     det: dict[str, str] = {}
     cur_by_pid: dict[str, str] = {}
@@ -162,14 +156,8 @@ def parse_game_logs(res: str) -> dict[str, str]:
 
 
 def parse_export_format(stdout: str) -> list[tuple[datetime, str]]:
-    """Parse ``journalctl -o export`` into (timestamp, line) tuples.
-
-    Args:
-        stdout: Raw export-format journalctl output.
-
-    Returns:
-        (datetime, formatted_line) list in arrival order.
-    """
+    """Parse ``journalctl -o export`` output into (timestamp, line) tuples,
+    in arrival order."""
     ents: list[tuple[datetime, str]] = []
     cur: dict[str, Any] = {}
     for line in stdout.splitlines():
@@ -183,15 +171,8 @@ def parse_export_format(stdout: str) -> list[tuple[datetime, str]]:
 def _consume_export_line(
     line: str, cur: dict[str, Any]
 ) -> tuple[datetime, str] | None:
-    """Accumulate one export-format field; return entry on MESSAGE=.
-
-    Args:
-        line: Single export-format line.
-        cur: Accumulator dict for the current record (mutated in place).
-
-    Returns:
-        (datetime, formatted_line) on MESSAGE= terminator, else None.
-    """
+    """Add one export-format field to *cur* (mutated); on MESSAGE= return
+    the finished (timestamp, line), else None."""
     if line.startswith("__REALTIME_TIMESTAMP="):
         try:
             cur["ts"] = datetime.fromtimestamp(
@@ -221,14 +202,11 @@ def _finalize_export_entry(
 
 
 def fetch_tagged_entries(tag: str) -> list[tuple[datetime, str]]:
-    """Run journalctl for *tag* and parse into (timestamp, line) entries.
+    """Run journalctl for *tag*; return parsed (timestamp, line) entries.
 
-    Shared by the Diagnostics view and the support-report export. Raises
-    subprocess.SubprocessError (includes TimeoutExpired)/OSError — error
-    handling is the caller's concern. errors="replace" keeps decoding
-    itself from ever raising: a MESSAGE field with an embedded newline
-    flips journalctl's export format to binary-safe encoding, which is
-    not guaranteed valid UTF-8.
+    Raises subprocess.SubprocessError (incl. TimeoutExpired) or OSError.
+    errors="replace": a MESSAGE with an embedded newline switches the
+    export format to binary, which need not be valid UTF-8.
     """
     # argv list, no shell: the tag reaches journalctl as a single "-t"
     # value (always one of the Diagnostics tab's four fixed choices).
@@ -269,13 +247,10 @@ def fetch_gamescope_logs() -> list[tuple[datetime, str]]:
 
 
 def _run_journalctl_iso() -> str:
-    """Pull last hour of gamescope-bearing identifiers.
+    """Last hour of the two identifiers that carry gamescope output.
 
-    `python3` is the service's stdout/stderr stream, which gamescope
-    inherits from session_launch.py, so gamescope's own output is logged
-    under it. `steam` is Steam's own logger, which carries the
-    "[Gamescope WSI]" lines of the Vulkan apps Steam starts. Narrowing to
-    these two keeps Dolphin/plasmashell noise out.
+    `python3` is the service's stdout/stderr, inherited by gamescope;
+    `steam` carries the [Gamescope WSI] lines of what Steam starts.
     """
     try:
         # Fixed argv, no shell — the identifiers below are hardcoded.

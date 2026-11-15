@@ -198,17 +198,13 @@ def _check_config_types(data: object) -> list[CheckResult]:
 
 
 def _check_gamescope_flags(data: object) -> CheckResult:
-    """Validate global-config 'flags' against gamescope's own argv parser.
+    """Check the global `flags` with the installed gamescope's own parser.
 
-    A flag the installed gamescope does not recognise makes it exit at
-    launch, and the launcher falls back to Desktop. Only the global
-    config is checked: per-game profiles don't pass gamescope flags.
-
-    Runs `gamescope <flags> --help` instead of comparing against the
-    option list --help prints: gamescope accepts some flags it never lists
-    (e.g. --fade-out-duration). --help makes it print usage and exit
-    without touching the display. getopt_long stops at the first bad
-    option, so at most one is reported.
+    An unknown flag makes gamescope exit at launch (the launcher then falls
+    back to Desktop). Runs `gamescope <flags> --help` instead of reading
+    the option list, because gamescope accepts flags --help doesn't list
+    (e.g. --fade-out-duration). getopt_long stops at the first bad option,
+    so at most one is reported. Per-game profiles have no gamescope flags.
     """
     flags = data.get("flags") if isinstance(data, dict) else None
     if not isinstance(flags, list) or not flags:

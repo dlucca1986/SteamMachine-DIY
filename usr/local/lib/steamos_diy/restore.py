@@ -103,18 +103,10 @@ def _match_mapping_prefix(
 def _resolve_target(
     member_name: str, mapping: dict[str, str], allowed: tuple[str, ...]
 ) -> str | None:
-    """Map an archive member to a validated filesystem path.
+    """Map an archive member to a validated filesystem path, or None.
 
-    Members with a ".." component are rejected outright; the mapped path
-    is then checked with _is_path_safe (real path vs. allow-list).
-
-    Args:
-        member_name: Archive-relative path of the tar member.
-        mapping: Prefix-to-destination map from get_backup_mapping.
-        allowed: Real-path-resolved allow-list from _allowed_prefixes.
-
-    Returns:
-        Validated absolute path, or None if unmapped or outside allow-list.
+    A ".." component is rejected outright; the mapped path must then pass
+    _is_path_safe (its real path inside *allowed*).
     """
     # Needed on top of the realpath check: realpath collapses "file/.."
     # lexically, so "system/steamos_diy.conf/../../shadow" would resolve
@@ -192,16 +184,11 @@ def _ensure_safe_target(target: str) -> bool:
 def _write_member(
     tar: tarfile.TarFile, member: tarfile.TarInfo, target: str
 ) -> bool:
-    """Write member to target via tmp+rename; False on any failure.
+    """Write member to target via tmp + rename; False on any failure.
 
-    Atomic: target holds either the old or the complete new content, even
-    if the restore is killed mid-write (tmp isn't fsynced, so this doesn't
-    cover a power loss). Replacing the inode instead of truncating the
-    file in place also avoids ETXTBSY on a running binary.
-
-    Every OSError is caught and reported as a failed member, so one bad
-    entry (e.g. a parent path that already exists as a file) can't abort
-    the whole restore.
+    Target ends up old or complete-new if the restore is killed (tmp isn't
+    fsynced, so not across a power loss). Replacing the inode also avoids
+    ETXTBSY on a running binary. Any OSError fails this member only.
     """
     try:
         if member.isdir():
