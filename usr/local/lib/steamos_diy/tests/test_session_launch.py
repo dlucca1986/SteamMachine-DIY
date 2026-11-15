@@ -290,6 +290,34 @@ def test_term_handler_kills_a_session_that_ignores_sigterm(
     assert started[0].returncode == -signal.SIGKILL
 
 
+def test_run_names_the_next_session_not_the_one_that_ended(
+    tmp_path, set_ssot, monkeypatch
+):
+    """Regression: after a Desktop -> Game Mode switch the launcher wrote
+    "Switching to Desktop..." on TTY1 (it named the session that had just
+    ended; seen on the TV of lelo-gaming). The message must name what
+    next_session holds when the session ends."""
+    next_session = tmp_path / "next_session"
+    next_session.write_text("desktop")
+    set_ssot(next_session=str(next_session))
+    shown = []
+    monkeypatch.setattr(session_launch, "notify", shown.append)
+    monkeypatch.setattr(session_launch.signal, "signal", lambda *_a: None)
+    monkeypatch.setattr(session_launch.time, "sleep", lambda _s: None)
+
+    def switch_to_steam(*_a):
+        next_session.write_text("steam")  # what session_select writes
+        return "desktop", 0
+
+    monkeypatch.setattr(session_launch, "_run_session", switch_to_steam)
+
+    with pytest.raises(SystemExit) as exc:
+        session_launch.run()
+
+    assert exc.value.code == 75
+    assert shown[-1] == "Switching to Game Mode..."
+
+
 # ---------------------------------------------------------------------------
 # _run_session — end-to-end crash-recovery integration
 # ---------------------------------------------------------------------------

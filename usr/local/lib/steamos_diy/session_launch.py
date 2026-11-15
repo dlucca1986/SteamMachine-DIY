@@ -208,13 +208,6 @@ def _handle_recovery(next_path: str) -> str:
     return target
 
 
-def _post_session_message(target: str, ret_code: int) -> str:
-    """Compose the final TTY message shown after the session ends."""
-    if target == "desktop":
-        return f"Switching to {target.capitalize()}..."
-    return f"Ended (Code: {ret_code})"
-
-
 def _run_session(
     cmd: list[str],
     next_path: str,
@@ -322,11 +315,17 @@ def run() -> None:
 
     v_timeout = get_ssot_num("VALIDATION_TIMEOUT", 5.0)
 
-    target, ret_code = _run_session(
-        cmd, next_path, target, v_timeout, proc_holder
-    )
+    _run_session(cmd, next_path, target, v_timeout, proc_holder)
 
-    notify(_post_session_message(target, ret_code))
+    # Name the session the restarted service will start: what next_session
+    # holds now (a switch request or a crash recovery may have changed it),
+    # by the same rule as _build_command_for.
+    next_target = read_session_target(next_path, default="steam")
+    notify(
+        "Switching to Game Mode..."
+        if next_target == "steam"
+        else "Switching to Desktop..."
+    )
     time.sleep(get_ssot_num("NOTIFY_DELAY", 0.4))
 
     # The child ended on its own: a session switch, or a crash already

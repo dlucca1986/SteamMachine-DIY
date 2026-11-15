@@ -57,6 +57,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     installer, which left it 0600).
 
 ### Fixed
+- After a Desktop → Game Mode switch, TTY1 showed "Switching to Desktop..." before
+  "Starting Game Mode..." (seen on a TV): the launcher named the session that had just ended.
+  It now names the one `next_session` holds, so the message reads "Switching to Game Mode...".
+  The "Ended (Code: N)" variant is gone.
 - A Game Mode session that didn't react to `SIGTERM` (a hung gamescope) survived `systemctl stop`/
   `restart`: the launcher waited on it without a limit until systemd killed the launcher after
   10 s, and systemd's kill doesn't reach the session (it lives in its logind scope, not the
