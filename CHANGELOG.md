@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- The shipped `config.yaml` passes `--xwayland-count 2`, and the launcher no longer sets
+  `STEAM_MULTIPLE_XWAYLANDS=1` itself: gamescope sets it in Steam mode, and only when it runs
+  more than one Xwayland (gamescope 3.17.0 source, `UpdateCompatEnvVars`; checked live). The
+  launcher set it even with a single Xwayland. An existing `config.yaml` is not changed by
+  `--update`: add `- "--xwayland-count 2"` to its `flags` by hand.
 - Docs: the Backup & Recovery page now states plainly what restore's security checks do *not*
   cover. A backup archive carries the project's code, the systemd unit and the symlink list, and
   restore puts them back as root — so an archive is as sensitive as a root password, and the

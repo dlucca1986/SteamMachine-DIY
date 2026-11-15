@@ -62,7 +62,6 @@ Before the user's `env_vars`, the launcher applies a fixed map of **session vari
 | `vk_xwayland_wait_ready=false` | Read by gamescope and its Vulkan WSI layer; value as in Valve's session (session tweak, no Steam control) |
 | `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0` | Keep SDL games up on focus loss (session tweak) |
 | `ENABLE_GAMESCOPE_WSI=1`, `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3`, `WINEDLLOVERRIDES=dxgi=n` | Proton/vkd3d session defaults (session tweak, no Steam control) |
-| `STEAM_MULTIPLE_XWAYLANDS=1` | Tells Steam the session has more than one Xwayland server. Gamescope starts one by default and a second only with `--xwayland-count 2` in your `flags` (checked on gamescope 3.17.0); the shipped `config.yaml` doesn't set it (session tweak, no Steam control) |
 | `SRT_LOG_TO_JOURNAL=1` | Routes Steam's own `steam-runtime-tools` logger to the journal (session tweak, no Steam control) |
 | `SRT_URLOPEN_PREFER_STEAM=1` | Links clicked in Game Mode open in Steam's own overlay browser instead of `steam-runtime-tools`' `xdg-open` reaching for a desktop browser (session tweak, no Steam control) |
 | `QT_QPA_PLATFORM_THEME=kde` | Plasma styling (icons) for Qt apps inside gamescope (session tweak, no Steam control) |

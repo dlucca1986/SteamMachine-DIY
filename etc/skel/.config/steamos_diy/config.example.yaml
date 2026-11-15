@@ -40,7 +40,9 @@ flags:
   - "--immediate-flips"      # Immediate flips (may tear)
 
   # --- UX polish (universal, panel-independent) ---
-  - "--hide-cursor-delay 3000"   # Hide the mouse cursor after 3s idle
+  - "--hide-cursor-delay 3000"   # Hide the mouse cursor after 3000 ms idle
+  - "--xwayland-count 2"         # Two Xwayland servers; gamescope then sets
+                                 # STEAM_MULTIPLE_XWAYLANDS=1 for Steam
 
   # --- VRR / MangoHud (recommended for FreeSync/VRR displays) ---
   - "--adaptive-sync"         # Adaptive sync (VRR), if available

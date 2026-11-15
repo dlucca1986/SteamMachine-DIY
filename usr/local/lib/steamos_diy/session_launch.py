@@ -69,9 +69,6 @@ GAME_MODE_ENV: dict[str, str] = {
     # Read by gamescope's WSI layer and by SDL
     "vk_xwayland_wait_ready": "false",
     "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
-    # Tells Steam there are several Xwayland servers; gamescope starts a
-    # second one only with --xwayland-count 2 in the user's flags.
-    "STEAM_MULTIPLE_XWAYLANDS": "1",
     # steam-runtime-tools' logger writes to the journal (ships with Steam
     # itself, not the distro).
     "SRT_LOG_TO_JOURNAL": "1",

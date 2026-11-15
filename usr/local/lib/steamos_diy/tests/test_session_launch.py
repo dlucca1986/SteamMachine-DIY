@@ -84,7 +84,6 @@ def test_game_mode_env_matches_real_steamos_agnostic_vars():
     above GAME_MODE_ENV)."""
     assert session_launch.GAME_MODE_ENV["QT_QPA_PLATFORM_THEME"] == "kde"
     assert session_launch.GAME_MODE_ENV["XCURSOR_SCALE"] == "256"
-    assert session_launch.GAME_MODE_ENV["STEAM_MULTIPLE_XWAYLANDS"] == "1"
     assert session_launch.GAME_MODE_ENV["SRT_LOG_TO_JOURNAL"] == "1"
     assert session_launch.GAME_MODE_ENV["SRT_URLOPEN_PREFER_STEAM"] == "1"
     assert "QT_IM_MODULE" not in session_launch.GAME_MODE_ENV

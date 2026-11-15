@@ -86,6 +86,7 @@ flags:
   - "--rt"
   - "--immediate-flips"
   - "--hide-cursor-delay 3000"
+  - "--xwayland-count 2"
   - "--adaptive-sync"
   - "--mangoapp"
 
