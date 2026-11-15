@@ -203,7 +203,7 @@ def _write_member(
         return False
 
     src = tar.extractfile(member)
-    if src is None:
+    if src is None:  # typing only: dirs/devices/FIFOs never reach here
         return True
 
     tmp = f"{target}.sdy_restore_tmp"

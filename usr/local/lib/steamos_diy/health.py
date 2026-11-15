@@ -244,12 +244,8 @@ def _check_binaries() -> list[CheckResult]:
 
 def _check_groups() -> CheckResult:
     """Confirm the current user belongs to every session-critical group."""
-    try:
-        gids = os.getgroups()
-    except OSError:
-        gids = []
     current: set[str] = set()
-    for gid in gids:
+    for gid in os.getgroups():
         try:
             current.add(grp.getgrgid(gid).gr_name)
         except KeyError:
