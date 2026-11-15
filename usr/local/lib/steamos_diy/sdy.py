@@ -162,9 +162,9 @@ def _safe_split(field: str, value: str) -> list[str]:
 def _build_command(raw_args: list[str], profile_data: dict) -> list[str]:
     """Compose wrapper + raw_args + extra_args for execvpe.
 
-    Profile values override the environment (global config / SSoT).
-    None means "key absent" (fall back to the environment); "" means
-    "explicitly empty" (no wrapper/extra args for this profile).
+    A profile's GAME_WRAPPER / GAME_EXTRA_ARGS override the environment
+    (the global config's env_vars). None means "key absent" (use the
+    environment); "" means "explicitly empty" (none for this profile).
     """
     wrapper_val = profile_data.get("GAME_WRAPPER")
     wrapper = (

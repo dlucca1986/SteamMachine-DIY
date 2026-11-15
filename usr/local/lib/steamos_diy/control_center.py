@@ -178,11 +178,11 @@ def _fetch_support_logs() -> list[str]:
 
 
 def _build_support_report() -> str:
-    """Assemble the full diagnostic report: system, service, preflight, logs.
+    """Assemble the diagnostic report: system, service, preflight, logs.
 
-    Logs are re-fetched raw with the ALL tag set — independent of the
-    Diagnostics filter and without the display-side dedup collapse, so
-    the file is complete and machine-greppable.
+    The logs are fetched again, without the display filter or the "Repeated
+    N times" collapse: the last 300 project entries of 12 h, plus 1 h of
+    gamescope output.
     """
     status = get_service_status()
     lines = [
@@ -953,10 +953,10 @@ class SDYControlCenter(QMainWindow):
         state["loaded"] = raw
 
     def _scaffold_game_profile(self, raw, name):
-        """Build default YAML profile; includes SDY_ID header if AppID present.
+        """Build a default YAML profile for *name*.
 
-        Returns YAML with STEAM_APPID header when AppID is found in *raw*,
-        else a bare scaffold.
+        When *raw* carries an AppID, it starts with a commented "# SDY_ID:"
+        line and STEAM_APPID, so sdy finds it by AppID.
         """
         m = _APPID_FROM_DISPLAY.search(raw)
         aid = m.group(1) if m else ""
@@ -1061,11 +1061,10 @@ class SDYControlCenter(QMainWindow):
     # ── Game discovery (background thread) ─────────────────────────────────
 
     def refresh_detected_games(self):
-        """Scan journal for game launches; emits games_detected when done.
+        """Scan the journal for game launches; emits games_detected when done.
 
-        Runs journalctl directly (no shell) — pure-Python filtering avoids
-        shell-injection risk when home contains metacharacters. Skips the
-        scan if one is already in flight (see _scan_games_busy's comment).
+        Runs journalctl directly (no shell) and filters in Python. Skips the
+        scan if one is already in flight (_scan_games_busy).
         """
         if self._scan_games_busy:
             return

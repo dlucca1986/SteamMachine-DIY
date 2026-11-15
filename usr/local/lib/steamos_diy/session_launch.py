@@ -99,10 +99,10 @@ def _raise_nofile_limit(target: int = GAME_MODE_NOFILE_TARGET) -> None:
 
 
 def _build_gamescope_args(cfg: dict) -> list[str]:
-    """Build gamescope+steam argv: session capabilities, then user config.
+    """Build the gamescope + Steam argv.
 
-    GAME_MODE_ENV is applied first so the user's env_vars retain the last
-    word; user flags are appended to the gamescope argv.
+    GAME_MODE_ENV is applied first so the user's env_vars keep the last
+    word; the user's flags are appended to the gamescope argv.
     """
     _raise_nofile_limit()
     gs_bin = get_ssot_var("bin_gs", DEFAULT_GS_BIN)

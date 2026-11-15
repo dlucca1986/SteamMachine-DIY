@@ -243,7 +243,8 @@ def _check_binaries() -> list[CheckResult]:
 
 
 def _check_groups() -> CheckResult:
-    """Confirm the current user belongs to every session-critical group."""
+    """Check the user is in the groups install.sh adds that the preflight
+    looks for (_CRITICAL_GROUPS)."""
     current: set[str] = set()
     for gid in os.getgroups():
         try:
@@ -276,11 +277,10 @@ def _check_state() -> CheckResult:
 
 
 def run_preflight() -> list[CheckResult]:
-    """Run every preflight check; order roughly tracks failure severity.
+    """Run every preflight check.
 
-    Drops the SSoT cache first so re-running the doctor after editing the
-    config reflects the current on-disk state, not stale cached values.
-    The global config is parsed once and shared by the structural checks.
+    Drops the SSoT cache first, so a re-run after an edit checks the file
+    as it is now. The global config is parsed once for the structural checks.
     """
     clear_ssot_cache()
     results = [_check_ssot()]

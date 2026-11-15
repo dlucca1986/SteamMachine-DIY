@@ -396,7 +396,8 @@ def safe_emit(signal, *args) -> None:
 
 
 def get_real_user() -> tuple[str, Path]:
-    """Resolve real user behind sudo/pkexec; falls back to ("root", /root)."""
+    """Real user behind pkexec/sudo, else the current user;
+    ("root", /root) if the lookup fails."""
     uid = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
     try:
         u_info = pwd.getpwuid(int(uid)) if uid else pwd.getpwuid(os.getuid())
@@ -443,11 +444,8 @@ def check_root() -> None:
 
 
 def require_ssot_conf(tag: str) -> None:
-    """Exit with code 1, logging f"{tag}_FAILED", if the SSoT conf is missing.
-
-    Shared precondition for backup.py and restore.py, which both need the
-    SSoT readable before doing anything privileged.
-    """
+    """Exit with code 1, logging f"{tag}_FAILED", if the SSoT file is
+    missing (backup.py and restore.py's shared precondition)."""
     if not os.path.isfile(SSOT_CONF_PATH):
         jlog("SYSTEM", f"{tag}_FAILED: SSoT config not found", level="ERROR")
         sys.exit(1)
