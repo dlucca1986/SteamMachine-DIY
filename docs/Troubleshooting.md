@@ -64,7 +64,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `CORE` | `STOP_TIMEOUT: session ignored SIGTERM, killing` | WARN | On a stop (`systemctl stop`/`restart`, shutdown), the session hadn't exited 5 s after `SIGTERM`, so the launcher sent `SIGKILL`. A hung gamescope is the likely cause. |
 | `CORE` | `SWITCH_REQUEST: <target>` | INFO | A session switch (`steamos-session-select`) was requested. |
 | `CORE` | `DISPATCH_FAILED: target=<target>` | WARN | The command that ends the current session (`steam -shutdown` towards Desktop; `qdbus6 org.kde.Shutdown /Shutdown logout` via `bin_dbus` towards Game Mode) could not be started, or exited with an error within a second. The target was still written to disk (unless a `NEXT_SESSION_WRITE_FAILED` line precedes it), so it takes effect on the next boot/restart. If it repeats on every switch, check that command in the SSoT: a desktop/compositor update may have changed its syntax. |
-| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the single most important write in the launcher, since the next boot re-reads whatever `next_session` already held instead of the safe fallback this write exists to guarantee. Emitted by any of the three writes: validation, crash recovery, switch request. |
+| `CORE` | `NEXT_SESSION_WRITE_FAILED: <path>` | ERROR | The persisted next-boot target couldn't be written — the next start reads whatever `next_session` already held (after a crash, possibly the session that just failed). Emitted by any of the three writes: validation, crash recovery, switch request. |
 
 ### Game launch (`sdy.py`)
 
@@ -74,7 +74,7 @@ Placeholders below (`<name>`) stand for the actual runtime value substituted int
 | `STEAM` | `BAD_<FIELD>: <value> - <error>` | WARN | A per-game `GAME_WRAPPER` or `GAME_EXTRA_ARGS` had an unbalanced quote; degraded to a naive split and still ran. |
 | `STEAM` | `GAME_LAUNCH: <name> (AppID: <id>)` | INFO | A game is being launched: executable name and `SteamAppId` (the matched profile is not logged). |
 | `STEAM` | `EXECUTION_FAILED: <error>` | ERROR | `execvpe` failed — missing binary, permission denied, or a malformed argv. The game never started. |
-| `STEAM` | `NO_TARGET: sdy invoked with no argv` | ERROR | `sdy.py` was invoked with nothing to launch — almost always a Steam-side invocation problem, not a config issue. |
+| `STEAM` | `NO_TARGET: sdy invoked with no argv` | ERROR | `sdy` was run with nothing to launch (e.g. `sdy` alone instead of `sdy %command%` in the launch options). |
 
 ### Diagnostics tab log fetch (`journal.py`)
 
@@ -119,7 +119,7 @@ The `RESTORE_REJECTED_*` lines and `RESTORE_WRITE_FAIL`/`RESTORE_CHMOD_FAIL` are
 | `SYSTEM` | `RESTORE_FAILED: Missing <archive path>` | ERROR | The archive file passed to restore doesn't exist. |
 | `SYSTEM` | `RESTORE_PAYLOAD_DONE` | DEBUG | All archive members have been processed (some may have been rejected — see the per-member lines above). |
 | `SYSTEM` | `RESTORE_LINKS_DONE` | DEBUG | All manifest symlinks have been processed. |
-| `SYSTEM` | `RESTORE_EMPTY: no member matched the backup mapping` | ERROR | Every single member was rejected — almost always the wrong archive (foreign format, or from an incompatible layout), not a normal partial failure. |
+| `SYSTEM` | `RESTORE_EMPTY: no member matched the backup mapping` | ERROR | Every single member was rejected — usually the wrong archive (foreign format, or from an incompatible layout), not a normal partial failure. |
 | `SYSTEM` | `RESTORE_SUCCESS: Environment ready.` | INFO | The restore completed with at least one member restored. |
 | `SYSTEM` | `RESTORE_FATAL: <ExceptionType>: <error>` | ERROR | An archive-level failure (corrupt gzip/tar, or an unexpected `OSError`) — this aborts the **entire** restore. |
 
