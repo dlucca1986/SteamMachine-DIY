@@ -11,14 +11,9 @@
 # --- GLOBAL ENVIRONMENT VARIABLES ---
 # These apply to ALL games unless overridden by a specific game profile.
 #
-# NOTE: the launcher already enables the universal capabilities (FSR/NIS
-# scaling, tearing, dynamic FPS limiter). Declare here only display features
-# YOUR panel has, or Steam shows controls that do nothing.
+# NOTE: gamescope itself tells Steam what it supports (scaling filters,
+# tearing, FPS limiter, VRR, HDR); nothing to declare here for that.
 env_vars:
-  # --- Per-display capabilities (opt-in — only if your panel supports it) ---
-  # STEAM_GAMESCOPE_VRR_SUPPORTED: "1"   # VRR / FreeSync / G-Sync panels
-  # STEAM_GAMESCOPE_HDR_SUPPORTED: "1"   # HDR panels (pair with --hdr-enabled)
-  # PROTON_ENABLE_HDR: "1"               # Let Proton games output HDR
 
   # Default performance wrapper applied to all games via sdy (e.g. gamemoderun)
   # Note: MangoHud in Gamescope mode uses the --mangoapp flag, not GAME_WRAPPER

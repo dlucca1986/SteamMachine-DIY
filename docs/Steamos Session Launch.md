@@ -16,7 +16,7 @@ Execution arguments are generated from a **YAML configuration**.
 #### **Transformation Logic**
 The `_build_gamescope_args()` function constructs the execution string:
 * **Flag Injection**: Parses the `flags` list from the YAML and appends them to the `gamescope` command. Each entry is split with `shlex.split`; an unbalanced quote falls back to a plain whitespace split (logged as `BAD_FLAG_ENTRY` at `WARN`) instead of crashing the launcher over one malformed entry.
-* **Environment Overrides**: First applies `GAME_MODE_ENV` — a fixed set of session capabilities advertised to Steam (see *Session Capabilities* below) — then injects the user's `env_vars`, which are applied afterwards and therefore keep the last word. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
+* **Environment Overrides**: First applies `GAME_MODE_ENV` — the few session variables gamescope doesn't set itself (see *Session Variables* below) — then injects the user's `env_vars`, which are applied afterwards and therefore keep the last word. Configuration guidance (including the MangoHud/`--mangoapp` caveat) lives in [Dynamic Gamescope Mapping](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Dynamic-Gamescope-Mapping).
 * **No shell**: the command is started with `subprocess.Popen` and an argument list, so nothing in it is interpreted by a shell.
 
 ### 3. Atomic State Management
@@ -38,7 +38,7 @@ Gamescope is launched with two hardcoded flags, followed by the user-defined YAM
 
 ```python
 gs_args = [gs_bin, "-e", "-f"]          # hardcoded: Steam integration + fullscreen
-apply_env_map(GAME_MODE_ENV)            # session capabilities (see below)
+apply_env_map(GAME_MODE_ENV)            # session variables (see below)
 apply_env_map(cfg.get("env_vars"))      # user env_vars — applied last, win
 # ... flags from config.yaml appended here ...
 gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
@@ -51,25 +51,16 @@ gs_args.extend(["--", steam_bin, "-gamepadui", "-steamos3", "-steamdeck"])
 
 ---
 
-## 🧩 Session Capabilities (`GAME_MODE_ENV`)
-Before the user's `env_vars`, the launcher applies a fixed map of **session variables**: most make Steam's Game Mode expose the matching Quick Access controls on **any GPU**, the rest are session tweaks. The user never needs to set these:
+## 🧩 Session Variables (`GAME_MODE_ENV`)
+Before the user's `env_vars`, the launcher sets only the variables gamescope doesn't set itself:
 
 | Variable | Purpose |
 | :--- | :--- |
-| `STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT`, `STEAM_GAMESCOPE_NIS_SUPPORTED` | Scaling Filter (FSR / NIS) |
-| `STEAM_GAMESCOPE_HAS_TEARING_SUPPORT`, `STEAM_GAMESCOPE_TEARING_SUPPORTED` | Disable Vertical Sync (tearing) |
-| `STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER` | Frame Limit |
-| `vk_xwayland_wait_ready=false` | Read by gamescope and its Vulkan WSI layer; value as in Valve's session (session tweak, no Steam control) |
-| `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0` | Keep SDL games up on focus loss (session tweak) |
-| `ENABLE_GAMESCOPE_WSI=1`, `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3`, `WINEDLLOVERRIDES=dxgi=n` | Proton/vkd3d session defaults (session tweak, no Steam control) |
-| `SRT_LOG_TO_JOURNAL=1` | Routes Steam's own `steam-runtime-tools` logger to the journal (session tweak, no Steam control) |
-| `SRT_URLOPEN_PREFER_STEAM=1` | Links clicked in Game Mode open in Steam's own overlay browser instead of `steam-runtime-tools`' `xdg-open` reaching for a desktop browser (session tweak, no Steam control) |
-| `QT_QPA_PLATFORM_THEME=kde` | Plasma styling (icons) for Qt apps inside gamescope (session tweak, no Steam control) |
-| `XCURSOR_SCALE=256` | Cursor scale inside the embedded session (session tweak, no Steam control) |
+| `SRT_LOG_TO_JOURNAL=1` | Steam's `steam-runtime-tools` logger writes to the journal (checked: Steam's lines appear under `-t steam`) |
+| `VKD3D_SWAPCHAIN_LATENCY_FRAMES=3` | Per ChimeraOS's gamescope-session: "workaround older versions of vkd3d-proton setting this too low" |
+| `WINEDLLOVERRIDES=dxgi=n` | Per ChimeraOS's gamescope-session: "to expose vram info from radv" (AMD) |
 
-The values come from Valve's gamescope-session. Checked on this project's machines: `ENABLE_GAMESCOPE_WSI` (the layer's `[Gamescope WSI]` lines appear in the journal), `SRT_LOG_TO_JOURNAL` (Steam's logs reach the journal via `srt-logger`), `QT_QPA_PLATFORM_THEME=kde` (needs Plasma's `KDEPlasmaPlatformTheme6.so`, present); the others are used as Valve's session uses them.
-
-These don't depend on the display. **Display-dependent** capabilities — VRR (`STEAM_GAMESCOPE_VRR_SUPPORTED`) and HDR (`STEAM_GAMESCOPE_HDR_SUPPORTED`) — are deliberately left out: declare them in your own `env_vars` **only when your monitor supports them**. Since user `env_vars` are applied after `GAME_MODE_ENV`, they can override any of these defaults.
+In Steam mode (`-e`) gamescope 3.17.0 exports the rest itself: the variables that make Steam show the scaling filter (FSR/NIS), tearing (when the display backend supports it), frame limit, VRR and HDR controls, `STEAM_MULTIPLE_XWAYLANDS=1` (only with `--xwayland-count` above 1), `ENABLE_GAMESCOPE_WSI=1`, `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0` and `vk_xwayland_wait_ready=false` (source: `src/main.cpp`, `UpdateCompatEnvVars`; checked by running `gamescope -e` in an empty environment). gamescope doesn't overwrite a variable that is already set, so your own `env_vars` still win.
 
 ---
 

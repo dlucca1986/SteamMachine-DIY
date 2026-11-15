@@ -23,6 +23,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ones shortened. No behavior change.
 
 ### Removed
+- 13 of the 16 variables the launcher set for Game Mode (`GAME_MODE_ENV`). In Steam mode
+  gamescope 3.17.0 already exports the Steam capability variables (scaling filters, tearing
+  when the backend supports it, frame limit, VRR, HDR, multiple Xwaylands),
+  `ENABLE_GAMESCOPE_WSI`, `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS` and `vk_xwayland_wait_ready`
+  (`src/main.cpp`; checked by running `gamescope -e` in an empty environment).
+  `QT_QPA_PLATFORM_THEME` and `XCURSOR_SCALE` had no effect: Qt reads `QT_QPA_PLATFORMTHEME`,
+  and nothing installed reads `XCURSOR_SCALE`. Kept: `SRT_LOG_TO_JOURNAL`,
+  `VKD3D_SWAPCHAIN_LATENCY_FRAMES`, `WINEDLLOVERRIDES=dxgi=n`. The docs no longer tell you
+  to declare `STEAM_GAMESCOPE_VRR_SUPPORTED`/`HDR_SUPPORTED`: gamescope sets both.
 - `post_start_cmds` (commands run 2 s after gamescope starts) with its `POST_START_DELAY` SSoT
   key, its `POST_START_CMD*` log lines and its preflight check. Its only documented use was
   `gamescopectl adaptive_sync_ignore_overlay 1`, whose effect was never measured (gamescope's

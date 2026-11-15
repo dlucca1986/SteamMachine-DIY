@@ -76,19 +76,16 @@ def test_build_gamescope_args_survives_a_bad_env_var_name(set_ssot):
     assert os.environ["SDY_TEST_OK"] == "yes"
 
 
-def test_game_mode_env_matches_real_steamos_agnostic_vars():
-    """Pins some of the vars ported from Valve's gamescope-session (not a
-    comparison with SteamOS itself). QT_IM_MODULE/
-    GTK_IM_MODULE/XCURSOR_THEME are deliberately absent: their "steam"
-    plugin/theme exists only inside the SteamOS image (see the comment
-    above GAME_MODE_ENV)."""
-    assert session_launch.GAME_MODE_ENV["QT_QPA_PLATFORM_THEME"] == "kde"
-    assert session_launch.GAME_MODE_ENV["XCURSOR_SCALE"] == "256"
-    assert session_launch.GAME_MODE_ENV["SRT_LOG_TO_JOURNAL"] == "1"
-    assert session_launch.GAME_MODE_ENV["SRT_URLOPEN_PREFER_STEAM"] == "1"
-    assert "QT_IM_MODULE" not in session_launch.GAME_MODE_ENV
-    assert "GTK_IM_MODULE" not in session_launch.GAME_MODE_ENV
-    assert "XCURSOR_THEME" not in session_launch.GAME_MODE_ENV
+def test_game_mode_env_sets_only_what_gamescope_does_not():
+    """Regression: GAME_MODE_ENV repeated variables gamescope -e already
+    exports (and forced STEAM_MULTIPLE_XWAYLANDS=1 with one Xwayland),
+    plus two nothing reads (QT_QPA_PLATFORM_THEME, XCURSOR_SCALE). See the
+    comment above GAME_MODE_ENV for where the rest come from."""
+    assert set(session_launch.GAME_MODE_ENV) == {
+        "SRT_LOG_TO_JOURNAL",
+        "VKD3D_SWAPCHAIN_LATENCY_FRAMES",
+        "WINEDLLOVERRIDES",
+    }
 
 
 def test_raise_nofile_limit_raises_soft_below_target(monkeypatch):

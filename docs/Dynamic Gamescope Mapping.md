@@ -14,7 +14,7 @@ This file defines the system-wide environment and the default behavior of the **
 The system manages two types of configuration inputs:
 
 * **Execution Prefixes (`GAME_WRAPPER`)**: Defined as a string, this value is prepended to the game command (e.g., `gamemoderun` or `mangohud`). It is used by `sdy.py` to wrap the process execution.
-* **Environment Variables**: Key-value pairs injected into the session environment before launch. Universal session capabilities (FSR/NIS scaling, tearing, the dynamic FPS limiter, latency tweaks) are advertised automatically by the launcher via `GAME_MODE_ENV` — you do **not** set them here. Use `env_vars` for **display-dependent** capabilities that match your hardware (e.g. `STEAM_GAMESCOPE_VRR_SUPPORTED: "1"` on a VRR panel, `STEAM_GAMESCOPE_HDR_SUPPORTED: "1"` on an HDR panel) and for your own per-session variables. See [Steamos Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch) for the full capability list. **Note**: for the overlay in Game Mode use the `--mangoapp` flag; its level is then set from Steam's Quick Access menu (Performance). `MANGOHUD_CONFIG` and similar variables apply in per-game profiles that use `mangohud` as `GAME_WRAPPER`.
+* **Environment Variables**: Key-value pairs injected into the session environment before launch. gamescope itself tells Steam what the session supports (scaling filters, tearing, FPS limiter, VRR, HDR), so there is nothing to declare for that; use `env_vars` for your own variables. See [Steamos Session Launch](https://github.com/dlucca1986/SteamMachine-DIY/wiki/Steamos-Session-Launch) for the few the launcher adds. **Note**: for the overlay in Game Mode use the `--mangoapp` flag; its level is then set from Steam's Quick Access menu (Performance). `MANGOHUD_CONFIG` and similar variables apply in per-game profiles that use `mangohud` as `GAME_WRAPPER`.
 
 ---
 
@@ -55,12 +55,7 @@ The global config sets up Gamescope; `sdy.py` handles each game's own launch. Pr
 ### Global Config Reference (`config.example.yaml`)
 ```yaml
 # --- GLOBAL ENVIRONMENT VARIABLES ---
-# Universal capabilities (FSR/NIS, tearing, FPS limiter, latency) are applied
-# automatically by the launcher — only declare display-dependent ones here.
 env_vars:
-  # Per-display (opt-in — only if your panel supports it):
-  # STEAM_GAMESCOPE_VRR_SUPPORTED: "1"   # VRR / FreeSync / G-Sync
-  # STEAM_GAMESCOPE_HDR_SUPPORTED: "1"   # HDR panels (pair with --hdr-enabled)
   GAME_WRAPPER: "gamemoderun"
   GAME_EXTRA_ARGS: ""
 

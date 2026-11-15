@@ -49,39 +49,21 @@ STATUS_MAP: dict[str, str] = {
     "desktop": "Starting Desktop Mode...",
 }
 
-# Applied before the user's env_vars (which keep the last word): gamescope
-# capabilities advertised to Steam so Game Mode shows the matching
-# controls, plus hardware-independent session tweaks. Values and purposes
-# as in Valve's gamescope-session; checked here: the WSI layer, the SRT
-# journal logger and the Plasma Qt theme plugin. Display-dependent ones
-# (VRR, HDR) stay out — they belong in the user's config.
+# Applied before the user's env_vars (which keep the last word). Only what
+# gamescope doesn't set itself: in Steam mode (-e) gamescope 3.17.0 already
+# exports Steam's capability variables (FSR/NIS, tearing when the backend
+# supports it, FPS limiter, VRR, HDR, STEAM_MULTIPLE_XWAYLANDS with
+# --xwayland-count > 1), ENABLE_GAMESCOPE_WSI, SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS
+# and vk_xwayland_wait_ready (src/main.cpp UpdateCompatEnvVars; checked with
+# `gamescope -e` in an empty environment). Never set them again here.
 GAME_MODE_ENV: dict[str, str] = {
-    # Scaling filters (FSR/NIS)
-    "STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT": "1",
-    "STEAM_GAMESCOPE_NIS_SUPPORTED": "1",
-    # Tearing controls — compositor capability, user opts in per game
-    "STEAM_GAMESCOPE_HAS_TEARING_SUPPORT": "1",
-    "STEAM_GAMESCOPE_TEARING_SUPPORTED": "1",
-    # Steam's in-game FPS limiter
-    "STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER": "1",
-    # Read by gamescope's WSI layer and by SDL
-    "vk_xwayland_wait_ready": "false",
-    "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS": "0",
-    # steam-runtime-tools' logger writes to the journal (ships with Steam
-    # itself, not the distro).
+    # steam-runtime-tools' logger writes Steam's logs to the journal.
     "SRT_LOG_TO_JOURNAL": "1",
-    # Links clicked in Game Mode open in Steam's overlay browser, not a
-    # desktop browser that may be missing inside a gamescope session.
-    "SRT_URLOPEN_PREFER_STEAM": "1",
-    # Proton / vkd3d session defaults (from Valve's gamescope-session)
-    "ENABLE_GAMESCOPE_WSI": "1",
+    # Per ChimeraOS's gamescope-session: "workaround older versions of
+    # vkd3d-proton setting this too low".
     "VKD3D_SWAPCHAIN_LATENCY_FRAMES": "3",
+    # Per ChimeraOS's gamescope-session: "to expose vram info from radv".
     "WINEDLLOVERRIDES": "dxgi=n",
-    # Plasma styling for Qt apps inside gamescope (missing icons otherwise).
-    # Needs KDEPlasmaPlatformTheme6.so, which a Plasma install provides.
-    "QT_QPA_PLATFORM_THEME": "kde",
-    # Cursor size in the embedded X11 session, for the active cursor theme.
-    "XCURSOR_SCALE": "256",
 }
 
 # Deliberately NOT ported from Valve's gamescope-session: QT_IM_MODULE=steam,
